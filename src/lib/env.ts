@@ -23,7 +23,17 @@ export const env = {
   get anthropicApiKey() {
     return required("ANTHROPIC_API_KEY");
   },
+  // Gemini (Google AI Studio). Opcional: si está, el OCR usa Gemini.
+  get geminiApiKey() {
+    return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+  },
+  get ocrProvider(): "gemini" | "anthropic" {
+    return this.geminiApiKey ? "gemini" : "anthropic";
+  },
   get ocrModel() {
-    return process.env.OCR_MODEL || "claude-sonnet-4-6";
+    if (process.env.OCR_MODEL) return process.env.OCR_MODEL;
+    return this.ocrProvider === "gemini"
+      ? "gemini-2.0-flash"
+      : "claude-sonnet-4-6";
   },
 };

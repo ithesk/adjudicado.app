@@ -81,13 +81,50 @@ function normalizar(raw: unknown): OcrResultado {
   };
 }
 
-// Envía el PDF (base64) a Claude y devuelve los datos estructurados + el crudo.
-export async function extraerOrdenDeCompra(pdfBase64: string): Promise<{
-  resultado: OcrResultado;
-  crudo: unknown;
-}> {
-  const client = new Anthropic({ apiKey: env.anthropicApiKey });
+type Salida = { resultado: OcrResultado; crudo: unknown };
 
+// Punto de entrada: usa Gemini si hay key, si no Claude. Misma salida.
+export async function extraerOrdenDeCompra(pdfBase64: string): Promise<Salida> {
+  if (env.ocrProvider === "gemini") return extraerConGemini(pdfBase64);
+  return extraerConClaude(pdfBase64);
+}
+
+// ---- Google Gemini (Flash): lee el PDF y devuelve JSON. Barato. ----
+async function extraerConGemini(pdfBase64: string): Promise<Salida> {
+  const model = env.ocrModel; // p.ej. gemini-2.0-flash
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.geminiApiKey}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { inline_data: { mime_type: "application/pdf", data: pdfBase64 } },
+            { text: PROMPT },
+          ],
+        },
+      ],
+      generationConfig: { responseMimeType: "application/json", temperature: 0 },
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+  const data = await res.json();
+  const texto: string =
+    data?.candidates?.[0]?.content?.parts
+      ?.map((p: { text?: string }) => p.text ?? "")
+      .join("") ?? "";
+  const crudo = parsearJson(texto);
+  return { resultado: normalizar(crudo), crudo };
+}
+
+// ---- Anthropic Claude: lee el PDF y devuelve JSON. ----
+async function extraerConClaude(pdfBase64: string): Promise<Salida> {
+  const client = new Anthropic({ apiKey: env.anthropicApiKey });
   const msg = await client.messages.create({
     model: env.ocrModel,
     max_tokens: 2048,
