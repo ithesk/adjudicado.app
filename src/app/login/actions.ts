@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { fijarOrgActiva } from "@/lib/actions/org";
 
 export type AuthState = { error?: string };
 
@@ -57,6 +58,7 @@ export async function autenticar(
   // 2) crear empresa o unirse (service_role: RLS lo bloquea a propósito)
   const admin = createAdminClient();
   const userId = data.user.id;
+  let orgId: string;
 
   if (tipo === "empresa") {
     const { data: org, error: e1 } = await admin
@@ -72,6 +74,7 @@ export async function autenticar(
       rol: "admin",
     });
     if (e2) return { error: "No se pudo registrar tu membresía." };
+    orgId = org.id;
   } else {
     const { data: org } = await admin
       .from("organizacion")
@@ -85,7 +88,9 @@ export async function autenticar(
       nombre: nombre || email,
       rol: "colaborador",
     });
+    orgId = org.id;
   }
 
+  await fijarOrgActiva(orgId);
   redirect("/");
 }

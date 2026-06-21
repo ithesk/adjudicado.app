@@ -1,13 +1,10 @@
 import { redirect } from "next/navigation";
-import { getMiembro, getUser } from "@/lib/auth";
+import { getUser } from "@/lib/auth";
 import OnboardingForm from "./OnboardingForm";
 
 export default async function OnboardingPage() {
   const user = await getUser();
   if (!user) redirect("/login");
-
-  const miembro = await getMiembro();
-  if (miembro) redirect("/");
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4">

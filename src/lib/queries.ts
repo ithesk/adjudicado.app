@@ -107,10 +107,13 @@ export async function listarDocumentos(): Promise<DocumentoGlobal[]> {
 
 export async function listarSuplidores(): Promise<Suplidor[]> {
   if (isDemo()) return demoSuplidores();
+  const miembro = await getMiembro();
+  if (!miembro) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("suplidor")
     .select("id, nombre, canal, notas, contacto(id, nombre, rol, email, telefono)")
+    .eq("org_id", miembro.org_id)
     .order("nombre");
   return ((data as unknown as Suplidor[] | null) ?? []).map((s) => ({
     ...s,
@@ -131,10 +134,13 @@ export async function suplidorPorNombre(
 
 export async function listarInstituciones(): Promise<Institucion[]> {
   if (isDemo()) return demoInstituciones();
+  const miembro = await getMiembro();
+  if (!miembro) return [];
   const supabase = await createClient();
   const { data } = await supabase
     .from("institucion")
     .select("id, nombre, siglas, contacto(id, nombre, rol, email, telefono)")
+    .eq("org_id", miembro.org_id)
     .order("nombre");
   return ((data as unknown as Institucion[] | null) ?? []).map((i) => ({
     ...i,
@@ -188,10 +194,13 @@ export async function listarOrdenes(): Promise<OrdenConItems[]> {
       })) as OrdenConItems[],
     );
   }
+  const miembro = await getMiembro();
+  if (!miembro) return [];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("orden")
     .select("*, item(entregado, suplidor, nombre, tipo, estado_item, fecha_estim)")
+    .eq("org_id", miembro.org_id)
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];

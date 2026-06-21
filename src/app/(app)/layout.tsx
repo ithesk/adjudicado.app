@@ -8,9 +8,11 @@ import {
   LogOut,
   Settings,
   FolderClosed,
+  Check,
 } from "lucide-react";
-import { requireMiembro } from "@/lib/auth";
+import { requireMiembro, getMembresias } from "@/lib/auth";
 import { listarOrdenes } from "@/lib/queries";
+import { cambiarOrg } from "@/lib/actions/org";
 import { cerrarSesion } from "@/lib/actions/sesion";
 import { isDemo } from "@/lib/demo";
 import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
@@ -30,6 +32,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const miembro = await requireMiembro();
+  const membresias = await getMembresias();
   const ordenes = await listarOrdenes();
   const cuenta = (e: Estado) => ordenes.filter((o) => o.estado === e).length;
   const vivas = ordenes.filter((o) => esViva(o.estado)).length;
@@ -38,31 +41,65 @@ export default async function AppLayout({
     <div className="min-h-screen md:flex">
       {/* ===== Sidebar (desktop) ===== */}
       <aside className="sticky top-0 hidden h-screen w-[216px] flex-none flex-col border-r border-line bg-canvas p-2.5 md:flex">
-        {/* Workspace switcher */}
-        <Link
-          href="/configuracion/equipo"
-          className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2"
-        >
-          <span className="grid h-6 w-6 flex-none place-items-center rounded-[11px] bg-primary text-primary-ink">
-            <svg width="14" height="14" viewBox="0 0 40 40" fill="none" aria-hidden>
-              <path
-                d="M12 20.5 L17.5 26 L28.5 14"
-                stroke="currentColor"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          <span className="truncate text-[13.5px] font-semibold text-ink">
-            {miembro.organizacion?.nombre?.split(",")[0] ?? "Mi empresa"}
-          </span>
-          <ChevronsUpDown
-            className="ml-auto h-3.5 w-3.5 flex-none text-muted"
-            strokeWidth={2}
-            aria-hidden
-          />
-        </Link>
+        {/* Selector de empresa (un usuario puede pertenecer a varias) */}
+        <details className="group relative">
+          <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
+            <span className="grid h-6 w-6 flex-none place-items-center rounded-[11px] bg-primary text-primary-ink">
+              <svg width="14" height="14" viewBox="0 0 40 40" fill="none" aria-hidden>
+                <path
+                  d="M12 20.5 L17.5 26 L28.5 14"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <span className="truncate text-[13.5px] font-semibold text-ink">
+              {miembro.organizacion?.nombre?.split(",")[0] ?? "Mi empresa"}
+            </span>
+            <ChevronsUpDown
+              className="ml-auto h-3.5 w-3.5 flex-none text-muted"
+              strokeWidth={2}
+              aria-hidden
+            />
+          </summary>
+          <div className="absolute left-0 right-0 z-30 mt-1 rounded-lg border border-line bg-surface p-1 shadow-raised">
+            <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+              Tus empresas
+            </p>
+            {membresias.map((m) => {
+              const activa = m.org_id === miembro.org_id;
+              return (
+                <form key={m.org_id} action={cambiarOrg.bind(null, m.org_id)}>
+                  <button
+                    type="submit"
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink transition-colors hover:bg-surface-2"
+                  >
+                    <span className="truncate">
+                      {m.organizacion?.nombre ?? "Empresa"}
+                    </span>
+                    {activa && (
+                      <Check
+                        className="ml-auto h-3.5 w-3.5 text-primary"
+                        strokeWidth={2.5}
+                        aria-hidden
+                      />
+                    )}
+                  </button>
+                </form>
+              );
+            })}
+            <div className="my-1 border-t border-line" />
+            <Link
+              href="/onboarding"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              Crear o unirme a otra empresa
+            </Link>
+          </div>
+        </details>
 
         {/* Buscador → al tablero (que tiene el filtro real) */}
         <Link

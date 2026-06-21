@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
+import { fijarOrgActiva } from "@/lib/actions/org";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type OnbState = { error?: string };
@@ -35,6 +36,7 @@ export async function crearOrganizacion(
   });
   if (e2) return { error: "No se pudo registrar tu membresía." };
 
+  await fijarOrgActiva(org.id);
   redirect("/");
 }
 
@@ -59,16 +61,13 @@ export async function unirseOrganizacion(
     .maybeSingle();
   if (!org) return { error: "Código inválido. Pídeselo a un administrador." };
 
-  const { error } = await admin.from("miembro").insert({
+  await admin.from("miembro").insert({
     org_id: org.id,
     user_id: user.id,
     nombre: miNombre || user.email,
     rol: "colaborador",
   });
-  if (error) {
-    // unique(org_id, user_id) → ya es miembro.
-    redirect("/");
-  }
-
+  // unique(org_id, user_id) → si ya era miembro, igual la fijamos como activa.
+  await fijarOrgActiva(org.id);
   redirect("/");
 }
