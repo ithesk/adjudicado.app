@@ -5,6 +5,7 @@ import { formatFecha, type Miembro } from "@/lib/types";
 import { Panel } from "@/components/ui";
 import { Avatar } from "@/components/ui";
 import CodigoInvitacion from "@/components/CodigoInvitacion";
+import InvitarForm from "./InvitarForm";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +29,24 @@ export default async function EquipoPage() {
     <div className="space-y-4">
       <Panel className="p-4">
         <h2 className="text-sm font-semibold text-ink">
-          Invitar a un colaborador
+          Invitar por correo
         </h2>
-        <p className="mt-1 text-sm text-muted">
-          Comparte este código. La persona crea su cuenta y elige “Unirme” con él.
+        <p className="mt-1 mb-3 text-sm text-muted">
+          Escribe el correo de tu colega y le llegará un enlace para unirse a{" "}
+          {miembro.organizacion?.nombre ?? "tu empresa"}.
         </p>
-        <CodigoInvitacion codigo={miembro.org_id} />
+        <InvitarForm />
+
+        <details className="mt-4 border-t border-line pt-3">
+          <summary className="cursor-pointer text-[13px] text-muted hover:text-ink">
+            ¿Prefieres un código? (alternativa)
+          </summary>
+          <p className="mt-2 text-[13px] text-muted">
+            Comparte este código; la persona crea su cuenta y elige “Unirme con
+            código”.
+          </p>
+          <CodigoInvitacion codigo={miembro.org_id} />
+        </details>
       </Panel>
 
       <Panel>
