@@ -1,14 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { signIn, signUp, type AuthState } from "./actions";
+import { autenticar, type AuthState } from "./actions";
 import { inputBase } from "@/components/ui";
 
 export default function LoginPage() {
   const [modo, setModo] = useState<"entrar" | "crear">("entrar");
-  const accion = modo === "entrar" ? signIn : signUp;
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
-    accion,
+    autenticar,
     {},
   );
 
@@ -53,6 +52,7 @@ export default function LoginPage() {
           </div>
 
           <form action={formAction} className="space-y-3.5">
+            <input type="hidden" name="modo" value={modo} />
             {modo === "crear" && (
               <Campo
                 label="Nombre"
