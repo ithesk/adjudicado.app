@@ -45,3 +45,6 @@ next-env.d.ts
 .agents/
 skills-lock.json
 .cache/
+
+# credenciales de deploy (NO subir)
+.deploy.local

@@ -7,6 +7,21 @@ import { isDemo } from "@/lib/demo";
 const PUBLIC_PATHS = ["/login", "/auth"];
 
 export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+
+  // Nunca tocar estáticos ni assets de Next (si no, se redirige el CSS/JS al
+  // login y la app sale sin estilos). El matcher debería excluirlos, pero este
+  // guard lo garantiza pase lo que pase.
+  if (
+    path.startsWith("/_next/") ||
+    path === "/favicon.ico" ||
+    /\.(css|js|mjs|map|json|txt|xml|svg|png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|eot)$/i.test(
+      path,
+    )
+  ) {
+    return NextResponse.next({ request });
+  }
+
   // En modo demo no hay sesión: el login/onboarding no aplican → al tablero.
   if (isDemo()) {
     const p = request.nextUrl.pathname;
@@ -42,7 +57,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/"));
 
   // Sin sesión y ruta protegida → al login.
