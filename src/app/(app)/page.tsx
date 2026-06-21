@@ -1,0 +1,99 @@
+import Link from "next/link";
+import { X } from "lucide-react";
+import { calcularMetricas, listarOrdenes } from "@/lib/queries";
+import { getMiembro } from "@/lib/auth";
+import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
+import MetricBar from "./_components/MetricBar";
+import TriageTable from "./_components/TriageTable";
+
+export const dynamic = "force-dynamic";
+
+export default async function TableroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ estado?: string }>;
+}) {
+  const { estado } = await searchParams;
+  const filtro = estado as Estado | undefined;
+  const ordenes = await listarOrdenes();
+  const miembro = await getMiembro();
+  const metricas = calcularMetricas(ordenes);
+
+  const vivas = filtro
+    ? ordenes.filter((o) => o.estado === filtro)
+    : ordenes.filter((o) => esViva(o.estado));
+  const cerradas = filtro ? [] : ordenes.filter((o) => !esViva(o.estado));
+
+  return (
+    <div className="space-y-5">
+      <MetricBar m={metricas} />
+
+      {ordenes.length === 0 ? (
+        <EmptyState />
+      ) : (
+        <>
+          <section className="space-y-2">
+            <div className="flex items-baseline justify-between">
+              <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wide text-muted">
+                {filtro ? (
+                  <>
+                    <span className="text-ink">{ESTADO_LABEL[filtro]}</span>·{" "}
+                    {vivas.length}
+                    <Link
+                      href="/"
+                      className="inline-flex items-center gap-0.5 rounded-full bg-surface-2 px-1.5 py-0.5 normal-case tracking-normal text-muted hover:text-ink"
+                    >
+                      <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                      quitar
+                    </Link>
+                  </>
+                ) : (
+                  <>Órdenes vivas · {vivas.length}</>
+                )}
+              </h2>
+              <span className="text-xs text-muted">
+                ordena y filtra como quieras
+              </span>
+            </div>
+            {vivas.length === 0 ? (
+              <p className="rounded-md border border-dashed border-line p-6 text-center text-sm text-muted">
+                {filtro ? "No hay órdenes en este estado." : "No hay órdenes vivas."}
+              </p>
+            ) : (
+              <TriageTable
+                ordenes={vivas}
+                controls
+                currentUserId={miembro?.user_id}
+              />
+            )}
+          </section>
+
+          {cerradas.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="font-mono text-xs uppercase tracking-wide text-muted">
+                Cobradas / cerradas · {cerradas.length}
+              </h2>
+              <TriageTable ordenes={cerradas} apagado />
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="rounded-md border border-dashed border-line bg-surface p-12 text-center">
+      <p className="text-sm text-muted">
+        Todavía no hay órdenes. Sube el PDF de una orden de compra para empezar.
+      </p>
+      <Link
+        href="/orden/nueva"
+        className="mt-4 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-ink transition-colors hover:bg-primary-hover"
+      >
+        + Nueva orden
+      </Link>
+    </div>
+  );
+}
