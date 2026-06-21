@@ -16,23 +16,31 @@ export default function LoginPage() {
     <main className="grid min-h-screen place-items-center px-4 py-10">
       <div className="w-full max-w-[22rem]">
         <div className="mb-7 flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-md bg-primary font-mono text-xs font-bold text-primary-ink shadow-raised">
-            SK
+          <span className="grid h-8 w-8 place-items-center rounded-md bg-primary shadow-raised">
+            <svg width="18" height="18" viewBox="0 0 40 40" fill="none" aria-hidden>
+              <path
+                d="M12 20.5 L17.5 26 L28.5 14"
+                stroke="currentColor"
+                className="text-primary-ink"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
-          <div className="leading-tight">
-            <p className="font-mono text-sm font-semibold tracking-tight text-ink">
-              ejecución<span className="text-muted">.sk</span>
-            </p>
-            <p className="text-[11px] text-muted">Centro de Ejecución</p>
-          </div>
+          <p className="font-display text-lg font-semibold tracking-tight text-ink">
+            adjudicado<span className="text-muted">.app</span>
+          </p>
         </div>
 
         <div className="rounded-lg border border-line bg-surface p-6 shadow-raised">
           <h1 className="font-display text-lg font-semibold text-ink">
-            {modo === "entrar" ? "Entrar a tu cuenta" : "Crear una cuenta"}
+            {modo === "entrar" ? "Entra a tu cuenta" : "Crea la cuenta de tu empresa"}
           </h1>
           <p className="mt-1 mb-5 text-[13px] text-muted">
-            Seguimiento de órdenes adjudicadas, de la OC al cobro.
+            {modo === "entrar"
+              ? "Seguimiento de licitaciones, de la OC al cobro."
+              : "Crea el espacio de tu empresa y trabaja en equipo."}
           </p>
 
           <div className="mb-5 grid grid-cols-2 gap-1 rounded-md bg-surface-2 p-0.5 text-[13px] font-medium">
@@ -94,7 +102,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-5 text-center text-[11px] text-muted">
-          Innovación Tecnológica SK, SRL
+          Para empresas que ejecutan contratos del Estado dominicano.
         </p>
       </div>
     </main>

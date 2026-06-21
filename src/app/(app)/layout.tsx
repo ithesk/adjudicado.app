@@ -55,7 +55,7 @@ export default async function AppLayout({
             </svg>
           </span>
           <span className="truncate text-[13.5px] font-semibold text-ink">
-            {miembro.organizacion?.nombre?.split(",")[0] ?? "SK"}
+            {miembro.organizacion?.nombre?.split(",")[0] ?? "Mi empresa"}
           </span>
           <ChevronsUpDown
             className="ml-auto h-3.5 w-3.5 flex-none text-muted"
@@ -155,11 +155,19 @@ export default async function AppLayout({
       {/* ===== Top bar (móvil) ===== */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-canvas/90 px-4 py-2.5 backdrop-blur md:hidden">
         <Link href="/" className="flex items-center gap-2">
-          <span className="grid h-6 w-6 place-items-center rounded-[11px] bg-primary font-mono text-[11px] font-bold text-primary-ink">
-            SK
+          <span className="grid h-6 w-6 place-items-center rounded-[11px] bg-primary text-primary-ink">
+            <svg width="13" height="13" viewBox="0 0 40 40" fill="none" aria-hidden>
+              <path
+                d="M12 20.5 L17.5 26 L28.5 14"
+                stroke="currentColor"
+                strokeWidth="4.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </span>
-          <span className="font-mono text-sm font-semibold">
-            ejecución<span className="text-muted">.sk</span>
+          <span className="font-display text-sm font-semibold tracking-tight">
+            adjudicado<span className="text-muted">.app</span>
           </span>
         </Link>
         <div className="flex items-center gap-2">

@@ -180,7 +180,7 @@ export function demoMiembro(): Miembro {
     created_at: new Date().toISOString(),
     organizacion: {
       id: ORG_ID,
-      nombre: "Innovación Tecnológica SK, SRL (DEMO)",
+      nombre: "Suministros del Caribe, SRL (demo)",
       created_at: new Date().toISOString(),
     },
   };

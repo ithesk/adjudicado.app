@@ -22,9 +22,9 @@ const bricolage = Bricolage_Grotesque({
 });
 
 export const metadata: Metadata = {
-  title: "Centro de Ejecución SK",
+  title: "adjudicado.app — seguimiento de licitaciones",
   description:
-    "Seguimiento de órdenes de compra adjudicadas — de la OC al cobro.",
+    "De la orden de compra adjudicada al cobro. Para empresas que ejecutan contratos del Estado dominicano.",
 };
 
 export default function RootLayout({

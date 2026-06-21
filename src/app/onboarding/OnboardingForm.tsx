@@ -25,7 +25,7 @@ export default function OnboardingForm({ correo }: { correo: string }) {
             modo === "crear" ? "bg-surface shadow-sm" : "text-muted"
           }`}
         >
-          Crear nueva
+          Crear mi empresa
         </button>
         <button
           type="button"
@@ -48,9 +48,9 @@ export default function OnboardingForm({ correo }: { correo: string }) {
 
         {modo === "crear" ? (
           <Campo
-            label="Nombre de la organización"
+            label="Nombre de tu empresa"
             name="nombre"
-            placeholder="Innovación Tecnológica SK, SRL"
+            placeholder="Mi Empresa, SRL"
             required
           />
         ) : (
@@ -76,8 +76,8 @@ export default function OnboardingForm({ correo }: { correo: string }) {
           {pending
             ? "Un momento…"
             : modo === "crear"
-              ? "Crear organización"
-              : "Unirme"}
+              ? "Crear mi empresa"
+              : "Unirme a la empresa"}
         </button>
       </form>
     </div>
