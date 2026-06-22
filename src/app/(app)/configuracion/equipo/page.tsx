@@ -1,4 +1,4 @@
-import { Mail, RotateCw, X } from "lucide-react";
+import { Mail } from "lucide-react";
 import { requireMiembro } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { listarPendientes } from "@/lib/queries";
@@ -7,7 +7,7 @@ import { formatFecha, type Miembro } from "@/lib/types";
 import { Panel, Avatar } from "@/components/ui";
 import CodigoInvitacion from "@/components/CodigoInvitacion";
 import InvitarForm from "./InvitarForm";
-import { reenviarInvitacion, cancelarInvitacion } from "./actions";
+import BotonesInvitacion from "./BotonesInvitacion";
 
 export const dynamic = "force-dynamic";
 
@@ -71,25 +71,7 @@ export default async function EquipoPage() {
                     · sin aceptar
                   </p>
                 </div>
-                <form action={reenviarInvitacion.bind(null, p.email, "colaborador")}>
-                  <button
-                    type="submit"
-                    className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
-                  >
-                    <RotateCw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                    Reenviar
-                  </button>
-                </form>
-                <form action={cancelarInvitacion.bind(null, p.id)}>
-                  <button
-                    type="submit"
-                    className="grid h-8 w-8 place-items-center rounded-md text-muted transition-colors hover:bg-danger-soft hover:text-danger"
-                    title="Cancelar invitación"
-                    aria-label="Cancelar invitación"
-                  >
-                    <X className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </button>
-                </form>
+                <BotonesInvitacion email={p.email} id={p.id} />
               </li>
             ))}
           </ul>

@@ -65,19 +65,36 @@ export async function invitarMiembro(
   return { ok: `Invitación enviada a ${email}. Le llegará un correo.` };
 }
 
-// Reenvía la invitación a un correo pendiente.
-export async function reenviarInvitacion(email: string, rol: string) {
-  if (isDemo()) return;
+// Reenvía la invitación a un correo pendiente. Devuelve resultado para feedback.
+export async function reenviarInvitacion(
+  email: string,
+  rol: string,
+): Promise<InviteState> {
+  if (isDemo()) return { ok: "(demo) reenviado." };
   const miembro = await requireMiembro();
-  await enviarInvite(email, rol || "colaborador", miembro, await origenActual());
+  const { error } = await enviarInvite(
+    email,
+    rol || "colaborador",
+    miembro,
+    await origenActual(),
+  );
+  if (error) {
+    const msg = /security|seconds|rate/i.test(error.message)
+      ? "Espera unos segundos antes de reenviar a ese correo."
+      : "No se pudo reenviar: " + error.message;
+    return { error: msg };
+  }
   revalidatePath("/configuracion/equipo");
+  return { ok: `Reenviado a ${email}.` };
 }
 
 // Cancela una invitación pendiente (borra el usuario invitado no confirmado).
-export async function cancelarInvitacion(userId: string) {
-  if (isDemo()) return;
+export async function cancelarInvitacion(userId: string): Promise<InviteState> {
+  if (isDemo()) return {};
   await requireMiembro();
   const admin = createAdminClient();
-  await admin.auth.admin.deleteUser(userId);
+  const { error } = await admin.auth.admin.deleteUser(userId);
+  if (error) return { error: "No se pudo cancelar: " + error.message };
   revalidatePath("/configuracion/equipo");
+  return { ok: "Invitación cancelada." };
 }
