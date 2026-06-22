@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { requireMiembro } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isDemo } from "@/lib/demo";
 import type { Miembro } from "@/lib/types";
@@ -16,25 +17,66 @@ async function origenActual(): Promise<string> {
   return host ? `${proto}://${host}` : "https://adjudicado-app.vercel.app";
 }
 
-// Lógica compartida de envío de invitación.
-async function enviarInvite(
+// Invita por correo. Si el correo YA existe (usuario fantasma o de otra empresa),
+// lo agrega a esta empresa y le manda un enlace de acceso. Auto-resuelve.
+async function invitarOAgregar(
   email: string,
   rol: string,
   miembro: Miembro,
   origin: string,
-) {
+): Promise<InviteState> {
   const admin = createAdminClient();
-  return admin.auth.admin.inviteUserByEmail(email, {
+  const { error } = await admin.auth.admin.inviteUserByEmail(email, {
     data: {
       invite_org_id: miembro.org_id,
       invite_org_nombre: miembro.organizacion?.nombre,
       invite_rol: rol,
     },
-    redirectTo: `${origin}/auth/confirm?next=/`,
+    redirectTo: `${origin}/auth/confirm?next=/bienvenida`,
   });
+
+  if (!error) {
+    return { ok: `Invitación enviada a ${email}. Le llegará un correo.` };
+  }
+  if (!/registered|already exists|been registered/i.test(error.message)) {
+    return { error: "No se pudo enviar: " + error.message };
+  }
+
+  // Ya existe → localizarlo, agregarlo a la empresa y mandarle acceso.
+  const { data: list } = await admin.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  const u = (list?.users ?? []).find(
+    (x) => (x.email ?? "").toLowerCase() === email.toLowerCase(),
+  );
+  if (!u) return { error: "Ese correo ya existe pero no pude localizarlo." };
+
+  const { data: existe } = await admin
+    .from("miembro")
+    .select("id")
+    .eq("org_id", miembro.org_id)
+    .eq("user_id", u.id)
+    .maybeSingle();
+  if (existe) return { error: `${email} ya es miembro de tu empresa.` };
+
+  await admin.from("miembro").insert({
+    org_id: miembro.org_id,
+    user_id: u.id,
+    nombre: (u.user_metadata?.nombre as string) || email,
+    rol,
+  });
+  // Enlace de acceso (recovery → crea/define contraseña y entra).
+  const supabase = await createClient();
+  await supabase.auth.resetPasswordForEmail(email);
+
+  return {
+    ok: `${email} ya tenía cuenta: lo agregué a ${
+      miembro.organizacion?.nombre ?? "tu empresa"
+    } y le envié un enlace para acceder.`,
+  };
 }
 
-// Invita por correo (le llega un email con el enlace).
 export async function invitarMiembro(
   _prev: InviteState,
   formData: FormData,
@@ -47,48 +89,30 @@ export async function invitarMiembro(
   if (isDemo()) return { ok: `(demo) Se enviaría una invitación a ${email}.` };
 
   const miembro = await requireMiembro();
-  const { error } = await enviarInvite(
-    email,
-    rol,
-    miembro,
-    await origenActual(),
-  );
-  if (error) {
-    return {
-      error:
-        "No se pudo enviar: " +
-        error.message +
-        ". Si ya tiene cuenta, que entre con el código.",
-    };
-  }
-  revalidatePath("/configuracion/equipo");
-  return { ok: `Invitación enviada a ${email}. Le llegará un correo.` };
+  const r = await invitarOAgregar(email, rol, miembro, await origenActual());
+  if (r.ok) revalidatePath("/configuracion/equipo");
+  return r;
 }
 
-// Reenvía la invitación a un correo pendiente. Devuelve resultado para feedback.
 export async function reenviarInvitacion(
   email: string,
   rol: string,
 ): Promise<InviteState> {
   if (isDemo()) return { ok: "(demo) reenviado." };
   const miembro = await requireMiembro();
-  const { error } = await enviarInvite(
+  const r = await invitarOAgregar(
     email,
     rol || "colaborador",
     miembro,
     await origenActual(),
   );
-  if (error) {
-    const msg = /security|seconds|rate/i.test(error.message)
-      ? "Espera unos segundos antes de reenviar a ese correo."
-      : "No se pudo reenviar: " + error.message;
-    return { error: msg };
-  }
-  revalidatePath("/configuracion/equipo");
-  return { ok: `Reenviado a ${email}.` };
+  if (r.ok) revalidatePath("/configuracion/equipo");
+  // Mensaje específico de reenvío si fue invitación nueva.
+  if (r.ok && r.ok.startsWith("Invitación enviada"))
+    return { ok: `Reenviado a ${email}.` };
+  return r;
 }
 
-// Cancela una invitación pendiente (borra el usuario invitado no confirmado).
 export async function cancelarInvitacion(userId: string): Promise<InviteState> {
   if (isDemo()) return {};
   await requireMiembro();
