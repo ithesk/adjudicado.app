@@ -205,6 +205,52 @@ export async function agregarBitacora(
   refrescar(ordenId);
 }
 
+// Alterna la reacción del usuario actual sobre una entrada de bitácora.
+// No revalida: el panel actualiza en vivo y al recargar se lee de la base.
+export async function alternarReaccion(
+  _ordenId: string,
+  bitacoraId: string,
+  emoji: string,
+) {
+  if (isDemo()) return;
+  const user = await getUser();
+  if (!user) return;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("bitacora_reaccion")
+    .select("id")
+    .eq("bitacora_id", bitacoraId)
+    .eq("user_id", user.id)
+    .eq("emoji", emoji)
+    .maybeSingle();
+  if (data) {
+    await supabase.from("bitacora_reaccion").delete().eq("id", data.id);
+  } else {
+    const { error } = await supabase
+      .from("bitacora_reaccion")
+      .insert({ bitacora_id: bitacoraId, user_id: user.id, emoji });
+    if (error) console.error("alternarReaccion falló:", error.message);
+  }
+}
+
+export async function agregarComentario(
+  _ordenId: string,
+  bitacoraId: string,
+  texto: string,
+) {
+  if (isDemo()) return;
+  const limpio = texto.trim();
+  if (!limpio) return;
+  const user = await getUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("bitacora_comentario").insert({
+    bitacora_id: bitacoraId,
+    autor_id: user?.id ?? null,
+    texto: limpio,
+  });
+  if (error) console.error("agregarComentario falló:", error.message);
+}
+
 export async function actualizarSuplidor(
   ordenId: string,
   suplidor: string,

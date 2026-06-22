@@ -24,8 +24,17 @@ import {
 } from "@/lib/types";
 import { Avatar, Panel, SectionTitle } from "@/components/ui";
 import { isDemo } from "@/lib/demo";
-import { agregarBitacora } from "../actions";
+import {
+  agregarBitacora,
+  agregarComentario,
+  alternarReaccion,
+} from "../actions";
 import { useActividad } from "./Actividad";
+
+// Solo las entradas que ya viven en la base (UUID) se pueden reaccionar/comentar
+// de forma persistente; las locales (recién creadas en la sesión) son optimistas.
+const esUUID = (id: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 const COMPONER: { valor: TipoBitacora; label: string; icon: LucideIcon }[] = [
   { valor: "llamada", label: "Llamada", icon: Phone },
@@ -187,10 +196,14 @@ export default function BitacoraPanel({
         return { ...b, reacciones: reacciones.filter((r) => r.usuarios.length) };
       }),
     );
+    if (esUUID(id)) {
+      startTransition(() => alternarReaccion(ordenId, id, emoji));
+    }
   }
 
   function comentar(id: string, t: string) {
-    if (!t.trim()) return;
+    const limpio = t.trim();
+    if (!limpio) return;
     setItems((prev) =>
       prev.map((b) =>
         b.id === id
@@ -201,7 +214,7 @@ export default function BitacoraPanel({
                 {
                   id: nuevoId("c"),
                   autor: currentUser,
-                  texto: t.trim(),
+                  texto: limpio,
                   created_at: nowISO(),
                 },
               ],
@@ -209,6 +222,9 @@ export default function BitacoraPanel({
           : b,
       ),
     );
+    if (esUUID(id)) {
+      startTransition(() => agregarComentario(ordenId, id, limpio));
+    }
   }
 
   const visibles = useMemo(() => {

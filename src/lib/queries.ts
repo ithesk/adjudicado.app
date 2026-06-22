@@ -354,7 +354,9 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("orden")
-    .select("*, item(*), bitacora(*), documento(*)")
+    .select(
+      "*, item(*), bitacora(*, bitacora_reaccion(emoji, user_id), bitacora_comentario(id, autor_id, texto, created_at)), documento(*)",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -366,16 +368,58 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
   // de la org, para no mostrar "Alguien".
   const personas = await listarPersonas();
   const porId = new Map(personas.map((p) => [p.id, p]));
+  const nombreDe = (uid: string | null) =>
+    (uid ? porId.get(uid)?.nombre : null) ?? "Miembro del equipo";
+
   orden.responsable = orden.responsable_id
     ? porId.get(orden.responsable_id) ?? null
     : null;
   orden.colaboradoresPersonas = (orden.colaboradores ?? [])
     .map((id) => porId.get(id))
     .filter((p): p is Persona => Boolean(p));
-  orden.bitacora = orden.bitacora.map((b) => ({
-    ...b,
-    autor: b.autor_id ? porId.get(b.autor_id) ?? null : null,
-  }));
+
+  orden.bitacora = orden.bitacora.map((b) => {
+    const raw = b as Bitacora & {
+      bitacora_reaccion?: { emoji: string; user_id: string }[];
+      bitacora_comentario?: {
+        id: string;
+        autor_id: string | null;
+        texto: string;
+        created_at: string;
+      }[];
+    };
+
+    // Agrupar reacciones por emoji con los nombres de quienes reaccionaron.
+    const porEmoji = new Map<string, string[]>();
+    for (const r of raw.bitacora_reaccion ?? []) {
+      const arr = porEmoji.get(r.emoji) ?? [];
+      arr.push(nombreDe(r.user_id));
+      porEmoji.set(r.emoji, arr);
+    }
+    const reacciones = Array.from(porEmoji, ([emoji, usuarios]) => ({
+      emoji,
+      usuarios,
+    }));
+
+    const comentarios = (raw.bitacora_comentario ?? [])
+      .map((c) => ({
+        id: c.id,
+        autor: { id: c.autor_id ?? "", nombre: nombreDe(c.autor_id) },
+        texto: c.texto,
+        created_at: c.created_at,
+      }))
+      .sort(
+        (x, y) =>
+          new Date(x.created_at).getTime() - new Date(y.created_at).getTime(),
+      );
+
+    return {
+      ...b,
+      autor: b.autor_id ? porId.get(b.autor_id) ?? null : null,
+      reacciones: reacciones.length ? reacciones : undefined,
+      comentarios: comentarios.length ? comentarios : undefined,
+    };
+  });
 
   orden.item.sort((a, b) => a.orden_indice - b.orden_indice);
   orden.bitacora.sort(
