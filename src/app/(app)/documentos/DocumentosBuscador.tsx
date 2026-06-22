@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { formatFecha } from "@/lib/types";
 import type { DocumentoGlobal } from "@/lib/queries";
+import VisorDocumento from "@/components/VisorDocumento";
 
 const TIPO: Record<string, { label: string; icon: LucideIcon }> = {
   oc: { label: "OC", icon: FileSignature },
@@ -138,6 +139,12 @@ export default function DocumentosBuscador({
                     <span>· {formatFecha(d.created_at.slice(0, 10))}</span>
                   </p>
                 </div>
+                <VisorDocumento
+                  bucket={d.bucket}
+                  path={d.archivo_url}
+                  nombre={d.nombre}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
+                />
                 <Link
                   href={`/orden/${d.orden_id}`}
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"

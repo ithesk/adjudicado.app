@@ -1,11 +1,11 @@
 "use client";
 
-import { useTransition } from "react";
 import { useFormStatus } from "react-dom";
-import { Paperclip, FileText, Upload, ExternalLink } from "lucide-react";
+import { Paperclip, FileText, Upload } from "lucide-react";
 import { formatFecha, type Documento } from "@/lib/types";
 import { Panel, SectionTitle } from "@/components/ui";
-import { subirDocumento, urlFirmada } from "../actions";
+import VisorDocumento from "@/components/VisorDocumento";
+import { subirDocumento } from "../actions";
 
 const TIPOS = [
   { v: "acta", l: "Acta" },
@@ -110,15 +110,6 @@ function DocRow({
   bucket: "documentos" | "ordenes-oc";
   path: string;
 }) {
-  const [pending, startTransition] = useTransition();
-
-  function abrir() {
-    startTransition(async () => {
-      const url = await urlFirmada(bucket, path);
-      if (url) window.open(url, "_blank");
-    });
-  }
-
   return (
     <li className="flex items-center gap-3 px-4 py-2.5">
       <FileText className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} aria-hidden />
@@ -126,15 +117,7 @@ function DocRow({
         <p className="truncate text-[13px] text-ink">{nombre}</p>
         <p className="text-[11px] uppercase tracking-wide text-muted">{sub}</p>
       </div>
-      <button
-        type="button"
-        onClick={abrir}
-        disabled={pending}
-        className="inline-flex shrink-0 items-center gap-1 text-[13px] font-medium text-muted transition-colors hover:text-primary disabled:opacity-50"
-      >
-        <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-        {pending ? "…" : "Ver"}
-      </button>
+      <VisorDocumento bucket={bucket} path={path} nombre={nombre} />
     </li>
   );
 }

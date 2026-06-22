@@ -54,6 +54,7 @@ export interface DocumentoGlobal {
   nombre: string;
   tipo: string;
   archivo_url: string;
+  bucket: "documentos" | "ordenes-oc";
   created_at: string;
   numeroOc: string | null;
   institucion: string | null;
@@ -71,6 +72,7 @@ export async function listarDocumentos(): Promise<DocumentoGlobal[]> {
           nombre: d.nombre,
           tipo: d.tipo,
           archivo_url: d.archivo_url,
+          bucket: "documentos" as const,
           created_at: d.created_at,
           numeroOc: o.numero_oc,
           institucion: o.institucion,
@@ -83,25 +85,64 @@ export async function listarDocumentos(): Promise<DocumentoGlobal[]> {
   }
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("documento")
-    .select("*, orden(numero_oc, institucion)")
-    .order("created_at", { ascending: false });
-  return ((data as unknown[] | null) ?? []).map((row) => {
-    const d = row as Record<string, unknown> & {
-      orden?: { numero_oc?: string; institucion?: string };
-    };
-    return {
-      id: d.id as string,
-      orden_id: d.orden_id as string,
-      nombre: d.nombre as string,
-      tipo: (d.tipo as string) ?? "otro",
-      archivo_url: d.archivo_url as string,
-      created_at: d.created_at as string,
-      numeroOc: d.orden?.numero_oc ?? null,
-      institucion: d.orden?.institucion ?? null,
-    };
-  });
+  // El repositorio global = documentos subidos + la OC original de cada orden
+  // (que vive en orden.oc_archivo_url, no en la tabla documento).
+  const [docsRes, ordenesRes] = await Promise.all([
+    supabase
+      .from("documento")
+      .select("*, orden(numero_oc, institucion)")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("orden")
+      .select("id, numero_oc, institucion, oc_archivo_url, created_at")
+      .not("oc_archivo_url", "is", null),
+  ]);
+
+  const docs: DocumentoGlobal[] = ((docsRes.data as unknown[] | null) ?? []).map(
+    (row) => {
+      const d = row as Record<string, unknown> & {
+        orden?: { numero_oc?: string; institucion?: string };
+      };
+      return {
+        id: d.id as string,
+        orden_id: d.orden_id as string,
+        nombre: d.nombre as string,
+        tipo: (d.tipo as string) ?? "otro",
+        archivo_url: d.archivo_url as string,
+        bucket: "documentos",
+        created_at: d.created_at as string,
+        numeroOc: d.orden?.numero_oc ?? null,
+        institucion: d.orden?.institucion ?? null,
+      };
+    },
+  );
+
+  const ocs: DocumentoGlobal[] = (
+    (ordenesRes.data as
+      | {
+          id: string;
+          numero_oc: string | null;
+          institucion: string | null;
+          oc_archivo_url: string;
+          created_at: string;
+        }[]
+      | null) ?? []
+  ).map((o) => ({
+    id: `oc-${o.id}`,
+    orden_id: o.id,
+    nombre: o.numero_oc ? `OC ${o.numero_oc}` : "Orden de compra",
+    tipo: "oc",
+    archivo_url: o.oc_archivo_url,
+    bucket: "ordenes-oc",
+    created_at: o.created_at,
+    numeroOc: o.numero_oc,
+    institucion: o.institucion,
+  }));
+
+  return [...ocs, ...docs].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
 }
 
 // ---------- Catálogo reutilizable ----------
@@ -232,7 +273,15 @@ export async function listarOrdenes(): Promise<OrdenConItems[]> {
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
-  return ordenarPorUrgencia(data as OrdenConItems[]);
+
+  // Resolver el responsable (el tablero muestra su nombre/avatar).
+  const personas = await listarPersonas();
+  const porId = new Map(personas.map((p) => [p.id, p]));
+  const ordenes = (data as OrdenConItems[]).map((o) => ({
+    ...o,
+    responsable: o.responsable_id ? porId.get(o.responsable_id) ?? null : null,
+  }));
+  return ordenarPorUrgencia(ordenes);
 }
 
 // Orden por urgencia: vencidas/menos días primero; sin plazo al final.

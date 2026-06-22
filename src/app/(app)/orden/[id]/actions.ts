@@ -139,7 +139,11 @@ export async function actualizarItem(
   }
   if (Object.keys(limpio).length === 0) return;
   const supabase = await createClient();
-  await supabase.from("item").update(limpio).eq("id", itemId);
+  const { error } = await supabase.from("item").update(limpio).eq("id", itemId);
+  if (error) {
+    console.error("actualizarItem falló:", error.message, limpio);
+    return;
+  }
   refrescar(ordenId);
 }
 

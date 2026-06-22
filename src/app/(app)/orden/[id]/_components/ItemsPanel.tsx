@@ -420,6 +420,9 @@ function ItemRow({
                         ...(cat?.canal ? { canal: cat.canal } : {}),
                       });
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
                     onBlur={(e) => {
                       const v = e.target.value.trim();
                       onPersist(item.id, { suplidor: v || null, canal: item.canal });
@@ -474,6 +477,9 @@ function ItemRow({
                         precio: e.target.value === "" ? null : Number(e.target.value),
                       })
                     }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
                     onBlur={() => onPersist(item.id, { precio: item.precio })}
                     placeholder="0.00"
                     className={inputBase}
@@ -510,6 +516,9 @@ function ItemRow({
             <input
               value={item.condiciones ?? ""}
               onChange={(e) => onUpdate(item.id, { condiciones: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
               onBlur={() => onPersist(item.id, { condiciones: item.condiciones })}
               placeholder={
                 item.tipo === "servicio"
@@ -658,6 +667,9 @@ function Reparto({
                 <input
                   value={a.suplidor ?? ""}
                   onChange={(e) => onSet(a.id, { suplidor: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
                   onBlur={(e) => {
                     const v = e.target.value.trim();
                     if (v) onGuardarSup(a.canal, v);
