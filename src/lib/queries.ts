@@ -421,6 +421,29 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
     };
   });
 
+  // Separar la bitácora de la orden de la coordinación por ítem.
+  // Las entradas con item_id van al hilo de su ítem; el resto, al feed general.
+  const coordPorItem = new Map<string, Bitacora[]>();
+  const generales: Bitacora[] = [];
+  for (const b of orden.bitacora) {
+    const itemId = (b as Bitacora).item_id ?? null;
+    if (itemId) {
+      const arr = coordPorItem.get(itemId) ?? [];
+      arr.push(b);
+      coordPorItem.set(itemId, arr);
+    } else {
+      generales.push(b);
+    }
+  }
+  orden.bitacora = generales;
+  orden.item = orden.item.map((it) => ({
+    ...it,
+    coordinacion: (coordPorItem.get(it.id) ?? []).sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    ),
+  }));
+
   orden.item.sort((a, b) => a.orden_indice - b.orden_indice);
   orden.bitacora.sort(
     (a, b) =>

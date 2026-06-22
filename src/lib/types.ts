@@ -249,6 +249,7 @@ export function proximoEstadoItem(item: Item): { key: string; label: string } | 
 export interface Bitacora {
   id: string;
   orden_id: string;
+  item_id?: string | null; // si está, la entrada pertenece a la coordinación de ese ítem
   autor_id: string | null;
   tipo: TipoBitacora;
   texto: string;
