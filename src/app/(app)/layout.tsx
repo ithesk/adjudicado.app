@@ -15,7 +15,7 @@ import { listarOrdenes } from "@/lib/queries";
 import { cambiarOrg } from "@/lib/actions/org";
 import { cerrarSesion } from "@/lib/actions/sesion";
 import { isDemo } from "@/lib/demo";
-import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
+import { ESTADO_LABEL, esViva, nombreLegible, type Estado } from "@/lib/types";
 import NavLink from "./_components/NavLink";
 
 const ESTADOS_NAV: { key: Estado; dot: string }[] = [
@@ -32,6 +32,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const miembro = await requireMiembro();
+  const nombreUsuario = nombreLegible(miembro.nombre);
   const membresias = await getMembresias();
   const ordenes = await listarOrdenes();
   const cuenta = (e: Estado) => ordenes.filter((o) => o.estado === e).length;
@@ -160,10 +161,10 @@ export default async function AppLayout({
         <details className="group relative mt-auto border-t border-line pt-2.5">
           <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
             <span className="grid h-7 w-7 flex-none place-items-center rounded-full bg-surface-2 font-mono text-[11px] font-semibold text-ink-soft">
-              {(miembro.nombre ?? "?").slice(0, 2).toUpperCase()}
+              {nombreUsuario.slice(0, 2).toUpperCase()}
             </span>
             <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-soft">
-              {miembro.nombre ?? "Usuario"}
+              {nombreUsuario}
             </span>
             {isDemo() && (
               <span className="rounded-full bg-warn-soft px-1.5 py-0.5 font-mono text-[10px] font-medium text-warn">
@@ -180,7 +181,7 @@ export default async function AppLayout({
           <div className="absolute bottom-full left-0 right-0 z-30 mb-1 rounded-lg border border-line bg-surface p-1 shadow-raised">
             <div className="px-2 py-1.5">
               <p className="truncate text-[12.5px] font-medium text-ink">
-                {miembro.nombre ?? "Usuario"}
+                {nombreUsuario}
               </p>
               <p className="truncate text-[11px] text-muted">
                 {miembro.organizacion?.nombre ?? "Mi empresa"}

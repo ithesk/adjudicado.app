@@ -16,6 +16,7 @@ import {
   formatFecha,
   formatRD,
   nivelUrgencia,
+  nombreLegible,
   relojEntregaActivo,
 } from "@/lib/types";
 import { estadoChip, textoDias, urgenciaChip } from "@/lib/ui";
@@ -61,7 +62,7 @@ export default async function OrdenDetallePage({
   const miembro = await getMiembro();
   const currentUser = {
     id: miembro?.user_id ?? "yo",
-    nombre: miembro?.nombre ?? "Tú",
+    nombre: miembro?.nombre ? nombreLegible(miembro.nombre) : "Tú",
   };
 
   return (

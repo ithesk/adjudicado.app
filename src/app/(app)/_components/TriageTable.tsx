@@ -416,9 +416,11 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
           {orden.numero_oc || "OC s/n"}
         </span>
         {espera && (
-          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+          <span className="mt-0.5 flex min-w-0 max-w-[20rem] items-center gap-1 text-[11px] text-muted">
             <Clock className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
-            <span className="truncate">espera: {espera.nombre}</span>
+            <span className="min-w-0 flex-1 truncate" title={espera.nombre ?? undefined}>
+              espera: {espera.nombre}
+            </span>
             <span
               className={`shrink-0 rounded px-1 font-mono text-[10px] font-medium ${urgenciaChip(
                 nivelUrgencia(diasEspera),
@@ -443,9 +445,14 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       </Link>
     ),
     responsable: orden.responsable ? (
-      <span className="flex items-center gap-1.5">
-        <Avatar nombre={orden.responsable.nombre} size={20} />
-        <span className="truncate text-[13px] text-ink-soft">
+      <span className="flex min-w-0 max-w-[11rem] items-center gap-1.5">
+        <span className="shrink-0">
+          <Avatar nombre={orden.responsable.nombre} size={20} />
+        </span>
+        <span
+          className="min-w-0 flex-1 truncate text-[13px] text-ink-soft"
+          title={orden.responsable.nombre}
+        >
           {orden.responsable.nombre}
         </span>
       </span>

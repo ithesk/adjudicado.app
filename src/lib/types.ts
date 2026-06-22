@@ -96,6 +96,22 @@ export interface Institucion {
   contactos: Contacto[];
 }
 
+// Nombre legible para mostrar. Si el "nombre" es en realidad un correo
+// (caso típico de un invitado que aún no puso su nombre), usa la parte local
+// capitalizada: "acosta@innova.com" → "Acosta", "juan.perez@x.com" → "Juan Perez".
+export function nombreLegible(nombre: string | null | undefined): string {
+  const n = (nombre ?? "").trim();
+  if (!n) return "—";
+  if (!n.includes("@")) return n;
+  const local = n.split("@")[0];
+  const bonito = local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(" ");
+  return bonito || n;
+}
+
 export function iniciales(nombre: string | null | undefined): string {
   if (!nombre) return "?";
   const partes = nombre.trim().split(/\s+/);

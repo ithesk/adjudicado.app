@@ -20,6 +20,7 @@ import {
   esViva,
   estaAtascado,
   nivelUrgencia,
+  nombreLegible,
   plazoDominante,
   porCobrar,
   type Bitacora,
@@ -241,7 +242,7 @@ export async function listarPersonas(): Promise<Persona[]> {
     .eq("org_id", miembro.org_id);
   return (data ?? []).map((m) => ({
     id: m.user_id as string,
-    nombre: (m.nombre as string) ?? "—",
+    nombre: nombreLegible(m.nombre as string | null),
   }));
 }
 
