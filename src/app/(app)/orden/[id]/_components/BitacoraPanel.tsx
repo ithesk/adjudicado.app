@@ -23,6 +23,7 @@ import {
   type TipoBitacora,
 } from "@/lib/types";
 import { Avatar, Panel, SectionTitle } from "@/components/ui";
+import { isDemo } from "@/lib/demo";
 import { agregarBitacora } from "../actions";
 import { useActividad } from "./Actividad";
 
@@ -86,7 +87,10 @@ function diaLabel(iso: string): string {
   );
 }
 
+// Datos de ejemplo (reacción + comentario) SOLO para el demo, para mostrar
+// cómo lucen las reacciones y comentarios. En producción no se inyecta nada.
 function sembrar(items: Entrada[]): Entrada[] {
+  if (!isDemo()) return items;
   const i = items.findIndex((b) => b.tipo !== "evento");
   if (i === -1) return items;
   const copia = [...items];
