@@ -83,10 +83,54 @@ function normalizar(raw: unknown): OcrResultado {
 
 type Salida = { resultado: OcrResultado; crudo: unknown };
 
-// Punto de entrada: usa Gemini si hay key, si no Claude. Misma salida.
+// Punto de entrada: OpenAI → Gemini → Claude, según la key disponible.
 export async function extraerOrdenDeCompra(pdfBase64: string): Promise<Salida> {
+  if (env.ocrProvider === "openai") return extraerConOpenAI(pdfBase64);
   if (env.ocrProvider === "gemini") return extraerConGemini(pdfBase64);
   return extraerConClaude(pdfBase64);
+}
+
+// ---- OpenAI (gpt-4o-mini): lee el PDF (Responses API) y devuelve JSON. ----
+async function extraerConOpenAI(pdfBase64: string): Promise<Salida> {
+  const res = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.openaiApiKey}`,
+    },
+    body: JSON.stringify({
+      model: env.ocrModel, // gpt-4o-mini
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_file",
+              filename: "oc.pdf",
+              file_data: `data:application/pdf;base64,${pdfBase64}`,
+            },
+            { type: "input_text", text: PROMPT },
+          ],
+        },
+      ],
+      text: { format: { type: "json_object" } },
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`OpenAI ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  }
+  const data = await res.json();
+  // output_text (conveniencia) o recorrer output[].content[].text
+  let texto: string = data.output_text ?? "";
+  if (!texto && Array.isArray(data.output)) {
+    texto = data.output
+      .flatMap((o: { content?: { text?: string }[] }) => o.content ?? [])
+      .map((c: { text?: string }) => c.text ?? "")
+      .join("");
+  }
+  const crudo = parsearJson(texto);
+  return { resultado: normalizar(crudo), crudo };
 }
 
 // ---- Google Gemini (Flash): lee el PDF y devuelve JSON. Barato. ----

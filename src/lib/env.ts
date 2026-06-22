@@ -23,17 +23,24 @@ export const env = {
   get anthropicApiKey() {
     return required("ANTHROPIC_API_KEY");
   },
-  // Gemini (Google AI Studio). Opcional: si está, el OCR usa Gemini.
+  // OpenAI. Opcional: si está, el OCR usa OpenAI.
+  get openaiApiKey() {
+    return process.env.OPENAI_API_KEY || "";
+  },
+  // Gemini (Google AI Studio). Opcional.
   get geminiApiKey() {
     return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
   },
-  get ocrProvider(): "gemini" | "anthropic" {
-    return this.geminiApiKey ? "gemini" : "anthropic";
+  // Proveedor del OCR según la key presente (precedencia: OpenAI → Gemini → Claude).
+  get ocrProvider(): "openai" | "gemini" | "anthropic" {
+    if (this.openaiApiKey) return "openai";
+    if (this.geminiApiKey) return "gemini";
+    return "anthropic";
   },
   get ocrModel() {
     if (process.env.OCR_MODEL) return process.env.OCR_MODEL;
-    return this.ocrProvider === "gemini"
-      ? "gemini-2.0-flash"
-      : "claude-sonnet-4-6";
+    if (this.ocrProvider === "openai") return "gpt-4o-mini";
+    if (this.ocrProvider === "gemini") return "gemini-2.0-flash";
+    return "claude-sonnet-4-6";
   },
 };
