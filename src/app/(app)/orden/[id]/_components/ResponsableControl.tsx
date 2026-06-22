@@ -1,25 +1,35 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { ChevronDown, UserPlus, Check } from "lucide-react";
 import type { Persona } from "@/lib/types";
 import { Avatar } from "@/components/ui";
 import { asignarResponsable } from "../actions";
+import { useActividad } from "./Actividad";
 
 export default function ResponsableControl({
   ordenId,
-  responsable,
+  responsable: inicial,
   personas,
 }: {
   ordenId: string;
   responsable: Persona | null;
   personas: Persona[];
 }) {
-  const [pending, startTransition] = useTransition();
+  // Estado local optimista: se ve al instante (en demo y en real).
+  const [responsable, setResponsable] = useState<Persona | null>(inicial);
+  const [, startTransition] = useTransition();
+  const { emitir } = useActividad();
 
   function asignar(id: string | null) {
+    const p = id ? personas.find((x) => x.id === id) ?? null : null;
+    setResponsable(p);
+    emitir(
+      p
+        ? `Asignó la orden a ${p.nombre}.`
+        : "Quitó el responsable de la orden.",
+    );
     startTransition(() => asignarResponsable(ordenId, id));
-    // cierra el <details>
     document
       .querySelectorAll<HTMLDetailsElement>("details[data-resp]")
       .forEach((d) => (d.open = false));
@@ -40,7 +50,7 @@ export default function ResponsableControl({
           </span>
         )}
         <ChevronDown
-          className={`h-3.5 w-3.5 text-muted ${pending ? "animate-pulse" : ""}`}
+          className="h-3.5 w-3.5 text-muted"
           strokeWidth={2}
           aria-hidden
         />
@@ -50,6 +60,11 @@ export default function ResponsableControl({
         <p className="px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
           Responsable
         </p>
+        {personas.length === 0 && (
+          <p className="px-2 py-1.5 text-[12px] text-muted">
+            Invita a tu equipo para asignar responsables.
+          </p>
+        )}
         {personas.map((p) => {
           const activo = responsable?.id === p.id;
           return (

@@ -15,18 +15,28 @@ import {
   CreditCard,
   Truck,
   Handshake,
+  Split,
+  Trash2,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import {
   CANAL_LABEL,
+  cantidadRepartida,
   diasRestantes,
   estadoItemLabel,
   flujoDeItem,
   formatFecha,
+  formatRD,
   itemEntregado,
+  asignacionEntregada,
+  precioTotalItem,
   proximoEstadoItem,
+  resumenReparto,
+  tieneReparto,
   nivelUrgencia,
   tiempoRelativo,
+  type Asignacion,
   type Bitacora,
   type CanalItem,
   type Item,
@@ -193,6 +203,62 @@ function ItemRow({
     (s) => s.nombre.toLowerCase() === (item.suplidor ?? "").toLowerCase(),
   );
 
+  // ---- Reparto entre suplidores ----
+  const flujo = flujoDeItem(item);
+  const split = tieneReparto(item);
+  const asignaciones = item.asignaciones ?? [];
+  const partesListas = asignaciones.filter((a) =>
+    asignacionEntregada(item, a),
+  ).length;
+
+  function setAsignaciones(next: Asignacion[] | undefined) {
+    onUpdate(item.id, { asignaciones: next });
+  }
+  function nuevaAsig(cantidad: number): Asignacion {
+    return {
+      id: nid(),
+      suplidor: null,
+      canal: item.canal,
+      cantidad,
+      precio: null,
+      estado_item: flujo[0].key,
+      fecha_estim: null,
+    };
+  }
+  function dividir() {
+    setAsignaciones([
+      {
+        id: nid(),
+        suplidor: item.suplidor,
+        canal: item.canal,
+        cantidad: item.cantidad,
+        precio: item.precio,
+        estado_item: item.estado_item ?? flujo[0].key,
+        fecha_estim: item.fecha_estim,
+      },
+      nuevaAsig(1),
+    ]);
+    emitir(`Dividió “${item.nombre}” entre varios suplidores.`);
+  }
+  function addAsig() {
+    setAsignaciones([...asignaciones, nuevaAsig(1)]);
+  }
+  function setAsig(aId: string, patch: Partial<Asignacion>) {
+    setAsignaciones(asignaciones.map((a) => (a.id === aId ? { ...a, ...patch } : a)));
+  }
+  function delAsig(aId: string) {
+    const rest = asignaciones.filter((a) => a.id !== aId);
+    setAsignaciones(rest.length ? rest : undefined);
+    emitir(`Quitó un suplidor del reparto de “${item.nombre}”.`);
+  }
+  function avanzarAsig(a: Asignacion) {
+    const i = flujo.findIndex((x) => x.key === (a.estado_item ?? flujo[0].key));
+    if (i < 0 || i >= flujo.length - 1) return;
+    const next = flujo[i + 1];
+    setAsig(a.id, { estado_item: next.key });
+    emitir(`“${item.nombre}” · ${a.suplidor || "suplidor"}: ${next.label}.`);
+  }
+
   return (
     <li>
       {/* Fila colapsada */}
@@ -231,9 +297,18 @@ function ItemRow({
               {item.nombre}
             </span>
             <span className="block truncate text-[11px] text-muted">
-              {estadoItemLabel(item)} ·{" "}
-              {item.canal ? CANAL_LABEL[item.canal] : "canal por definir"}
-              {item.suplidor ? ` · ${item.suplidor}` : ""}
+              {split ? (
+                <>
+                  <Split className="mr-1 inline h-3 w-3 align-[-1px]" strokeWidth={2} aria-hidden />
+                  {resumenReparto(item)}
+                </>
+              ) : (
+                <>
+                  {estadoItemLabel(item)} ·{" "}
+                  {item.canal ? CANAL_LABEL[item.canal] : "canal por definir"}
+                  {item.suplidor ? ` · ${item.suplidor}` : ""}
+                </>
+              )}
             </span>
           </span>
         </button>
@@ -247,8 +322,18 @@ function ItemRow({
           {entregado ? "Listo" : item.fecha_estim ? textoDias(dias) : "s/ ETA"}
         </span>
 
-        {/* Acción directa: avanzar de estado sin tener que expandir */}
-        {prox ? (
+        {/* Acción directa: avanzar de estado sin tener que expandir.
+            Si el ítem está repartido, se gestiona por suplidor al expandir. */}
+        {split ? (
+          <button
+            type="button"
+            onClick={() => setAbierto(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:text-ink"
+          >
+            <Split className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            {partesListas}/{asignaciones.length} partes
+          </button>
+        ) : prox ? (
           <button
             type="button"
             onClick={() => onAvanzar(item)}
@@ -271,88 +356,129 @@ function ItemRow({
         <div className="space-y-4 bg-canvas/40 px-4 pb-4 pt-1">
           <Hint tipo={item.tipo} />
 
-          <div>
-            <p className="mb-1.5 text-xs font-medium text-muted">
-              Estado del ítem · toca para fijar uno
-            </p>
-            <Pipeline item={item} onSet={(k) => onSetEstado(item, k)} />
-          </div>
+          {/* Datalist compartido de suplidores (lo usan los campos de abajo). */}
+          <datalist id={`sup-cat-${item.id}`}>
+            {suplidores.map((s) => (
+              <option key={s.id} value={s.nombre} />
+            ))}
+          </datalist>
 
-          {/* Campos del ítem */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Campo label="Suplidor">
-              <input
-                value={item.suplidor ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  const cat = suplidores.find(
-                    (s) => s.nombre.toLowerCase() === v.toLowerCase(),
-                  );
-                  // Al elegir del catálogo, hereda el canal del suplidor.
-                  onUpdate(item.id, {
-                    suplidor: v,
-                    ...(cat?.canal ? { canal: cat.canal } : {}),
-                  });
-                }}
-                onBlur={(e) => {
-                  const v = e.target.value.trim();
-                  if (!v) return;
-                  agregarSuplidor(v, item.canal as CanalItem | null);
-                  if (v !== supInicial.current) {
-                    emitir(`Asignó suplidor “${v}” a “${item.nombre}”.`);
-                    supInicial.current = v;
-                  }
-                }}
-                list={`sup-cat-${item.id}`}
-                placeholder="Elige del catálogo o escribe…"
-                className={inputBase}
-              />
-              <datalist id={`sup-cat-${item.id}`}>
-                {suplidores.map((s) => (
-                  <option key={s.id} value={s.nombre} />
-                ))}
-              </datalist>
-            </Campo>
-            <Campo label="Canal">
-              <select
-                value={item.canal ?? ""}
-                onChange={(e) =>
-                  onUpdate(item.id, { canal: e.target.value as CanalItem })
-                }
-                className={inputBase}
+          {!split ? (
+            <>
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-muted">
+                  Estado del ítem · toca para fijar uno
+                </p>
+                <Pipeline item={item} onSet={(k) => onSetEstado(item, k)} />
+              </div>
+
+              {/* Campos del ítem (un solo suplidor) */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Campo label="Suplidor">
+                  <input
+                    value={item.suplidor ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const cat = suplidores.find(
+                        (s) => s.nombre.toLowerCase() === v.toLowerCase(),
+                      );
+                      onUpdate(item.id, {
+                        suplidor: v,
+                        ...(cat?.canal ? { canal: cat.canal } : {}),
+                      });
+                    }}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (!v) return;
+                      agregarSuplidor(v, item.canal as CanalItem | null);
+                      if (v !== supInicial.current) {
+                        emitir(`Asignó suplidor “${v}” a “${item.nombre}”.`);
+                        supInicial.current = v;
+                      }
+                    }}
+                    list={`sup-cat-${item.id}`}
+                    placeholder="Elige del catálogo o escribe…"
+                    className={inputBase}
+                  />
+                </Campo>
+                <Campo label="Canal">
+                  <select
+                    value={item.canal ?? ""}
+                    onChange={(e) =>
+                      onUpdate(item.id, { canal: e.target.value as CanalItem })
+                    }
+                    className={inputBase}
+                  >
+                    {(Object.keys(CANAL_LABEL) as CanalItem[]).map((c) => (
+                      <option key={c} value={c}>
+                        {CANAL_LABEL[c]}
+                      </option>
+                    ))}
+                  </select>
+                </Campo>
+                <Campo label="Fecha estimada (ETA)">
+                  <input
+                    type="date"
+                    value={item.fecha_estim ?? ""}
+                    onChange={(e) =>
+                      onUpdate(item.id, { fecha_estim: e.target.value })
+                    }
+                    className={inputBase}
+                  />
+                </Campo>
+                <Campo label="Precio acordado (RD$)">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={item.precio ?? ""}
+                    onChange={(e) =>
+                      onUpdate(item.id, {
+                        precio: e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    placeholder="0.00"
+                    className={inputBase}
+                  />
+                </Campo>
+              </div>
+
+              <button
+                type="button"
+                onClick={dividir}
+                className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-line px-2.5 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
               >
-                {(Object.keys(CANAL_LABEL) as CanalItem[]).map((c) => (
-                  <option key={c} value={c}>
-                    {CANAL_LABEL[c]}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo label="Fecha estimada (ETA)">
-              <input
-                type="date"
-                value={item.fecha_estim ?? ""}
-                onChange={(e) =>
-                  onUpdate(item.id, { fecha_estim: e.target.value })
-                }
-                className={inputBase}
-              />
-            </Campo>
-            <Campo label={item.tipo === "servicio" ? "Método de pago / condiciones" : "Condiciones"}>
-              <input
-                value={item.condiciones ?? ""}
-                onChange={(e) =>
-                  onUpdate(item.id, { condiciones: e.target.value })
-                }
-                placeholder={
-                  item.tipo === "servicio"
-                    ? "Transferencia, tarjeta…"
-                    : "Precio, soporte, tracking…"
-                }
-                className={inputBase}
-              />
-            </Campo>
-          </div>
+                <Split className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                Dividir entre suplidores
+              </button>
+            </>
+          ) : (
+            <Reparto
+              item={item}
+              suplidores={suplidores}
+              onSet={setAsig}
+              onAdd={addAsig}
+              onDel={delAsig}
+              onAvanzar={avanzarAsig}
+              onGuardarSup={(canal, nombre) => agregarSuplidor(nombre, canal)}
+            />
+          )}
+
+          {/* Condiciones / notas (siempre) */}
+          <Campo
+            label={item.tipo === "servicio" ? "Método de pago / condiciones" : "Condiciones / notas"}
+          >
+            <input
+              value={item.condiciones ?? ""}
+              onChange={(e) => onUpdate(item.id, { condiciones: e.target.value })}
+              placeholder={
+                item.tipo === "servicio"
+                  ? "Transferencia, tarjeta…"
+                  : "Soporte, tracking, garantía…"
+              }
+              className={inputBase}
+            />
+          </Campo>
 
           {/* Contactos del suplidor (del catálogo reutilizable) */}
           {supCatalogo && supCatalogo.contactos.length > 0 && (
@@ -414,6 +540,207 @@ function Pipeline({
   );
 }
 
+const miniInput =
+  "w-full rounded-md border border-line bg-surface px-2 py-1 text-[12px] text-ink outline-none focus:border-primary";
+
+function MiniCampo({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-muted">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+// Editor de reparto: un ítem repartido entre varios suplidores, cada parte con
+// su cantidad, precio, canal, ETA y su propio flujo de estado.
+function Reparto({
+  item,
+  onSet,
+  onAdd,
+  onDel,
+  onAvanzar,
+  onGuardarSup,
+}: {
+  item: Item;
+  suplidores: Suplidor[];
+  onSet: (aId: string, patch: Partial<Asignacion>) => void;
+  onAdd: () => void;
+  onDel: (aId: string) => void;
+  onAvanzar: (a: Asignacion) => void;
+  onGuardarSup: (canal: CanalItem | null, nombre: string) => void;
+}) {
+  const flujo = flujoDeItem(item);
+  const asignaciones = item.asignaciones ?? [];
+  const total = precioTotalItem(item);
+  const repartida = cantidadRepartida(item);
+  const descuadre = repartida !== item.cantidad;
+
+  return (
+    <div className="rounded-md border border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-3 py-2">
+        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+          <Split className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          Reparto entre suplidores · {asignaciones.length}
+        </p>
+        <span
+          className={`font-mono text-[11px] ${descuadre ? "text-warn" : "text-muted"}`}
+        >
+          {repartida}/{item.cantidad} uds
+        </span>
+      </div>
+
+      <ul className="divide-y divide-line">
+        {asignaciones.map((a) => {
+          const lista = asignacionEntregada(item, a);
+          const i = flujo.findIndex(
+            (x) => x.key === (a.estado_item ?? flujo[0].key),
+          );
+          const prox = i >= 0 && i < flujo.length - 1 ? flujo[i + 1] : null;
+          return (
+            <li key={a.id} className="space-y-2.5 px-3 py-3">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${
+                    lista ? "bg-ok-soft text-ok" : "bg-surface-2 text-muted"
+                  }`}
+                >
+                  {lista ? (
+                    <Check className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                  ) : (
+                    <Box className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  )}
+                </span>
+                <input
+                  value={a.suplidor ?? ""}
+                  onChange={(e) => onSet(a.id, { suplidor: e.target.value })}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v) onGuardarSup(a.canal, v);
+                  }}
+                  list={`sup-cat-${item.id}`}
+                  placeholder="Suplidor de esta parte…"
+                  className="flex-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => onDel(a.id)}
+                  aria-label="Quitar suplidor"
+                  className="text-muted transition-colors hover:text-danger"
+                >
+                  <Trash2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <MiniCampo label="Cantidad">
+                  <input
+                    type="number"
+                    min={0}
+                    value={a.cantidad}
+                    onChange={(e) =>
+                      onSet(a.id, { cantidad: Number(e.target.value) || 0 })
+                    }
+                    className={miniInput}
+                  />
+                </MiniCampo>
+                <MiniCampo label="Canal">
+                  <select
+                    value={a.canal ?? ""}
+                    onChange={(e) =>
+                      onSet(a.id, { canal: e.target.value as CanalItem })
+                    }
+                    className={miniInput}
+                  >
+                    {(Object.keys(CANAL_LABEL) as CanalItem[]).map((c) => (
+                      <option key={c} value={c}>
+                        {CANAL_LABEL[c]}
+                      </option>
+                    ))}
+                  </select>
+                </MiniCampo>
+                <MiniCampo label="Precio (RD$)">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={a.precio ?? ""}
+                    onChange={(e) =>
+                      onSet(a.id, {
+                        precio:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      })
+                    }
+                    placeholder="0.00"
+                    className={miniInput}
+                  />
+                </MiniCampo>
+                <MiniCampo label="ETA">
+                  <input
+                    type="date"
+                    value={a.fecha_estim ?? ""}
+                    onChange={(e) => onSet(a.id, { fecha_estim: e.target.value })}
+                    className={miniInput}
+                  />
+                </MiniCampo>
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted">
+                  Estado:{" "}
+                  <span className="text-ink-soft">
+                    {flujo[Math.max(0, i)].label}
+                  </span>
+                </span>
+                {prox ? (
+                  <button
+                    type="button"
+                    onClick={() => onAvanzar(a)}
+                    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-ink transition-colors hover:bg-primary-hover"
+                  >
+                    {prox.label}
+                    <ArrowRight className="h-3 w-3" strokeWidth={2} aria-hidden />
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-ok-soft px-2 py-1 text-[11px] font-medium text-ok">
+                    <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                    Listo
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="flex items-center justify-between border-t border-line px-3 py-2">
+        <button
+          type="button"
+          onClick={onAdd}
+          className="inline-flex items-center gap-1 text-[12px] font-medium text-primary transition-opacity hover:opacity-80"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+          Agregar suplidor
+        </button>
+        {total != null && (
+          <span className="font-mono text-[12px] text-ink-soft">
+            Total: {formatRD(total)}
+          </span>
+        )}
+      </div>
+
+      {descuadre && (
+        <p className="border-t border-line px-3 py-1.5 text-[11px] text-warn">
+          Las cantidades suman {repartida} y el ítem pide {item.cantidad}. Ajusta
+          el reparto.
+        </p>
+      )}
+    </div>
+  );
+}
+
 const COORD_TIPOS: { valor: TipoBitacora; label: string; icon: LucideIcon }[] = [
   { valor: "llamada", label: "Llamada", icon: Phone },
   { valor: "correo", label: "Correo", icon: Mail },
@@ -470,7 +797,7 @@ function Coordinacion({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="text-[12px] font-medium text-ink">
-                        {b.autor?.nombre ?? "Alguien"}
+                        {b.autor?.nombre ?? "Miembro del equipo"}
                       </span>
                       <span className="inline-flex items-center gap-1 text-[10px] text-muted">
                         <Icon className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />

@@ -118,6 +118,18 @@ export const CANAL_LABEL: Record<CanalItem, string> = {
   directo: "Directo",
 };
 
+// Reparto de un ítem entre varios suplidores: "5 unidades, 1 por Amazon y 4
+// por eBay". Cada parte tiene su propio suplidor, cantidad, precio y flujo.
+export interface Asignacion {
+  id: string;
+  suplidor: string | null;
+  canal: CanalItem | null;
+  cantidad: number;
+  precio: number | null; // total de esta parte (RD$)
+  estado_item: string | null; // clave dentro del flujo del tipo del ítem
+  fecha_estim: string | null; // ETA propia de esta parte
+}
+
 export interface Item {
   id: string;
   orden_id: string;
@@ -133,8 +145,10 @@ export interface Item {
   canal: CanalItem | null;
   estado_item: string | null; // clave dentro del flujo de su tipo
   fecha_estim: string | null; // ETA propia del ítem
-  condiciones: string | null; // precio, soporte, términos, tracking…
+  precio: number | null; // precio acordado del ítem (cuando no está repartido)
+  condiciones: string | null; // soporte, términos, tracking…
   coordinacion?: Bitacora[]; // hilo de coordinación propio (demo)
+  asignaciones?: Asignacion[]; // reparto entre suplidores (demo)
 }
 
 // Flujo (pipeline) por tipo de ítem. El último estado = entregado/activado.
@@ -170,10 +184,43 @@ export function estadoItemLabel(item: Item): string {
   return f.find((x) => x.key === e)?.label ?? f[0].label;
 }
 
+// ¿Esta parte (reparto) ya llegó a su estado terminal?
+export function asignacionEntregada(item: Item, a: Asignacion): boolean {
+  const f = FLUJO_ITEM[item.tipo];
+  return a.estado_item === f[f.length - 1].key;
+}
+
+export function tieneReparto(item: Item): boolean {
+  return (item.asignaciones?.length ?? 0) > 0;
+}
+
 export function itemEntregado(item: Item): boolean {
+  if (tieneReparto(item)) {
+    return item.asignaciones!.every((a) => asignacionEntregada(item, a));
+  }
   const f = flujoDeItem(item);
   const terminal = f[f.length - 1].key;
   return item.entregado || item.estado_item === terminal;
+}
+
+// "1× Amazon · 4× eBay" — resumen legible del reparto.
+export function resumenReparto(item: Item): string {
+  return (item.asignaciones ?? [])
+    .map((a) => `${a.cantidad}× ${a.suplidor || "sin suplidor"}`)
+    .join(" · ");
+}
+
+export function cantidadRepartida(item: Item): number {
+  return (item.asignaciones ?? []).reduce((n, a) => n + (a.cantidad || 0), 0);
+}
+
+export function precioTotalItem(item: Item): number | null {
+  if (tieneReparto(item)) {
+    const partes = item.asignaciones!.filter((a) => a.precio != null);
+    if (partes.length === 0) return null;
+    return partes.reduce((s, a) => s + (a.precio ?? 0), 0);
+  }
+  return item.precio;
 }
 
 export function proximoEstadoItem(item: Item): { key: string; label: string } | null {

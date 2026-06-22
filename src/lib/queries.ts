@@ -307,6 +307,19 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
   if (error || !data) return null;
 
   const orden = data as OrdenDetalle;
+
+  // Resolver nombres (responsable + autores de la bitácora) desde los miembros
+  // de la org, para no mostrar "Alguien".
+  const personas = await listarPersonas();
+  const porId = new Map(personas.map((p) => [p.id, p]));
+  orden.responsable = orden.responsable_id
+    ? porId.get(orden.responsable_id) ?? null
+    : null;
+  orden.bitacora = orden.bitacora.map((b) => ({
+    ...b,
+    autor: b.autor_id ? porId.get(b.autor_id) ?? null : null,
+  }));
+
   orden.item.sort((a, b) => a.orden_indice - b.orden_indice);
   orden.bitacora.sort(
     (a, b) =>

@@ -264,22 +264,41 @@ export function demoOrdenes(): OrdenDetalle[] {
           suplidor: "Microsoft (directo)",
           canal: "suscripcion",
           estado_item: "activado",
+          precio: 540000,
           condiciones:
             "Pago anual por transferencia. Activación inmediata tras el pago; sin espera de suplidor.",
         }),
         it("demo-1", 1, "Laptops Dell Latitude 5440 (5 uds.)", "fisico", 5, false, {
-          suplidor: "Amazon Business",
-          canal: "amazon",
-          estado_item: "en_transito",
-          fecha_estim: dia(2),
+          // Repartido entre dos suplidores: 1 por Amazon, 4 por eBay.
           condiciones:
-            "Orden Amazon #112-4459832. Envío estándar a almacén. Tracking disponible en la cuenta.",
+            "Mismo modelo, dos fuentes para cumplir a tiempo. Verificar serie a la recepción.",
+          asignaciones: [
+            {
+              id: "demo-1-item-1-a0",
+              suplidor: "Amazon Business",
+              canal: "amazon",
+              cantidad: 1,
+              precio: 82000,
+              estado_item: "en_transito",
+              fecha_estim: dia(2),
+            },
+            {
+              id: "demo-1-item-1-a1",
+              suplidor: "eBay (vendedor PCWorld)",
+              canal: "directo",
+              cantidad: 4,
+              precio: 320000,
+              estado_item: "pedido",
+              fecha_estim: dia(7),
+            },
+          ],
         }),
         it("demo-1", 2, "Licencias antivirus corporativo (200 equipos)", "licencia", 200, false, {
           suplidor: "Ingram Micro",
           canal: "distribuidor",
           estado_item: "negociando",
           fecha_estim: dia(6),
+          precio: 890000,
           condiciones:
             "Esperando confirmación de fábrica. Negociando precio por volumen + 1 año de soporte. Tope aprobado: RD$ 920k.",
           coordinacion: [
@@ -539,7 +558,14 @@ function canalPorDefecto(tipo: TipoItem): CanalItem {
 type ItemExtra = Partial<
   Pick<
     Item,
-    "suplidor" | "canal" | "estado_item" | "fecha_estim" | "condiciones" | "coordinacion"
+    | "suplidor"
+    | "canal"
+    | "estado_item"
+    | "fecha_estim"
+    | "precio"
+    | "condiciones"
+    | "coordinacion"
+    | "asignaciones"
   >
 >;
 
@@ -583,8 +609,10 @@ function it(
     canal: extra.canal ?? canalPorDefecto(tipo),
     estado_item: extra.estado_item ?? (entregado ? terminal : flujo[0].key),
     fecha_estim: extra.fecha_estim ?? null,
+    precio: extra.precio ?? null,
     condiciones: extra.condiciones ?? null,
     coordinacion: extra.coordinacion,
+    asignaciones: extra.asignaciones,
   };
 }
 

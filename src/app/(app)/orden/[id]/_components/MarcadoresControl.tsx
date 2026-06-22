@@ -3,27 +3,42 @@
 import { useState, useTransition } from "react";
 import { X, Plus } from "lucide-react";
 import { agregarEtiqueta, quitarEtiqueta } from "../actions";
+import { useActividad } from "./Actividad";
 
 const SUGERIDAS = ["urgente", "espera-suplidor", "espera-acta", "subsanacion"];
 
 export default function MarcadoresControl({
   ordenId,
-  etiquetas,
+  etiquetas: iniciales,
 }: {
   ordenId: string;
   etiquetas: string[];
 }) {
+  // Estado local optimista: el marcador aparece/desaparece al instante.
+  const [etiquetas, setEtiquetas] = useState<string[]>(iniciales);
   const [nueva, setNueva] = useState("");
   const [abierto, setAbierto] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const { emitir } = useActividad();
 
   function agregar(valor: string) {
-    if (!valor.trim()) return;
-    startTransition(async () => {
-      await agregarEtiqueta(ordenId, valor);
+    const v = valor.trim();
+    if (!v || etiquetas.includes(v)) {
       setNueva("");
       setAbierto(false);
-    });
+      return;
+    }
+    setEtiquetas((prev) => [...prev, v]);
+    setNueva("");
+    setAbierto(false);
+    emitir(`Agregó el marcador “${v}”.`);
+    startTransition(() => agregarEtiqueta(ordenId, v));
+  }
+
+  function quitar(v: string) {
+    setEtiquetas((prev) => prev.filter((e) => e !== v));
+    emitir(`Quitó el marcador “${v}”.`);
+    startTransition(() => quitarEtiqueta(ordenId, v));
   }
 
   const disponibles = SUGERIDAS.filter((s) => !etiquetas.includes(s));
@@ -41,7 +56,7 @@ export default function MarcadoresControl({
           {e}
           <button
             type="button"
-            onClick={() => startTransition(() => quitarEtiqueta(ordenId, e))}
+            onClick={() => quitar(e)}
             className="text-muted transition-colors hover:text-danger"
             aria-label={`Quitar ${e}`}
           >
@@ -54,7 +69,6 @@ export default function MarcadoresControl({
         <button
           type="button"
           onClick={() => setAbierto(true)}
-          disabled={pending}
           className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-dashed border-line text-muted transition-colors hover:border-line-strong hover:text-ink"
           aria-label="Agregar marcador"
         >
@@ -66,7 +80,6 @@ export default function MarcadoresControl({
             <button
               key={s}
               type="button"
-              disabled={pending}
               onClick={() => agregar(s)}
               className="rounded-md border border-dashed border-line px-2 py-0.5 text-xs text-muted transition-colors hover:border-line-strong hover:text-ink"
             >

@@ -462,7 +462,7 @@ function Registro({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="text-[13px] font-medium text-ink">
-            {b.autor?.nombre ?? "Alguien"}
+            {b.autor?.nombre ?? (b.tipo === "evento" ? "Sistema" : "Miembro del equipo")}
           </span>
           <span className="inline-flex items-center gap-1 text-[11px] text-muted">
             <Icon className={`h-3 w-3 ${m.tono}`} strokeWidth={2} aria-hidden />
