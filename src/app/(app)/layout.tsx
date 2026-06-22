@@ -96,7 +96,7 @@ export default async function AppLayout({
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-2 hover:text-ink"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              Crear o unirme a otra empresa
+              Crear otra empresa
             </Link>
           </div>
         </details>

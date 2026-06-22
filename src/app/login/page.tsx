@@ -6,7 +6,6 @@ import { inputBase } from "@/components/ui";
 
 export default function LoginPage() {
   const [modo, setModo] = useState<"entrar" | "crear">("entrar");
-  const [tipo, setTipo] = useState<"empresa" | "unir">("empresa");
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     autenticar,
     {},
@@ -56,7 +55,6 @@ export default function LoginPage() {
             <input type="hidden" name="modo" value={modo} />
             {modo === "crear" && (
               <>
-                <input type="hidden" name="tipo" value={tipo} />
                 <Campo
                   label="Tu nombre"
                   name="nombre"
@@ -65,51 +63,13 @@ export default function LoginPage() {
                   autoComplete="name"
                   required
                 />
-
-                <div>
-                  <span className="mb-1.5 block text-[13px] font-medium text-ink-soft">
-                    Tu empresa
-                  </span>
-                  <div className="mb-2 grid grid-cols-2 gap-1 rounded-md bg-surface-2 p-0.5 text-[12px] font-medium">
-                    <button
-                      type="button"
-                      onClick={() => setTipo("empresa")}
-                      className={`rounded-[5px] py-1.5 transition-colors ${
-                        tipo === "empresa"
-                          ? "bg-surface text-ink shadow-card"
-                          : "text-muted hover:text-ink"
-                      }`}
-                    >
-                      Nueva empresa
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTipo("unir")}
-                      className={`rounded-[5px] py-1.5 transition-colors ${
-                        tipo === "unir"
-                          ? "bg-surface text-ink shadow-card"
-                          : "text-muted hover:text-ink"
-                      }`}
-                    >
-                      Unirme con código
-                    </button>
-                  </div>
-                  {tipo === "empresa" ? (
-                    <input
-                      name="empresa"
-                      placeholder="Nombre de tu empresa, SRL"
-                      className={inputBase}
-                      required
-                    />
-                  ) : (
-                    <input
-                      name="codigo"
-                      placeholder="Código de invitación de tu empresa"
-                      className={inputBase}
-                      required
-                    />
-                  )}
-                </div>
+                <Campo
+                  label="Nombre de tu empresa"
+                  name="empresa"
+                  type="text"
+                  placeholder="Mi Empresa, SRL"
+                  required
+                />
               </>
             )}
             <Campo

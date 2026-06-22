@@ -5,7 +5,6 @@ import { listarPendientes } from "@/lib/queries";
 import { demoMiembros, isDemo } from "@/lib/demo";
 import { formatFecha, type Miembro } from "@/lib/types";
 import { Panel, Avatar } from "@/components/ui";
-import CodigoInvitacion from "@/components/CodigoInvitacion";
 import InvitarForm from "./InvitarForm";
 import BotonesInvitacion from "./BotonesInvitacion";
 
@@ -39,17 +38,6 @@ export default async function EquipoPage() {
           {miembro.organizacion?.nombre ?? "tu empresa"}.
         </p>
         <InvitarForm />
-
-        <details className="mt-4 border-t border-line pt-3">
-          <summary className="cursor-pointer text-[13px] text-muted hover:text-ink">
-            ¿Prefieres un código? (alternativa)
-          </summary>
-          <p className="mt-2 text-[13px] text-muted">
-            Comparte este código; la persona crea su cuenta y elige “Unirme con
-            código”.
-          </p>
-          <CodigoInvitacion codigo={miembro.org_id} />
-        </details>
       </Panel>
 
       {pendientes.length > 0 && (

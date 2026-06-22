@@ -28,10 +28,10 @@ export default async function OnboardingPage() {
         </div>
         <div className="mb-6 text-center">
           <h1 className="font-display text-xl font-semibold">
-            Bienvenido. ¿Tu empresa o te unes a una?
+            Crea el espacio de tu empresa
           </h1>
           <p className="mt-1 text-sm text-muted">
-            Crea el espacio de tu empresa, o únete al de un colega con su código.
+            Quedas como administrador. Luego invitas a tu equipo por correo.
           </p>
         </div>
         <OnboardingForm correo={user.email ?? ""} />
