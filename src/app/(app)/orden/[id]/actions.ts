@@ -168,6 +168,24 @@ export async function agregarCoordinacionItem(
   refrescar(ordenId);
 }
 
+// Registra un evento automático (avance de ítem, suplidor asignado, marcador…)
+// en la bitácora. NO revalida: el feed en vivo ya lo muestra al instante y así
+// evitamos que aparezca duplicado en la misma sesión.
+export async function registrarEvento(ordenId: string, texto: string) {
+  if (isDemo()) return;
+  const limpio = texto.trim();
+  if (!limpio) return;
+  const user = await getUser();
+  const supabase = await createClient();
+  const { error } = await supabase.from("bitacora").insert({
+    orden_id: ordenId,
+    autor_id: user?.id ?? null,
+    tipo: "evento",
+    texto: limpio,
+  });
+  if (error) console.error("registrarEvento falló:", error.message);
+}
+
 export async function agregarBitacora(
   ordenId: string,
   tipo: TipoBitacora,

@@ -66,7 +66,11 @@ export default async function OrdenDetallePage({
   };
 
   return (
-    <ActividadProvider currentUser={currentUser} suplidores={suplidores}>
+    <ActividadProvider
+      ordenId={orden.id}
+      currentUser={currentUser}
+      suplidores={suplidores}
+    >
       <div className="space-y-5">
         <Link
           href="/"

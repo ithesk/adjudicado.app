@@ -1,7 +1,8 @@
 "use client";
 
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useContext, useRef, useState, useTransition } from "react";
 import type { Bitacora, CanalItem, Persona, Suplidor } from "@/lib/types";
+import { registrarEvento } from "../actions";
 
 interface ActividadCtx {
   // Eventos emitidos por acciones en los ítems (se ven en la bitácora).
@@ -22,24 +23,28 @@ export function useActividad(): ActividadCtx {
 }
 
 export default function ActividadProvider({
+  ordenId,
   currentUser,
   suplidores: inicial,
   children,
 }: {
+  ordenId: string;
   currentUser: Persona;
   suplidores: Suplidor[];
   children: React.ReactNode;
 }) {
   const [eventos, setEventos] = useState<Bitacora[]>([]);
   const [suplidores, setSuplidores] = useState<Suplidor[]>(inicial);
+  const [, startTransition] = useTransition();
   const seq = useRef(0);
 
   function emitir(texto: string) {
     seq.current += 1;
+    // Feed en vivo (instantáneo).
     setEventos((prev) => [
       {
         id: `ev-${Date.now()}-${seq.current}`,
-        orden_id: "",
+        orden_id: ordenId,
         autor_id: currentUser.id,
         autor: currentUser,
         tipo: "evento",
@@ -48,6 +53,8 @@ export default function ActividadProvider({
       },
       ...prev,
     ]);
+    // Persistir en la bitácora (queda al recargar).
+    startTransition(() => registrarEvento(ordenId, texto));
   }
 
   function agregarSuplidor(nombre: string, canal: CanalItem | null) {
