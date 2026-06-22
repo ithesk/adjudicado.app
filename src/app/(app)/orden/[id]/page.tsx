@@ -27,6 +27,7 @@ import BitacoraPanel from "./_components/BitacoraPanel";
 import DocumentosPanel from "./_components/DocumentosPanel";
 import PlazosPanel from "./_components/PlazosPanel";
 import ResponsableControl from "./_components/ResponsableControl";
+import ColaboradoresControl from "./_components/ColaboradoresControl";
 import MarcadoresControl from "./_components/MarcadoresControl";
 import ActividadProvider from "./_components/Actividad";
 
@@ -118,6 +119,14 @@ export default async function OrdenDetallePage({
               personas={personas}
             />
           </Prop>
+          <Prop label="Colaboradores">
+            <ColaboradoresControl
+              ordenId={orden.id}
+              colaboradores={orden.colaboradoresPersonas ?? []}
+              responsableId={orden.responsable_id}
+              personas={personas}
+            />
+          </Prop>
           <Prop label="Marcadores">
             <MarcadoresControl ordenId={orden.id} etiquetas={orden.etiquetas} />
           </Prop>
@@ -158,7 +167,11 @@ export default async function OrdenDetallePage({
         </div>
       </div>
 
-      <ItemsPanel items={orden.item} currentUser={currentUser} />
+      <ItemsPanel
+        ordenId={orden.id}
+        items={orden.item}
+        currentUser={currentUser}
+      />
 
       {institucion && institucion.contactos.length > 0 && (
         <Panel>

@@ -94,6 +94,20 @@ export async function asignarResponsable(
   refrescar(ordenId);
 }
 
+// Colaboradores de una orden (además del responsable líder).
+export async function actualizarColaboradores(
+  ordenId: string,
+  userIds: string[],
+) {
+  if (isDemo()) return;
+  const supabase = await createClient();
+  await supabase
+    .from("orden")
+    .update({ colaboradores: userIds })
+    .eq("id", ordenId);
+  refrescar(ordenId);
+}
+
 // ---------- Persistencia a nivel de ítem ----------
 
 const CAMPOS_ITEM = new Set([
@@ -102,9 +116,11 @@ const CAMPOS_ITEM = new Set([
   "canal",
   "estado_item",
   "fecha_estim",
+  "precio",
   "condiciones",
   "entregado",
   "fecha_entrega",
+  "asignaciones",
   "nombre",
   "cantidad",
   "tipo",
@@ -118,6 +134,7 @@ export async function actualizarItem(
   if (isDemo()) return;
   const limpio: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(patch)) {
+    // No colapsar arrays/objetos a null: solo cadenas vacías → null.
     if (CAMPOS_ITEM.has(k)) limpio[k] = v === "" ? null : v;
   }
   if (Object.keys(limpio).length === 0) return;

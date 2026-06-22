@@ -53,6 +53,7 @@ export interface Orden {
   metodo_pago: string | null;
   plazo_pago_dias: number | null;
   responsable_id: string | null;
+  colaboradores?: string[]; // user_ids de colaboradores (además del responsable)
   etiquetas: string[];
   oc_archivo_url: string | null;
   ocr_raw: unknown;

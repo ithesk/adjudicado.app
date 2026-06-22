@@ -281,6 +281,7 @@ export type OrdenDetalle = Orden & {
   bitacora: Bitacora[];
   documento: Documento[];
   responsable?: Persona | null;
+  colaboradoresPersonas?: Persona[];
 };
 
 // Una orden con todas sus relaciones.
@@ -291,6 +292,9 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
       ? {
           ...o,
           responsable: demoPersona(o.responsable_id),
+          colaboradoresPersonas: (o.colaboradores ?? [])
+            .map((id) => demoPersona(id))
+            .filter((p): p is Persona => Boolean(p)),
           bitacora: bitacoraDemo(o),
           item: itemsDemo(o),
           documento: documentosDe(o),
@@ -315,6 +319,9 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
   orden.responsable = orden.responsable_id
     ? porId.get(orden.responsable_id) ?? null
     : null;
+  orden.colaboradoresPersonas = (orden.colaboradores ?? [])
+    .map((id) => porId.get(id))
+    .filter((p): p is Persona => Boolean(p));
   orden.bitacora = orden.bitacora.map((b) => ({
     ...b,
     autor: b.autor_id ? porId.get(b.autor_id) ?? null : null,

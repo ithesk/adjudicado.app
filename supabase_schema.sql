@@ -109,6 +109,7 @@ create table orden (
 
   -- Quién conduce la orden (trabajo en equipo)
   responsable_id    uuid references auth.users(id),
+  colaboradores     uuid[] not null default '{}',  -- colaboradores además del responsable
 
   -- Suplidor a nivel de orden (compat; el seguimiento real es por ítem)
   suplidor              text,
@@ -158,7 +159,9 @@ create table item (
   canal         text,
   estado_item   text,                                  -- clave del flujo por tipo
   fecha_estim   date,                                  -- ETA propia
+  precio        numeric,                               -- precio acordado del ítem
   condiciones   text,
+  asignaciones  jsonb,                                 -- reparto entre suplidores
 
   constraint tipo_valido check (tipo in ('licencia','fisico','servicio')),
   constraint item_canal_valido check (canal is null or canal in

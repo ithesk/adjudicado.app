@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   ChevronRight,
   KeyRound,
@@ -49,6 +49,7 @@ import { Avatar, Panel, SectionTitle, inputBase } from "@/components/ui";
 import { ContactList } from "@/components/contacts";
 import { textoDias, urgenciaChip } from "@/lib/ui";
 import { useActividad } from "./Actividad";
+import { actualizarItem, agregarCoordinacionItem } from "../actions";
 
 const TIPO_ICON: Record<TipoItem, LucideIcon> = {
   licencia: KeyRound,
@@ -78,18 +79,31 @@ let seq = 0;
 const nid = () => `local-item-${Date.now()}-${seq++}`;
 
 export default function ItemsPanel({
+  ordenId,
   items: itemsIniciales,
   currentUser,
 }: {
+  ordenId: string;
   items: Item[];
   currentUser: Persona;
 }) {
   const [items, setItems] = useState<Item[]>(itemsIniciales);
+  const [, startTransition] = useTransition();
   const { emitir } = useActividad();
   const entregados = items.filter(itemEntregado).length;
 
+  // Actualiza el estado local (UI inmediata).
   function update(id: string, patch: Partial<Item>) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }
+  // Persiste en Supabase (no-op en demo). Los campos no soportados se filtran.
+  function persist(id: string, patch: Record<string, unknown>) {
+    startTransition(() => actualizarItem(ordenId, id, patch));
+  }
+  // Local + persistente.
+  function save(id: string, patch: Partial<Item>) {
+    update(id, patch);
+    persist(id, patch as Record<string, unknown>);
   }
 
   function avanzar(it: Item) {
@@ -97,7 +111,7 @@ export default function ItemsPanel({
     if (!prox) return;
     const flujo = flujoDeItem(it);
     const esTerminal = prox.key === flujo[flujo.length - 1].key;
-    update(it.id, {
+    save(it.id, {
       estado_item: prox.key,
       entregado: esTerminal,
       fecha_entrega: esTerminal ? new Date().toISOString().slice(0, 10) : null,
@@ -109,7 +123,11 @@ export default function ItemsPanel({
     const flujo = flujoDeItem(it);
     const esTerminal = key === flujo[flujo.length - 1].key;
     const label = flujo.find((x) => x.key === key)?.label ?? key;
-    update(it.id, { estado_item: key, entregado: esTerminal });
+    save(it.id, {
+      estado_item: key,
+      entregado: esTerminal,
+      fecha_entrega: esTerminal ? new Date().toISOString().slice(0, 10) : null,
+    });
     emitir(`Marcó “${it.nombre}” como ${label}.`);
   }
 
@@ -118,6 +136,7 @@ export default function ItemsPanel({
     emitir(
       `${tipo === "llamada" ? "Llamada" : tipo === "correo" ? "Correo" : "Nota"} en “${it?.nombre ?? "ítem"}”: ${texto.slice(0, 60)}`,
     );
+    startTransition(() => agregarCoordinacionItem(ordenId, id, tipo, texto));
     setItems((prev) =>
       prev.map((it) =>
         it.id === id
@@ -165,6 +184,7 @@ export default function ItemsPanel({
               item={it}
               currentUser={currentUser}
               onUpdate={update}
+              onPersist={persist}
               onAvanzar={avanzar}
               onSetEstado={setEstado}
               onCoord={addCoord}
@@ -180,6 +200,7 @@ function ItemRow({
   item,
   currentUser,
   onUpdate,
+  onPersist,
   onAvanzar,
   onSetEstado,
   onCoord,
@@ -187,6 +208,7 @@ function ItemRow({
   item: Item;
   currentUser: Persona;
   onUpdate: (id: string, patch: Partial<Item>) => void;
+  onPersist: (id: string, patch: Record<string, unknown>) => void;
   onAvanzar: (it: Item) => void;
   onSetEstado: (it: Item, key: string) => void;
   onCoord: (id: string, tipo: TipoBitacora, texto: string) => void;
@@ -211,8 +233,17 @@ function ItemRow({
     asignacionEntregada(item, a),
   ).length;
 
+  // Solo estado local (para teclear suave en los campos del reparto).
   function setAsignaciones(next: Asignacion[] | undefined) {
     onUpdate(item.id, { asignaciones: next });
+  }
+  // Local + persistente (para cambios estructurales y al perder foco).
+  function commitAsignaciones(next: Asignacion[] | undefined) {
+    onUpdate(item.id, { asignaciones: next });
+    onPersist(item.id, { asignaciones: next ?? null });
+  }
+  function persistAsignaciones() {
+    onPersist(item.id, { asignaciones: item.asignaciones ?? null });
   }
   function nuevaAsig(cantidad: number): Asignacion {
     return {
@@ -226,7 +257,7 @@ function ItemRow({
     };
   }
   function dividir() {
-    setAsignaciones([
+    commitAsignaciones([
       {
         id: nid(),
         suplidor: item.suplidor,
@@ -241,21 +272,23 @@ function ItemRow({
     emitir(`Dividió “${item.nombre}” entre varios suplidores.`);
   }
   function addAsig() {
-    setAsignaciones([...asignaciones, nuevaAsig(1)]);
+    commitAsignaciones([...asignaciones, nuevaAsig(1)]);
   }
   function setAsig(aId: string, patch: Partial<Asignacion>) {
     setAsignaciones(asignaciones.map((a) => (a.id === aId ? { ...a, ...patch } : a)));
   }
   function delAsig(aId: string) {
     const rest = asignaciones.filter((a) => a.id !== aId);
-    setAsignaciones(rest.length ? rest : undefined);
+    commitAsignaciones(rest.length ? rest : undefined);
     emitir(`Quitó un suplidor del reparto de “${item.nombre}”.`);
   }
   function avanzarAsig(a: Asignacion) {
     const i = flujo.findIndex((x) => x.key === (a.estado_item ?? flujo[0].key));
     if (i < 0 || i >= flujo.length - 1) return;
     const next = flujo[i + 1];
-    setAsig(a.id, { estado_item: next.key });
+    commitAsignaciones(
+      asignaciones.map((x) => (x.id === a.id ? { ...x, estado_item: next.key } : x)),
+    );
     emitir(`“${item.nombre}” · ${a.suplidor || "suplidor"}: ${next.label}.`);
   }
 
@@ -389,6 +422,7 @@ function ItemRow({
                     }}
                     onBlur={(e) => {
                       const v = e.target.value.trim();
+                      onPersist(item.id, { suplidor: v || null, canal: item.canal });
                       if (!v) return;
                       agregarSuplidor(v, item.canal as CanalItem | null);
                       if (v !== supInicial.current) {
@@ -404,9 +438,11 @@ function ItemRow({
                 <Campo label="Canal">
                   <select
                     value={item.canal ?? ""}
-                    onChange={(e) =>
-                      onUpdate(item.id, { canal: e.target.value as CanalItem })
-                    }
+                    onChange={(e) => {
+                      const canal = e.target.value as CanalItem;
+                      onUpdate(item.id, { canal });
+                      onPersist(item.id, { canal });
+                    }}
                     className={inputBase}
                   >
                     {(Object.keys(CANAL_LABEL) as CanalItem[]).map((c) => (
@@ -420,9 +456,10 @@ function ItemRow({
                   <input
                     type="date"
                     value={item.fecha_estim ?? ""}
-                    onChange={(e) =>
-                      onUpdate(item.id, { fecha_estim: e.target.value })
-                    }
+                    onChange={(e) => {
+                      onUpdate(item.id, { fecha_estim: e.target.value });
+                      onPersist(item.id, { fecha_estim: e.target.value });
+                    }}
                     className={inputBase}
                   />
                 </Campo>
@@ -437,6 +474,7 @@ function ItemRow({
                         precio: e.target.value === "" ? null : Number(e.target.value),
                       })
                     }
+                    onBlur={() => onPersist(item.id, { precio: item.precio })}
                     placeholder="0.00"
                     className={inputBase}
                   />
@@ -457,6 +495,7 @@ function ItemRow({
               item={item}
               suplidores={suplidores}
               onSet={setAsig}
+              onPersist={persistAsignaciones}
               onAdd={addAsig}
               onDel={delAsig}
               onAvanzar={avanzarAsig}
@@ -471,6 +510,7 @@ function ItemRow({
             <input
               value={item.condiciones ?? ""}
               onChange={(e) => onUpdate(item.id, { condiciones: e.target.value })}
+              onBlur={() => onPersist(item.id, { condiciones: item.condiciones })}
               placeholder={
                 item.tipo === "servicio"
                   ? "Transferencia, tarjeta…"
@@ -559,6 +599,7 @@ function MiniCampo({ label, children }: { label: string; children: React.ReactNo
 function Reparto({
   item,
   onSet,
+  onPersist,
   onAdd,
   onDel,
   onAvanzar,
@@ -567,6 +608,7 @@ function Reparto({
   item: Item;
   suplidores: Suplidor[];
   onSet: (aId: string, patch: Partial<Asignacion>) => void;
+  onPersist: () => void;
   onAdd: () => void;
   onDel: (aId: string) => void;
   onAvanzar: (a: Asignacion) => void;
@@ -619,6 +661,7 @@ function Reparto({
                   onBlur={(e) => {
                     const v = e.target.value.trim();
                     if (v) onGuardarSup(a.canal, v);
+                    onPersist();
                   }}
                   list={`sup-cat-${item.id}`}
                   placeholder="Suplidor de esta parte…"
@@ -643,15 +686,17 @@ function Reparto({
                     onChange={(e) =>
                       onSet(a.id, { cantidad: Number(e.target.value) || 0 })
                     }
+                    onBlur={onPersist}
                     className={miniInput}
                   />
                 </MiniCampo>
                 <MiniCampo label="Canal">
                   <select
                     value={a.canal ?? ""}
-                    onChange={(e) =>
-                      onSet(a.id, { canal: e.target.value as CanalItem })
-                    }
+                    onChange={(e) => {
+                      onSet(a.id, { canal: e.target.value as CanalItem });
+                      onPersist();
+                    }}
                     className={miniInput}
                   >
                     {(Object.keys(CANAL_LABEL) as CanalItem[]).map((c) => (
@@ -673,6 +718,7 @@ function Reparto({
                           e.target.value === "" ? null : Number(e.target.value),
                       })
                     }
+                    onBlur={onPersist}
                     placeholder="0.00"
                     className={miniInput}
                   />
@@ -681,7 +727,10 @@ function Reparto({
                   <input
                     type="date"
                     value={a.fecha_estim ?? ""}
-                    onChange={(e) => onSet(a.id, { fecha_estim: e.target.value })}
+                    onChange={(e) => {
+                      onSet(a.id, { fecha_estim: e.target.value });
+                      onPersist();
+                    }}
                     className={miniInput}
                   />
                 </MiniCampo>
