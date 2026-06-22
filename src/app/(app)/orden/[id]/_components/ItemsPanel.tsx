@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ChevronRight,
   KeyRound,
@@ -38,6 +38,7 @@ import {
 import { Avatar, Panel, SectionTitle, inputBase } from "@/components/ui";
 import { ContactList } from "@/components/contacts";
 import { textoDias, urgenciaChip } from "@/lib/ui";
+import { useActividad } from "./Actividad";
 
 const TIPO_ICON: Record<TipoItem, LucideIcon> = {
   licencia: KeyRound,
@@ -69,13 +70,12 @@ const nid = () => `local-item-${Date.now()}-${seq++}`;
 export default function ItemsPanel({
   items: itemsIniciales,
   currentUser,
-  suplidores = [],
 }: {
   items: Item[];
   currentUser: Persona;
-  suplidores?: Suplidor[];
 }) {
   const [items, setItems] = useState<Item[]>(itemsIniciales);
+  const { emitir } = useActividad();
   const entregados = items.filter(itemEntregado).length;
 
   function update(id: string, patch: Partial<Item>) {
@@ -92,15 +92,22 @@ export default function ItemsPanel({
       entregado: esTerminal,
       fecha_entrega: esTerminal ? new Date().toISOString().slice(0, 10) : null,
     });
+    emitir(`Avanzó “${it.nombre}” a ${prox.label}.`);
   }
 
   function setEstado(it: Item, key: string) {
     const flujo = flujoDeItem(it);
     const esTerminal = key === flujo[flujo.length - 1].key;
+    const label = flujo.find((x) => x.key === key)?.label ?? key;
     update(it.id, { estado_item: key, entregado: esTerminal });
+    emitir(`Marcó “${it.nombre}” como ${label}.`);
   }
 
   function addCoord(id: string, tipo: TipoBitacora, texto: string) {
+    const it = items.find((x) => x.id === id);
+    emitir(
+      `${tipo === "llamada" ? "Llamada" : tipo === "correo" ? "Correo" : "Nota"} en “${it?.nombre ?? "ítem"}”: ${texto.slice(0, 60)}`,
+    );
     setItems((prev) =>
       prev.map((it) =>
         it.id === id
@@ -147,7 +154,6 @@ export default function ItemsPanel({
               key={it.id}
               item={it}
               currentUser={currentUser}
-              suplidores={suplidores}
               onUpdate={update}
               onAvanzar={avanzar}
               onSetEstado={setEstado}
@@ -163,7 +169,6 @@ export default function ItemsPanel({
 function ItemRow({
   item,
   currentUser,
-  suplidores,
   onUpdate,
   onAvanzar,
   onSetEstado,
@@ -171,12 +176,13 @@ function ItemRow({
 }: {
   item: Item;
   currentUser: Persona;
-  suplidores: Suplidor[];
   onUpdate: (id: string, patch: Partial<Item>) => void;
   onAvanzar: (it: Item) => void;
   onSetEstado: (it: Item, key: string) => void;
   onCoord: (id: string, tipo: TipoBitacora, texto: string) => void;
 }) {
+  const { suplidores, agregarSuplidor, emitir } = useActividad();
+  const supInicial = useRef(item.suplidor ?? "");
   const [abierto, setAbierto] = useState(false);
   const Icon = TIPO_ICON[item.tipo];
   const entregado = itemEntregado(item);
@@ -287,6 +293,15 @@ function ItemRow({
                     suplidor: v,
                     ...(cat?.canal ? { canal: cat.canal } : {}),
                   });
+                }}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (!v) return;
+                  agregarSuplidor(v, item.canal as CanalItem | null);
+                  if (v !== supInicial.current) {
+                    emitir(`Asignó suplidor “${v}” a “${item.nombre}”.`);
+                    supInicial.current = v;
+                  }
                 }}
                 list={`sup-cat-${item.id}`}
                 placeholder="Elige del catálogo o escribe…"

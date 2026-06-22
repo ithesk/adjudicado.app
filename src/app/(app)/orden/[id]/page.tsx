@@ -28,6 +28,7 @@ import DocumentosPanel from "./_components/DocumentosPanel";
 import PlazosPanel from "./_components/PlazosPanel";
 import ResponsableControl from "./_components/ResponsableControl";
 import MarcadoresControl from "./_components/MarcadoresControl";
+import ActividadProvider from "./_components/Actividad";
 
 export const dynamic = "force-dynamic";
 
@@ -63,14 +64,15 @@ export default async function OrdenDetallePage({
   };
 
   return (
-    <div className="space-y-5">
-      <Link
-        href="/"
-        className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-ink"
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden />
-        Tablero
-      </Link>
+    <ActividadProvider currentUser={currentUser} suplidores={suplidores}>
+      <div className="space-y-5">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-ink"
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden />
+          Tablero
+        </Link>
 
       {/* Cabecera */}
       <div className="rounded-lg border border-line bg-surface p-5 shadow-card">
@@ -156,11 +158,7 @@ export default async function OrdenDetallePage({
         </div>
       </div>
 
-      <ItemsPanel
-        items={orden.item}
-        currentUser={currentUser}
-        suplidores={suplidores}
-      />
+      <ItemsPanel items={orden.item} currentUser={currentUser} />
 
       {institucion && institucion.contactos.length > 0 && (
         <Panel>
@@ -187,7 +185,8 @@ export default async function OrdenDetallePage({
         />
         <PlazosPanel ordenId={orden.id} orden={orden} />
       </div>
-    </div>
+      </div>
+    </ActividadProvider>
   );
 }
 

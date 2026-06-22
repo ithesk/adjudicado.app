@@ -24,6 +24,7 @@ import {
 } from "@/lib/types";
 import { Avatar, Panel, SectionTitle } from "@/components/ui";
 import { agregarBitacora } from "../actions";
+import { useActividad } from "./Actividad";
 
 const COMPONER: { valor: TipoBitacora; label: string; icon: LucideIcon }[] = [
   { valor: "llamada", label: "Llamada", icon: Phone },
@@ -116,6 +117,7 @@ export default function BitacoraPanel({
   const [items, setItems] = useState<Entrada[]>(() =>
     sembrar(entradas as Entrada[]),
   );
+  const { eventos } = useActividad();
   const [tipo, setTipo] = useState<TipoBitacora>("llamada");
   const [texto, setTexto] = useState("");
   const [adjuntos, setAdjuntos] = useState<Adjunto[]>([]);
@@ -207,7 +209,7 @@ export default function BitacoraPanel({
 
   const visibles = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items
+    return [...items, ...(eventos as Entrada[])]
       .filter((b) => {
         if (filtro !== "todo" && b.tipo !== filtro) return false;
         if (!q) return true;
@@ -224,9 +226,10 @@ export default function BitacoraPanel({
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-  }, [items, filtro, query]);
+  }, [items, eventos, filtro, query]);
 
   const manual = items.filter((b) => b.tipo !== "evento").length;
+  const totalEventos = items.length - manual + eventos.length;
 
   return (
     <Panel className="flex flex-col">
@@ -234,7 +237,7 @@ export default function BitacoraPanel({
         icon={MessageSquarePlus}
         right={
           <span className="font-mono text-xs text-muted">
-            {manual} registros · {items.length - manual} eventos
+            {manual} registros · {totalEventos} eventos
           </span>
         }
       >
