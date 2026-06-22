@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   bitacoraDemo,
   documentosDe,
@@ -158,6 +159,33 @@ export async function institucionPorNombre(
   return (
     lista.find((i) => i.nombre.toLowerCase() === nombre.toLowerCase()) ?? null
   );
+}
+
+// Invitaciones pendientes de la empresa activa (invitados que aún no aceptan).
+export interface Pendiente {
+  id: string;
+  email: string;
+  invited_at: string | null;
+}
+
+export async function listarPendientes(): Promise<Pendiente[]> {
+  if (isDemo()) return [];
+  const miembro = await getMiembro();
+  if (!miembro) return [];
+  const admin = createAdminClient();
+  const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  return (data?.users ?? [])
+    .filter(
+      (u) =>
+        !u.email_confirmed_at &&
+        (u.user_metadata as { invite_org_id?: string })?.invite_org_id ===
+          miembro.org_id,
+    )
+    .map((u) => ({
+      id: u.id,
+      email: u.email ?? "",
+      invited_at: u.invited_at ?? null,
+    }));
 }
 
 // Personas asignables como responsable (miembros de la org).
