@@ -802,18 +802,28 @@ function Reparto({
   );
 }
 
-const COORD_TIPOS: { valor: TipoBitacora; label: string; icon: LucideIcon }[] = [
-  { valor: "llamada", label: "Llamada", icon: Phone },
-  { valor: "correo", label: "Correo", icon: Mail },
-  { valor: "nota", label: "Nota", icon: StickyNote },
-];
-
 const COORD_ICON: Record<string, LucideIcon> = {
   llamada: Phone,
   correo: Mail,
   nota: StickyNote,
   suplidor: Box,
   evento: StickyNote,
+};
+
+// Detecta el tipo de la nota por su contenido, para no obligar a elegirlo.
+function inferirTipo(t: string): TipoBitacora {
+  const s = t.toLowerCase();
+  if (/(llam|tel[eé]fon|whats|wasap|me dijo|habl[eé]|por tel)/.test(s))
+    return "llamada";
+  if (/(corre|e-?mail|escrib|adjunt|envi[eé] un correo|me respondi[oó])/.test(s))
+    return "correo";
+  return "nota";
+}
+
+const TIPO_LABEL: Record<string, string> = {
+  llamada: "Llamada",
+  correo: "Correo",
+  nota: "Nota",
 };
 
 function Coordinacion({
@@ -825,13 +835,14 @@ function Coordinacion({
   currentUser: Persona;
   onCoord: (id: string, tipo: TipoBitacora, texto: string) => void;
 }) {
-  const [tipo, setTipo] = useState<TipoBitacora>("correo");
   const [texto, setTexto] = useState("");
   const entradas = item.coordinacion ?? [];
+  const tipoInferido = inferirTipo(texto);
+  const IconInferido = COORD_ICON[tipoInferido];
 
   function enviar() {
     if (!texto.trim()) return;
-    onCoord(item.id, tipo, texto.trim());
+    onCoord(item.id, inferirTipo(texto), texto.trim());
     setTexto("");
   }
 
@@ -862,7 +873,7 @@ function Coordinacion({
                       </span>
                       <span className="inline-flex items-center gap-1 text-[10px] text-muted">
                         <Icon className="h-2.5 w-2.5" strokeWidth={2} aria-hidden />
-                        {b.tipo}
+                        {TIPO_LABEL[b.tipo] ?? b.tipo}
                       </span>
                       <time className="ml-auto text-[10px] text-muted">
                         {tiempoRelativo(b.created_at)}
@@ -879,33 +890,20 @@ function Coordinacion({
       )}
 
       <div className="flex items-center gap-1.5 border-t border-line p-2">
-        <div className="flex gap-0.5">
-          {COORD_TIPOS.map((t) => {
-            const Icon = t.icon;
-            const activo = tipo === t.valor;
-            return (
-              <button
-                key={t.valor}
-                type="button"
-                onClick={() => setTipo(t.valor)}
-                title={t.label}
-                aria-label={t.label}
-                className={`grid h-7 w-7 place-items-center rounded transition-colors ${
-                  activo ? "bg-surface-2 text-ink" : "text-muted hover:text-ink"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              </button>
-            );
-          })}
-        </div>
+        {/* Icono del tipo detectado automáticamente según lo que escribes. */}
+        <span
+          className="grid h-7 w-7 shrink-0 place-items-center rounded text-muted"
+          title={texto.trim() ? `Detectado: ${TIPO_LABEL[tipoInferido]}` : "Se detecta solo"}
+        >
+          <IconInferido className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        </span>
         <input
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") enviar();
           }}
-          placeholder={`Registrar ${tipo} de este ítem…`}
+          placeholder="Anota una actualización del suplidor…"
           className="flex-1 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[12px] text-ink outline-none focus:border-primary"
         />
         <button
