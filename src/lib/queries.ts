@@ -466,6 +466,7 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
   const nombreDe = (uid: string | null) =>
     (uid ? porId.get(uid)?.nombre : null) ?? "Miembro del equipo";
   const nombreItem = new Map(orden.item.map((i) => [i.id, i.nombre]));
+  const docPorId = new Map(orden.documento.map((d) => [d.id, d]));
 
   orden.responsable = orden.responsable_id
     ? porId.get(orden.responsable_id) ?? null
@@ -510,10 +511,14 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
       );
 
     const itemId = b.item_id ?? null;
+    const doc = b.documento_id ? docPorId.get(b.documento_id) : null;
     return {
       ...b,
       autor: b.autor_id ? porId.get(b.autor_id) ?? null : null,
       itemNombre: itemId ? nombreItem.get(itemId) ?? null : null,
+      adjuntos: doc
+        ? [{ nombre: doc.nombre, bucket: "documentos" as const, path: doc.archivo_url }]
+        : undefined,
       reacciones: reacciones.length ? reacciones : undefined,
       comentarios: comentarios.length ? comentarios : undefined,
     };

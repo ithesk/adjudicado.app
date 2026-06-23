@@ -329,6 +329,62 @@ export async function quitarEtiqueta(ordenId: string, etiqueta: string) {
   refrescar(ordenId);
 }
 
+// Adjunta un archivo a la bitácora: lo sube a Storage, lo registra como
+// documento de la orden (aparece en Documentos y en el repositorio global) y
+// crea una entrada de bitácora que lo referencia. itemId opcional = hilo del ítem.
+// Devuelve el path para poder abrir el adjunto al instante (optimista).
+export async function adjuntarDocumentoBitacora(
+  ordenId: string,
+  itemId: string | null,
+  formData: FormData,
+): Promise<{ path: string; nombre: string } | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  const user = await getUser();
+  if (!miembro) return null;
+
+  const archivo = formData.get("archivo");
+  if (!(archivo instanceof File) || archivo.size === 0) return null;
+
+  const supabase = await createClient();
+  const ext = archivo.name.split(".").pop() || "bin";
+  const path = `${miembro.org_id}/${ordenId}/${randomUUID()}.${ext}`;
+  const bytes = new Uint8Array(await archivo.arrayBuffer());
+
+  const { error: upErr } = await supabase.storage
+    .from("documentos")
+    .upload(path, bytes, {
+      contentType: archivo.type || "application/octet-stream",
+    });
+  if (upErr) {
+    console.error("adjuntar (upload) falló:", upErr.message);
+    return null;
+  }
+
+  const { data: doc } = await supabase
+    .from("documento")
+    .insert({
+      orden_id: ordenId,
+      nombre: archivo.name,
+      tipo: "adjunto",
+      archivo_url: path,
+      subido_por: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+
+  await supabase.from("bitacora").insert({
+    orden_id: ordenId,
+    item_id: itemId,
+    autor_id: user?.id ?? null,
+    tipo: "nota",
+    texto: archivo.name,
+    documento_id: doc?.id ?? null,
+  });
+
+  return { path, nombre: archivo.name };
+}
+
 export async function subirDocumento(ordenId: string, formData: FormData) {
   if (isDemo()) return;
   const miembro = await getMiembro();

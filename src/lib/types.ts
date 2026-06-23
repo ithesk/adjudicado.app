@@ -246,11 +246,20 @@ export function proximoEstadoItem(item: Item): { key: string; label: string } | 
   return i >= 0 && i < f.length - 1 ? f[i + 1] : null;
 }
 
+// Archivo adjunto de una entrada de bitácora (vive en Storage).
+export interface Adjunto {
+  nombre: string;
+  bucket?: "documentos" | "ordenes-oc";
+  path?: string;
+}
+
 export interface Bitacora {
   id: string;
   orden_id: string;
   item_id?: string | null; // si está, la entrada pertenece a la coordinación de ese ítem
   itemNombre?: string | null; // nombre del ítem (para el roll-up en la bitácora de la orden)
+  documento_id?: string | null; // documento adjunto (si la entrada es un archivo)
+  adjuntos?: Adjunto[]; // adjuntos resueltos para mostrar/abrir
   autor_id: string | null;
   tipo: TipoBitacora;
   texto: string;

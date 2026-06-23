@@ -23,11 +23,14 @@ import {
   type TipoBitacora,
 } from "@/lib/types";
 import { Avatar, Panel, SectionTitle } from "@/components/ui";
+import type { Adjunto } from "@/lib/types";
 import { isDemo } from "@/lib/demo";
+import VisorDocumento from "@/components/VisorDocumento";
 import {
   agregarBitacora,
   agregarComentario,
   alternarReaccion,
+  adjuntarDocumentoBitacora,
 } from "../actions";
 import { useActividad } from "./Actividad";
 
@@ -61,9 +64,6 @@ const PLACEHOLDER: Record<string, string> = {
 
 const REACCIONES = ["👍", "✅", "👀", "❗", "🎉"];
 
-interface Adjunto {
-  nombre: string;
-}
 interface Reaccion {
   emoji: string;
   usuarios: string[];
@@ -133,13 +133,50 @@ export default function BitacoraPanel({
   const { eventos } = useActividad();
   const [tipo, setTipo] = useState<TipoBitacora>("llamada");
   const [texto, setTexto] = useState("");
-  const [adjuntos, setAdjuntos] = useState<Adjunto[]>([]);
+  const [dragActive, setDragActive] = useState(false);
   const [filtro, setFiltro] = useState<"todo" | TipoBitacora>("todo");
   const [query, setQuery] = useState("");
   const [, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
+
+  // Sube archivos arrastrados/elegidos: cada uno se guarda como documento de la
+  // orden y crea su propia entrada en la bitácora (optimista + persistente).
+  async function adjuntar(files: File[]) {
+    for (const file of files) {
+      const id = nuevoId("adj");
+      setItems((prev) => [
+        {
+          id,
+          orden_id: ordenId,
+          autor_id: currentUser.id,
+          autor: currentUser,
+          tipo: "nota",
+          texto: file.name,
+          created_at: nowISO(),
+          adjuntos: [{ nombre: file.name }],
+        } as Entrada,
+        ...prev,
+      ]);
+      scrollAbajo();
+      const fd = new FormData();
+      fd.append("archivo", file);
+      const res = await adjuntarDocumentoBitacora(ordenId, null, fd);
+      if (res?.path) {
+        setItems((prev) =>
+          prev.map((b) =>
+            b.id === id
+              ? {
+                  ...b,
+                  adjuntos: [{ nombre: res.nombre, bucket: "documentos", path: res.path }],
+                }
+              : b,
+          ),
+        );
+      }
+    }
+  }
 
   function nuevoId(p: string) {
     seq.current += 1;
@@ -159,7 +196,7 @@ export default function BitacoraPanel({
   }, []);
 
   function registrar() {
-    if (!texto.trim() && adjuntos.length === 0) return;
+    if (!texto.trim()) return;
     const entrada: Entrada = {
       id: nuevoId("e"),
       orden_id: ordenId,
@@ -168,15 +205,11 @@ export default function BitacoraPanel({
       tipo,
       texto: texto.trim(),
       created_at: nowISO(),
-      adjuntos: adjuntos.length ? adjuntos : undefined,
     };
     setItems((prev) => [entrada, ...prev]);
     setTexto("");
-    setAdjuntos([]);
     scrollAbajo();
-    startTransition(() =>
-      agregarBitacora(ordenId, tipo, entrada.texto || "(adjunto)"),
-    );
+    startTransition(() => agregarBitacora(ordenId, tipo, entrada.texto));
   }
 
   function toggleReaccion(id: string, emoji: string) {
@@ -252,7 +285,31 @@ export default function BitacoraPanel({
   const totalEventos = items.length - manual + eventos.length;
 
   return (
-    <Panel className="flex flex-col">
+    <div
+      className="relative"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragActive(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        setDragActive(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragActive(false);
+        const files = Array.from(e.dataTransfer.files ?? []);
+        if (files.length) adjuntar(files);
+      }}
+    >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/5">
+          <span className="rounded-md bg-surface px-3 py-1.5 text-[13px] font-medium text-primary shadow-card">
+            Suelta para adjuntar a la bitácora
+          </span>
+        </div>
+      )}
+      <Panel className="flex flex-col">
       <SectionTitle
         icon={MessageSquarePlus}
         right={
@@ -331,27 +388,6 @@ export default function BitacoraPanel({
             rows={2}
             className="w-full resize-none rounded-t-md bg-surface px-3 py-2.5 text-[13px] text-ink outline-none placeholder:text-muted/70"
           />
-          {adjuntos.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-              {adjuntos.map((a, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1 rounded border border-line bg-surface-2 px-2 py-0.5 text-[11px] text-ink-soft"
-                >
-                  <FileText className="h-3 w-3" strokeWidth={2} aria-hidden />
-                  {a.nombre}
-                  <button
-                    type="button"
-                    onClick={() => setAdjuntos((p) => p.filter((_, j) => j !== i))}
-                    className="text-muted hover:text-danger"
-                    aria-label="Quitar adjunto"
-                  >
-                    <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
           <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5">
             <div className="flex flex-wrap items-center gap-0.5">
               {COMPONER.map((t) => {
@@ -392,10 +428,8 @@ export default function BitacoraPanel({
                 multiple
                 className="hidden"
                 onChange={(e) => {
-                  const fs = Array.from(e.target.files ?? []).map((f) => ({
-                    nombre: f.name,
-                  }));
-                  setAdjuntos((p) => [...p, ...fs]);
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length) adjuntar(files);
                   e.target.value = "";
                 }}
               />
@@ -403,7 +437,7 @@ export default function BitacoraPanel({
             <button
               type="button"
               onClick={registrar}
-              disabled={!texto.trim() && adjuntos.length === 0}
+              disabled={!texto.trim()}
               className="shrink-0 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-ink transition-colors hover:bg-primary-hover disabled:opacity-45"
               title="Cmd/Ctrl + Enter"
             >
@@ -412,7 +446,8 @@ export default function BitacoraPanel({
           </div>
         </div>
       </div>
-    </Panel>
+      </Panel>
+    </div>
   );
 }
 
@@ -510,15 +545,26 @@ function Registro({
 
         {b.adjuntos && b.adjuntos.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {b.adjuntos.map((a, i) => (
-              <span
-                key={i}
-                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2 py-1 text-[12px] text-ink-soft"
-              >
-                <FileText className="h-3.5 w-3.5 text-muted" strokeWidth={2} aria-hidden />
-                {a.nombre}
-              </span>
-            ))}
+            {b.adjuntos.map((a, i) =>
+              a.bucket && a.path ? (
+                <VisorDocumento
+                  key={i}
+                  bucket={a.bucket}
+                  path={a.path}
+                  nombre={a.nombre}
+                  label={a.nombre}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2 py-1 text-[12px] text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
+                />
+              ) : (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2 py-1 text-[12px] text-muted"
+                >
+                  <FileText className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  {a.nombre} · subiendo…
+                </span>
+              ),
+            )}
           </div>
         )}
 

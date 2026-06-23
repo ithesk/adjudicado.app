@@ -49,7 +49,12 @@ import { Avatar, Panel, SectionTitle, inputBase } from "@/components/ui";
 import { ContactList } from "@/components/contacts";
 import { textoDias, urgenciaChip } from "@/lib/ui";
 import { useActividad } from "./Actividad";
-import { actualizarItem, agregarCoordinacionItem } from "../actions";
+import VisorDocumento from "@/components/VisorDocumento";
+import {
+  actualizarItem,
+  agregarCoordinacionItem,
+  adjuntarDocumentoBitacora,
+} from "../actions";
 
 const TIPO_ICON: Record<TipoItem, LucideIcon> = {
   licencia: KeyRound,
@@ -131,6 +136,61 @@ export default function ItemsPanel({
     emitir(`Marcó “${it.nombre}” como ${label}.`);
   }
 
+  // Adjunta archivos (arrastrados) al hilo de coordinación de un ítem: sube y
+  // los registra como documentos de la orden, ligados al ítem.
+  async function adjuntarItem(itemId: string, files: File[]) {
+    for (const file of files) {
+      const cid = nid();
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === itemId
+            ? {
+                ...it,
+                coordinacion: [
+                  ...(it.coordinacion ?? []),
+                  {
+                    id: cid,
+                    orden_id: ordenId,
+                    item_id: itemId,
+                    autor_id: currentUser.id,
+                    autor: currentUser,
+                    tipo: "nota",
+                    texto: file.name,
+                    created_at: new Date().toISOString(),
+                    adjuntos: [{ nombre: file.name }],
+                  },
+                ],
+              }
+            : it,
+        ),
+      );
+      const fd = new FormData();
+      fd.append("archivo", file);
+      const res = await adjuntarDocumentoBitacora(ordenId, itemId, fd);
+      if (res?.path) {
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === itemId
+              ? {
+                  ...it,
+                  coordinacion: (it.coordinacion ?? []).map((c) =>
+                    c.id === cid
+                      ? {
+                          ...c,
+                          adjuntos: [
+                            { nombre: res.nombre, bucket: "documentos", path: res.path },
+                          ],
+                        }
+                      : c,
+                  ),
+                }
+              : it,
+          ),
+        );
+      }
+    }
+  }
+
   function addCoord(id: string, tipo: TipoBitacora, texto: string) {
     // La nota del ítem se persiste con su item_id y rueda hacia la bitácora de
     // la orden (etiquetada con el ítem). No emitimos evento resumen aparte para
@@ -187,6 +247,7 @@ export default function ItemsPanel({
               onAvanzar={avanzar}
               onSetEstado={setEstado}
               onCoord={addCoord}
+              onAdjuntar={adjuntarItem}
             />
           ))}
         </ul>
@@ -203,6 +264,7 @@ function ItemRow({
   onAvanzar,
   onSetEstado,
   onCoord,
+  onAdjuntar,
 }: {
   item: Item;
   currentUser: Persona;
@@ -211,6 +273,7 @@ function ItemRow({
   onAvanzar: (it: Item) => void;
   onSetEstado: (it: Item, key: string) => void;
   onCoord: (id: string, tipo: TipoBitacora, texto: string) => void;
+  onAdjuntar: (itemId: string, files: File[]) => void;
 }) {
   const { suplidores, agregarSuplidor, emitir } = useActividad();
   const supInicial = useRef(item.suplidor ?? "");
@@ -544,6 +607,7 @@ function ItemRow({
             item={item}
             currentUser={currentUser}
             onCoord={onCoord}
+            onAdjuntar={(files) => onAdjuntar(item.id, files)}
           />
         </div>
       )}
@@ -829,12 +893,15 @@ function Coordinacion({
   item,
   currentUser,
   onCoord,
+  onAdjuntar,
 }: {
   item: Item;
   currentUser: Persona;
   onCoord: (id: string, tipo: TipoBitacora, texto: string) => void;
+  onAdjuntar: (files: File[]) => void;
 }) {
   const [texto, setTexto] = useState("");
+  const [drag, setDrag] = useState(false);
   const entradas = item.coordinacion ?? [];
   const tipoInferido = inferirTipo(texto);
   const IconInferido = COORD_ICON[tipoInferido];
@@ -846,7 +913,32 @@ function Coordinacion({
   }
 
   return (
-    <div className="rounded-md border border-line bg-surface">
+    <div
+      className={`relative rounded-md border bg-surface ${
+        drag ? "border-primary" : "border-line"
+      }`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDrag(true);
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        setDrag(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDrag(false);
+        const files = Array.from(e.dataTransfer.files ?? []);
+        if (files.length) onAdjuntar(files);
+      }}
+    >
+      {drag && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-md border-2 border-dashed border-primary bg-primary/5">
+          <span className="rounded bg-surface px-2 py-1 text-[11px] font-medium text-primary shadow-card">
+            Suelta para adjuntar a este ítem
+          </span>
+        </div>
+      )}
       <p className="border-b border-line px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted">
         Coordinación del ítem · {entradas.length}
       </p>
@@ -878,9 +970,24 @@ function Coordinacion({
                         {tiempoRelativo(b.created_at)}
                       </time>
                     </div>
-                    <p className="text-[12px] leading-relaxed text-ink-soft">
-                      {b.texto}
-                    </p>
+                    {b.adjuntos && b.adjuntos[0]?.path ? (
+                      <VisorDocumento
+                        bucket={b.adjuntos[0].bucket ?? "documentos"}
+                        path={b.adjuntos[0].path}
+                        nombre={b.adjuntos[0].nombre}
+                        label={b.adjuntos[0].nombre}
+                        className="mt-0.5 inline-flex items-center gap-1.5 rounded border border-line bg-surface-2 px-2 py-1 text-[12px] text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
+                      />
+                    ) : b.adjuntos && b.adjuntos.length > 0 ? (
+                      <span className="mt-0.5 inline-flex items-center gap-1.5 rounded border border-line bg-surface-2 px-2 py-1 text-[12px] text-muted">
+                        <Box className="h-3 w-3" strokeWidth={2} aria-hidden />
+                        {b.adjuntos[0].nombre} · subiendo…
+                      </span>
+                    ) : (
+                      <p className="text-[12px] leading-relaxed text-ink-soft">
+                        {b.texto}
+                      </p>
+                    )}
                   </div>
                 </li>
               );
