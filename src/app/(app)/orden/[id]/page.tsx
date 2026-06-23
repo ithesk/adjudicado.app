@@ -164,44 +164,50 @@ export default async function OrdenDetallePage({
         </div>
       </div>
 
-      {/* Estado + stepper */}
-      <div className="rounded-lg border border-line bg-surface p-5 shadow-card">
-        <Stepper estado={orden.estado} />
-        <div className="mt-4 border-t border-line pt-4">
-          <EstadoControl ordenId={orden.id} estado={orden.estado} />
-        </div>
-      </div>
-
-      <ItemsPanel
-        ordenId={orden.id}
-        items={orden.item}
-        currentUser={currentUser}
-      />
-
-      {institucion && institucion.contactos.length > 0 && (
-        <Panel>
-          <SectionTitle icon={Contact}>
-            Institución · {institucion.nombre}
-          </SectionTitle>
-          <div className="px-4">
-            <ContactList contactos={institucion.contactos} />
+      {/* Workspace: columna principal (trabajo) + riel lateral (consulta).
+          En desktop/tablet ancho = 2 columnas; en móvil colapsa a una. */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:items-start">
+        {/* Columna principal */}
+        <div className="space-y-5 lg:col-span-2">
+          <div className="rounded-lg border border-line bg-surface p-5 shadow-card">
+            <Stepper estado={orden.estado} />
+            <div className="mt-4 border-t border-line pt-4">
+              <EstadoControl ordenId={orden.id} estado={orden.estado} />
+            </div>
           </div>
-        </Panel>
-      )}
 
-      <BitacoraPanel
-        ordenId={orden.id}
-        entradas={orden.bitacora}
-        currentUser={currentUser}
-      />
+          <ItemsPanel
+            ordenId={orden.id}
+            items={orden.item}
+            currentUser={currentUser}
+          />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DocumentosPanel
-          ordenId={orden.id}
-          documentos={orden.documento}
-          ocArchivo={orden.oc_archivo_url}
-        />
-        <PlazosPanel ordenId={orden.id} orden={orden} />
+          <BitacoraPanel
+            ordenId={orden.id}
+            entradas={orden.bitacora}
+            currentUser={currentUser}
+          />
+        </div>
+
+        {/* Riel lateral: plazos, documentos, contactos. Pegajoso en desktop. */}
+        <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+          <PlazosPanel ordenId={orden.id} orden={orden} />
+          <DocumentosPanel
+            ordenId={orden.id}
+            documentos={orden.documento}
+            ocArchivo={orden.oc_archivo_url}
+          />
+          {institucion && institucion.contactos.length > 0 && (
+            <Panel>
+              <SectionTitle icon={Contact}>
+                Institución · {institucion.nombre}
+              </SectionTitle>
+              <div className="px-4">
+                <ContactList contactos={institucion.contactos} />
+              </div>
+            </Panel>
+          )}
+        </aside>
       </div>
       </div>
     </ActividadProvider>
