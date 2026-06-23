@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  inferirTipoBitacora,
   tiempoRelativo,
   type Bitacora,
   type Persona,
@@ -39,13 +40,6 @@ import { useActividad } from "./Actividad";
 const esUUID = (id: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-const COMPONER: { valor: TipoBitacora; label: string; icon: LucideIcon }[] = [
-  { valor: "llamada", label: "Llamada", icon: Phone },
-  { valor: "correo", label: "Correo", icon: Mail },
-  { valor: "nota", label: "Nota", icon: StickyNote },
-  { valor: "suplidor", label: "Suplidor", icon: Package },
-];
-
 const META: Record<TipoBitacora, { icon: LucideIcon; label: string; tono: string }> =
   {
     llamada: { icon: Phone, label: "Llamada", tono: "text-primary" },
@@ -54,13 +48,6 @@ const META: Record<TipoBitacora, { icon: LucideIcon; label: string; tono: string
     suplidor: { icon: Package, label: "Suplidor", tono: "text-warn" },
     evento: { icon: Activity, label: "Evento", tono: "text-muted" },
   };
-
-const PLACEHOLDER: Record<string, string> = {
-  llamada: "¿Con quién hablaste y qué acordaron?",
-  correo: "Asunto y resumen del correo…",
-  nota: "Nota interna sobre esta orden…",
-  suplidor: "Novedad del suplidor (despacho, atraso, confirmación)…",
-};
 
 const REACCIONES = ["👍", "✅", "👀", "❗", "🎉"];
 
@@ -131,7 +118,6 @@ export default function BitacoraPanel({
     sembrar(entradas as Entrada[]),
   );
   const { eventos } = useActividad();
-  const [tipo, setTipo] = useState<TipoBitacora>("llamada");
   const [texto, setTexto] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const [filtro, setFiltro] = useState<"todo" | TipoBitacora>("todo");
@@ -197,19 +183,20 @@ export default function BitacoraPanel({
 
   function registrar() {
     if (!texto.trim()) return;
+    const t = inferirTipoBitacora(texto);
     const entrada: Entrada = {
       id: nuevoId("e"),
       orden_id: ordenId,
       autor_id: currentUser.id,
       autor: currentUser,
-      tipo,
+      tipo: t,
       texto: texto.trim(),
       created_at: nowISO(),
     };
     setItems((prev) => [entrada, ...prev]);
     setTexto("");
     scrollAbajo();
-    startTransition(() => agregarBitacora(ordenId, tipo, entrada.texto));
+    startTransition(() => agregarBitacora(ordenId, t, entrada.texto));
   }
 
   function toggleReaccion(id: string, emoji: string) {
@@ -384,34 +371,25 @@ export default function BitacoraPanel({
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") registrar();
             }}
-            placeholder={PLACEHOLDER[tipo]}
+            placeholder="Escribe lo que pasó… el tipo se detecta solo."
             rows={2}
             className="w-full resize-none rounded-t-md bg-surface px-3 py-2.5 text-[13px] text-ink outline-none placeholder:text-muted/70"
           />
           <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5">
-            <div className="flex flex-wrap items-center gap-0.5">
-              {COMPONER.map((t) => {
-                const Icon = t.icon;
-                const activo = tipo === t.valor;
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(() => {
+                const det = META[inferirTipoBitacora(texto)];
+                const DetIcon = det.icon;
                 return (
-                  <button
-                    key={t.valor}
-                    type="button"
-                    onClick={() => setTipo(t.valor)}
-                    aria-pressed={activo}
-                    className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                      activo ? "bg-surface-2 text-ink" : "text-muted hover:text-ink"
-                    }`}
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-muted"
+                    title="Tipo detectado automáticamente"
                   >
-                    <Icon
-                      className={`h-3.5 w-3.5 ${activo ? META[t.valor].tono : ""}`}
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                    {t.label}
-                  </button>
+                    <DetIcon className={`h-3.5 w-3.5 ${det.tono}`} strokeWidth={2} aria-hidden />
+                    {texto.trim() ? det.label : "Detección automática"}
+                  </span>
                 );
-              })}
+              })()}
               <span className="mx-1 h-4 w-px bg-line" />
               <button
                 type="button"

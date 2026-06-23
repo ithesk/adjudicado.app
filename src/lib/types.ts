@@ -112,6 +112,19 @@ export function nombreLegible(nombre: string | null | undefined): string {
   return bonito || n;
 }
 
+// Detecta el tipo de una entrada de bitácora por su contenido, para no obligar
+// a elegirlo. El orden importa: suplidor > llamada > correo > nota.
+export function inferirTipoBitacora(texto: string): TipoBitacora {
+  const s = texto.toLowerCase();
+  if (/(suplidor|proveedor|despach|atras|en tr[aá]nsito|tracking|gu[ií]a|factura)/.test(s))
+    return "suplidor";
+  if (/(llam|tel[eé]fon|whats|wasap|me dijo|habl[eé]|por tel)/.test(s))
+    return "llamada";
+  if (/(corre|e-?mail|escrib|adjunt|envi[eé]|me respondi[oó]|asunto)/.test(s))
+    return "correo";
+  return "nota";
+}
+
 export function iniciales(nombre: string | null | undefined): string {
   if (!nombre) return "?";
   const partes = nombre.trim().split(/\s+/);
