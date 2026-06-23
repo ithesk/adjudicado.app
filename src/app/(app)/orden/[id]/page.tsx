@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Building2, Truck, Contact, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Building2, Truck, Contact, Info, type LucideIcon } from "lucide-react";
 import {
   obtenerOrden,
   listarPersonas,
@@ -115,28 +115,6 @@ export default async function OrdenDetallePage({
           </div>
         </div>
 
-        {/* Propiedades de la orden */}
-        <div className="mt-4 flex flex-wrap items-start gap-x-8 gap-y-3 border-t border-line pt-4">
-          <Prop label="Responsable">
-            <ResponsableControl
-              ordenId={orden.id}
-              responsable={orden.responsable ?? null}
-              personas={personas}
-            />
-          </Prop>
-          <Prop label="Colaboradores">
-            <ColaboradoresControl
-              ordenId={orden.id}
-              colaboradores={orden.colaboradoresPersonas ?? []}
-              responsableId={orden.responsable_id}
-              personas={personas}
-            />
-          </Prop>
-          <Prop label="Marcadores">
-            <MarcadoresControl ordenId={orden.id} etiquetas={orden.etiquetas} />
-          </Prop>
-        </div>
-
         {/* Dos relojes */}
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Reloj
@@ -189,8 +167,31 @@ export default async function OrdenDetallePage({
           />
         </div>
 
-        {/* Riel lateral: plazos, documentos, contactos. Pegajoso en desktop. */}
+        {/* Riel lateral: detalles, plazos, documentos, contactos. Pegajoso. */}
         <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+          <Panel>
+            <SectionTitle icon={Info}>Detalles</SectionTitle>
+            <div className="space-y-3.5 px-4 pb-4">
+              <Prop label="Responsable">
+                <ResponsableControl
+                  ordenId={orden.id}
+                  responsable={orden.responsable ?? null}
+                  personas={personas}
+                />
+              </Prop>
+              <Prop label="Colaboradores">
+                <ColaboradoresControl
+                  ordenId={orden.id}
+                  colaboradores={orden.colaboradoresPersonas ?? []}
+                  responsableId={orden.responsable_id}
+                  personas={personas}
+                />
+              </Prop>
+              <Prop label="Marcadores">
+                <MarcadoresControl ordenId={orden.id} etiquetas={orden.etiquetas} />
+              </Prop>
+            </div>
+          </Panel>
           <PlazosPanel ordenId={orden.id} orden={orden} />
           <DocumentosPanel
             ordenId={orden.id}
