@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { X, UploadCloud, FileText } from "lucide-react";
 import type { TipoItem } from "@/lib/types";
 import { crearOrden, type CrearState } from "./actions";
 
@@ -39,6 +39,8 @@ export default function NuevaOrdenForm() {
   const [items, setItems] = useState<ItemDraft[]>([]);
   const [ocrRaw, setOcrRaw] = useState<unknown>(null);
   const [archivoPath, setArchivoPath] = useState("");
+  const [archivo, setArchivo] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [state, formAction, enviando] = useActionState<CrearState, FormData>(
@@ -46,15 +48,31 @@ export default function NuevaOrdenForm() {
     {},
   );
 
-  async function subir(e: React.FormEvent) {
-    e.preventDefault();
-    const file = fileRef.current?.files?.[0];
+  // Valida y guarda el archivo (desde clic o arrastrar y soltar).
+  function seleccionar(file: File | undefined | null) {
     if (!file) return;
+    const esPdf =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+    if (!esPdf) {
+      setErrorOcr("Solo se admite PDF.");
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setErrorOcr("El archivo supera 15 MB.");
+      return;
+    }
+    setErrorOcr(null);
+    setArchivo(file);
+  }
+
+  async function procesar() {
+    if (!archivo) return;
     setCargando(true);
     setErrorOcr(null);
 
     const fd = new FormData();
-    fd.append("archivo", file);
+    fd.append("archivo", archivo);
     try {
       const res = await fetch("/api/ocr", { method: "POST", body: fd });
       const json = await res.json();
@@ -99,23 +117,83 @@ export default function NuevaOrdenForm() {
 
   if (fase === "subir") {
     return (
-      <form
-        onSubmit={subir}
-        className="rounded-md border border-line bg-surface p-6"
-      >
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-line px-6 py-10 text-center transition hover:border-line">
-          <span className="text-sm font-medium text-ink">
-            Toca para elegir el PDF de la OC
-          </span>
-          <span className="text-xs text-muted">Solo PDF, hasta 15 MB</span>
+      <div className="rounded-md border border-line bg-surface p-6">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => fileRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") fileRef.current?.click();
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragActive(false);
+            seleccionar(e.dataTransfer.files?.[0]);
+          }}
+          className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-6 py-12 text-center transition-colors ${
+            dragActive
+              ? "border-primary bg-primary/5"
+              : "border-line hover:border-line-strong hover:bg-surface-2"
+          }`}
+        >
+          {archivo ? (
+            <>
+              <span className="grid h-11 w-11 place-items-center rounded-full bg-ok-soft text-ok">
+                <FileText className="h-5 w-5" strokeWidth={2} aria-hidden />
+              </span>
+              <span className="max-w-full truncate text-sm font-medium text-ink">
+                {archivo.name}
+              </span>
+              <span className="text-xs text-muted">
+                {(archivo.size / 1024 / 1024).toFixed(1)} MB · listo para extraer
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setArchivo(null);
+                  if (fileRef.current) fileRef.current.value = "";
+                }}
+                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-danger"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                Quitar
+              </button>
+            </>
+          ) : (
+            <>
+              <span
+                className={`grid h-11 w-11 place-items-center rounded-full transition-colors ${
+                  dragActive ? "bg-primary text-primary-ink" : "bg-surface-2 text-muted"
+                }`}
+              >
+                <UploadCloud className="h-5 w-5" strokeWidth={2} aria-hidden />
+              </span>
+              <span className="text-sm font-medium text-ink">
+                Arrastra aquí el PDF de la OC
+              </span>
+              <span className="text-xs text-muted">
+                o haz clic para elegirlo · solo PDF, hasta 15 MB
+              </span>
+            </>
+          )}
+
           <input
             ref={fileRef}
             type="file"
             accept="application/pdf"
-            className="mt-2 text-xs"
-            required
+            className="hidden"
+            onChange={(e) => seleccionar(e.target.files?.[0])}
           />
-        </label>
+        </div>
 
         {errorOcr && (
           <p className="mt-3 rounded-md bg-warn-soft px-3 py-2 text-sm text-warn">
@@ -124,13 +202,14 @@ export default function NuevaOrdenForm() {
         )}
 
         <button
-          type="submit"
-          disabled={cargando}
+          type="button"
+          onClick={procesar}
+          disabled={cargando || !archivo}
           className="mt-4 w-full rounded-md bg-primary py-2.5 text-sm font-semibold text-primary-ink transition hover:bg-primary-hover disabled:opacity-60"
         >
           {cargando ? "Leyendo el documento…" : "Extraer datos"}
         </button>
-      </form>
+      </div>
     );
   }
 
