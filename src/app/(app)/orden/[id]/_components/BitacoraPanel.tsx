@@ -488,6 +488,15 @@ function Registro({
             <Icon className={`h-3 w-3 ${m.tono}`} strokeWidth={2} aria-hidden />
             {m.label}
           </span>
+          {b.itemNombre && (
+            <span
+              className="inline-flex max-w-[12rem] items-center gap-1 truncate rounded bg-surface-2 px-1.5 py-px text-[10px] font-medium text-muted"
+              title={b.itemNombre}
+            >
+              <Package className="h-2.5 w-2.5 shrink-0" strokeWidth={2} aria-hidden />
+              {b.itemNombre}
+            </span>
+          )}
           <time className="ml-auto shrink-0 text-[11px] text-muted">
             {tiempoRelativo(b.created_at)}
           </time>

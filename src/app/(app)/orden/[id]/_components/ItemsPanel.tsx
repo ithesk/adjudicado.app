@@ -132,10 +132,9 @@ export default function ItemsPanel({
   }
 
   function addCoord(id: string, tipo: TipoBitacora, texto: string) {
-    const it = items.find((x) => x.id === id);
-    emitir(
-      `${tipo === "llamada" ? "Llamada" : tipo === "correo" ? "Correo" : "Nota"} en “${it?.nombre ?? "ítem"}”: ${texto.slice(0, 60)}`,
-    );
+    // La nota del ítem se persiste con su item_id y rueda hacia la bitácora de
+    // la orden (etiquetada con el ítem). No emitimos evento resumen aparte para
+    // no duplicar.
     startTransition(() => agregarCoordinacionItem(ordenId, id, tipo, texto));
     setItems((prev) =>
       prev.map((it) =>

@@ -8,6 +8,7 @@ import {
   LogOut,
   Settings,
   FolderClosed,
+  Activity,
   Check,
 } from "lucide-react";
 import { requireMiembro, getMembresias } from "@/lib/auth";
@@ -122,6 +123,12 @@ export default async function AppLayout({
             <span className="ml-auto font-mono text-[11px] text-muted">
               {vivas}
             </span>
+          </NavLink>
+          <NavLink
+            href="/actividad"
+            icon={<Activity className="h-[15px] w-[15px]" strokeWidth={2} />}
+          >
+            Bitácora general
           </NavLink>
           <NavLink
             href="/documentos"

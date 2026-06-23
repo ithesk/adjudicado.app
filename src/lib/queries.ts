@@ -30,6 +30,7 @@ import {
   type Orden,
   type Persona,
   type Suplidor,
+  type TipoBitacora,
   type TipoItem,
 } from "@/lib/types";
 
@@ -246,6 +247,100 @@ export async function listarPersonas(): Promise<Persona[]> {
   }));
 }
 
+// ---------- Bitácora general del sistema ----------
+// Toda la actividad de todas las órdenes de la empresa, en un solo feed.
+// Es la cúspide de la jerarquía: ítem → orden → sistema. Nada queda suelto.
+export interface ActividadGlobal {
+  id: string;
+  texto: string;
+  tipo: TipoBitacora;
+  created_at: string;
+  autor: Persona | null;
+  ordenId: string;
+  numeroOc: string | null;
+  institucion: string | null;
+  itemNombre: string | null;
+}
+
+export async function listarActividad(): Promise<ActividadGlobal[]> {
+  if (isDemo()) {
+    const out: ActividadGlobal[] = [];
+    for (const o of demoOrdenes()) {
+      for (const b of bitacoraDemo(o)) {
+        out.push({
+          id: b.id,
+          texto: b.texto,
+          tipo: b.tipo,
+          created_at: b.created_at,
+          autor: b.autor ?? null,
+          ordenId: o.id,
+          numeroOc: o.numero_oc,
+          institucion: o.institucion,
+          itemNombre: null,
+        });
+      }
+      for (const it of itemsDemo(o)) {
+        for (const c of it.coordinacion ?? []) {
+          out.push({
+            id: c.id,
+            texto: c.texto,
+            tipo: c.tipo,
+            created_at: c.created_at,
+            autor: c.autor ?? null,
+            ordenId: o.id,
+            numeroOc: o.numero_oc,
+            institucion: o.institucion,
+            itemNombre: it.nombre,
+          });
+        }
+      }
+    }
+    return out.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+  }
+
+  const miembro = await getMiembro();
+  if (!miembro) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("bitacora")
+    .select(
+      "id, texto, tipo, created_at, autor_id, orden_id, orden!inner(numero_oc, institucion, org_id), item(nombre)",
+    )
+    .eq("orden.org_id", miembro.org_id)
+    .order("created_at", { ascending: false })
+    .limit(300);
+
+  const personas = await listarPersonas();
+  const porId = new Map(personas.map((p) => [p.id, p]));
+
+  return ((data as unknown[] | null) ?? []).map((row) => {
+    const r = row as {
+      id: string;
+      texto: string;
+      tipo: TipoBitacora;
+      created_at: string;
+      autor_id: string | null;
+      orden_id: string;
+      orden?: { numero_oc?: string | null; institucion?: string | null };
+      item?: { nombre?: string | null } | null;
+    };
+    return {
+      id: r.id,
+      texto: r.texto,
+      tipo: r.tipo,
+      created_at: r.created_at,
+      autor: r.autor_id ? porId.get(r.autor_id) ?? null : null,
+      ordenId: r.orden_id,
+      numeroOc: r.orden?.numero_oc ?? null,
+      institucion: r.orden?.institucion ?? null,
+      itemNombre: r.item?.nombre ?? null,
+    };
+  });
+}
+
 // Lista de órdenes de la org (RLS ya filtra), ordenada por urgencia de plazo.
 export async function listarOrdenes(): Promise<OrdenConItems[]> {
   if (isDemo()) {
@@ -370,6 +465,7 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
   const porId = new Map(personas.map((p) => [p.id, p]));
   const nombreDe = (uid: string | null) =>
     (uid ? porId.get(uid)?.nombre : null) ?? "Miembro del equipo";
+  const nombreItem = new Map(orden.item.map((i) => [i.id, i.nombre]));
 
   orden.responsable = orden.responsable_id
     ? porId.get(orden.responsable_id) ?? null
@@ -413,29 +509,28 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
           new Date(x.created_at).getTime() - new Date(y.created_at).getTime(),
       );
 
+    const itemId = b.item_id ?? null;
     return {
       ...b,
       autor: b.autor_id ? porId.get(b.autor_id) ?? null : null,
+      itemNombre: itemId ? nombreItem.get(itemId) ?? null : null,
       reacciones: reacciones.length ? reacciones : undefined,
       comentarios: comentarios.length ? comentarios : undefined,
     };
   });
 
-  // Separar la bitácora de la orden de la coordinación por ítem.
-  // Las entradas con item_id van al hilo de su ítem; el resto, al feed general.
+  // Jerarquía: la bitácora de la ORDEN conserva TODAS las entradas (incluidas
+  // las de ítem, etiquetadas con su nombre). Además, cada entrada de ítem se
+  // engancha al hilo de coordinación de su ítem. Nada queda suelto.
   const coordPorItem = new Map<string, Bitacora[]>();
-  const generales: Bitacora[] = [];
   for (const b of orden.bitacora) {
-    const itemId = (b as Bitacora).item_id ?? null;
+    const itemId = b.item_id ?? null;
     if (itemId) {
       const arr = coordPorItem.get(itemId) ?? [];
       arr.push(b);
       coordPorItem.set(itemId, arr);
-    } else {
-      generales.push(b);
     }
   }
-  orden.bitacora = generales;
   orden.item = orden.item.map((it) => ({
     ...it,
     coordinacion: (coordPorItem.get(it.id) ?? []).sort(

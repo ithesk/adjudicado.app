@@ -250,6 +250,7 @@ export interface Bitacora {
   id: string;
   orden_id: string;
   item_id?: string | null; // si está, la entrada pertenece a la coordinación de ese ítem
+  itemNombre?: string | null; // nombre del ítem (para el roll-up en la bitácora de la orden)
   autor_id: string | null;
   tipo: TipoBitacora;
   texto: string;
