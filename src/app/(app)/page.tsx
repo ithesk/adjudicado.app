@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { X } from "lucide-react";
-import { calcularMetricas, listarOrdenes } from "@/lib/queries";
+import { calcularMetricas, listarActividad, listarOrdenes } from "@/lib/queries";
 import { getMiembro } from "@/lib/auth";
 import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
 import MetricBar from "./_components/MetricBar";
 import TriageTable from "./_components/TriageTable";
+import ActividadReciente from "./_components/ActividadReciente";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function TableroPage({
   const ordenes = await listarOrdenes();
   const miembro = await getMiembro();
   const metricas = calcularMetricas(ordenes);
+  const actividad = await listarActividad();
 
   const vivas = filtro
     ? ordenes.filter((o) => o.estado === filtro)
@@ -27,6 +29,8 @@ export default async function TableroPage({
   return (
     <div className="space-y-5">
       <MetricBar m={metricas} />
+
+      {!filtro && <ActividadReciente actividad={actividad} />}
 
       {ordenes.length === 0 ? (
         <EmptyState />
