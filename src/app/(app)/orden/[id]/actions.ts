@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isDemo } from "@/lib/demo";
 import {
   siguienteEstado,
+  tipoPorArchivo,
   type Estado,
   type SuplidorEstado,
   type TipoBitacora,
@@ -377,7 +378,7 @@ export async function adjuntarDocumentoBitacora(
     orden_id: ordenId,
     item_id: itemId,
     autor_id: user?.id ?? null,
-    tipo: "nota",
+    tipo: tipoPorArchivo(archivo.name),
     texto: archivo.name,
     documento_id: doc?.id ?? null,
   });

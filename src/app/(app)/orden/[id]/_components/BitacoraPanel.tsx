@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   inferirTipoBitacora,
+  tipoPorArchivo,
   tiempoRelativo,
   type Bitacora,
   type Persona,
@@ -138,7 +139,7 @@ export default function BitacoraPanel({
           orden_id: ordenId,
           autor_id: currentUser.id,
           autor: currentUser,
-          tipo: "nota",
+          tipo: tipoPorArchivo(file.name),
           texto: file.name,
           created_at: nowISO(),
           adjuntos: [{ nombre: file.name }],

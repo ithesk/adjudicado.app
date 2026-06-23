@@ -125,6 +125,20 @@ export function inferirTipoBitacora(texto: string): TipoBitacora {
   return "nota";
 }
 
+// Tipo de bitácora según el archivo adjuntado: .eml/.msg → correo,
+// facturas/comprobantes → suplidor; el resto, nota.
+export function tipoPorArchivo(nombre: string): TipoBitacora {
+  const n = nombre.toLowerCase();
+  if (n.endsWith(".eml") || n.endsWith(".msg")) return "correo";
+  if (
+    /(factura|invoice|comprobante|ncf|cotizaci[oó]n|orden\s*de\s*compra|pedido|despacho|gu[ií]a)/.test(
+      n,
+    )
+  )
+    return "suplidor";
+  return "nota";
+}
+
 export function iniciales(nombre: string | null | undefined): string {
   if (!nombre) return "?";
   const partes = nombre.trim().split(/\s+/);
