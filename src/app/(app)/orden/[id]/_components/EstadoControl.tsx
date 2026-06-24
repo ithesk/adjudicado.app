@@ -34,12 +34,15 @@ export default function EstadoControl({
   }
 
   const esHandoff = estado === "listo_facturar";
-  const esPago = estado === "facturado"; // facturado → cobrado = validar pago
+  const esLibramiento = estado === "facturado"; // facturado → libramiento
+  const esPago = estado === "libramiento"; // libramiento → cobrado = validar pago
   const etiqueta = esHandoff
     ? "Marcar facturado en Odoo"
-    : esPago
-      ? "Validar pago y cerrar"
-      : `Avanzar a ${ESTADO_LABEL[proximo]}`;
+    : esLibramiento
+      ? "Registrar libramiento"
+      : esPago
+        ? "Validar pago y cerrar"
+        : `Avanzar a ${ESTADO_LABEL[proximo]}`;
 
   function avanzar() {
     const destino = siguienteEstado(estado);
@@ -74,6 +77,11 @@ export default function EstadoControl({
       {esHandoff && (
         <span className="text-xs text-muted">
           La factura / e-CF se emite en Odoo, fuera del sistema.
+        </span>
+      )}
+      {esLibramiento && (
+        <span className="text-xs text-muted">
+          La institución emite el libramiento (orden de pago) antes de pagar.
         </span>
       )}
       {esPago && (

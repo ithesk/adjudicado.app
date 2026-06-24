@@ -43,6 +43,7 @@ export function textoDias(dias: number | null): string {
 // Chip de estado (neutro; el color fuerte se reserva a la urgencia).
 export function estadoChip(estado: string): string {
   if (estado === "cobrado") return "bg-ok-soft text-ok";
+  if (estado === "libramiento") return "bg-primary/10 text-primary";
   if (estado === "cerrado") return "bg-surface-2 text-muted";
   return "bg-surface-2 text-ink";
 }

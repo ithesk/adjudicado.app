@@ -26,6 +26,7 @@ const ESTADOS_NAV: { key: Estado; dot: string }[] = [
   { key: "entregado", dot: "bg-warn" },
   { key: "listo_facturar", dot: "bg-warn" },
   { key: "facturado", dot: "bg-ok" },
+  { key: "libramiento", dot: "bg-primary" },
 ];
 
 export default async function AppLayout({

@@ -6,6 +6,7 @@ export type Estado =
   | "entregado"
   | "listo_facturar"
   | "facturado"
+  | "libramiento"
   | "cobrado"
   | "cerrado";
 
@@ -312,6 +313,7 @@ export const ESTADOS: Estado[] = [
   "entregado",
   "listo_facturar",
   "facturado",
+  "libramiento",
   "cobrado",
   "cerrado",
 ];
@@ -322,6 +324,7 @@ export const ESTADO_LABEL: Record<Estado, string> = {
   entregado: "Entregado",
   listo_facturar: "Listo para facturar",
   facturado: "Facturado",
+  libramiento: "Libramiento",
   cobrado: "Cobrado",
   cerrado: "Cerrado",
 };
@@ -346,9 +349,9 @@ export function estaAtascado(estado: Estado): boolean {
   return estado === "entregado" || estado === "listo_facturar";
 }
 
-// "Por cobrar": facturado y esperando el pago.
+// "Por cobrar": facturado o con libramiento emitido, esperando el pago.
 export function porCobrar(estado: Estado): boolean {
-  return estado === "facturado";
+  return estado === "facturado" || estado === "libramiento";
 }
 
 // ---------- Urgencia de plazo ----------
@@ -368,7 +371,10 @@ export function diasRestantes(fechaISO: string | null): number | null {
 // manda plazo_entrega; si está facturado, manda el plazo de pago estimado.
 export function plazoDominante(orden: Orden): string | null {
   if (relojEntregaActivo(orden.estado)) return orden.plazo_entrega;
-  if (orden.estado === "facturado" && orden.plazo_pago_dias) {
+  if (
+    (orden.estado === "facturado" || orden.estado === "libramiento") &&
+    orden.plazo_pago_dias
+  ) {
     // Aproximación: facturado + plazo_pago_dias a partir de updated_at.
     const base = new Date(orden.updated_at);
     base.setDate(base.getDate() + orden.plazo_pago_dias);

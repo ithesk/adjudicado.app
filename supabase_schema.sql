@@ -132,7 +132,7 @@ create table orden (
 
   constraint estado_valido check (estado in (
     'orden_recibida','en_coordinacion','entregado',
-    'listo_facturar','facturado','cobrado','cerrado'))
+    'listo_facturar','facturado','libramiento','cobrado','cerrado'))
 );
 create index idx_orden_org         on orden(org_id);
 create index idx_orden_estado      on orden(org_id, estado);
