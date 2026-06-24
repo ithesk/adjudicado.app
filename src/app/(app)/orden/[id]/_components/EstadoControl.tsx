@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { ArrowRight, CheckCircle2, BadgeCheck } from "lucide-react";
 import { ESTADO_LABEL, siguienteEstado, type Estado } from "@/lib/types";
-import { avanzarEstado } from "../actions";
+import { avanzarEstado, fijarEstado } from "../actions";
 import { useActividad } from "./Actividad";
 
 export default function EstadoControl({
@@ -33,34 +33,70 @@ export default function EstadoControl({
     );
   }
 
-  const esHandoff = estado === "listo_facturar";
-  const esLibramiento = estado === "facturado"; // facturado → libramiento
-  const esPago = estado === "libramiento"; // libramiento → cobrado = validar pago
-  const etiqueta = esHandoff
-    ? "Marcar facturado en Odoo"
-    : esLibramiento
-      ? "Registrar libramiento"
-      : esPago
-        ? "Validar pago y cerrar"
-        : `Avanzar a ${ESTADO_LABEL[proximo]}`;
-
-  function avanzar() {
+  // Avanza un paso por la máquina lineal.
+  function avanzar(mensaje: string) {
     const destino = siguienteEstado(estado);
     if (!destino) return;
     setEstado(destino);
-    emitir(
-      esPago
-        ? "Validó el pago. La orden queda cerrada."
-        : `Avanzó la orden a ${ESTADO_LABEL[destino]}.`,
-    );
+    emitir(mensaje);
     startTransition(() => avanzarEstado(ordenId, estado));
   }
+
+  // Salta a un estado puntual (p. ej. cobrar directo, sin pasar por libramiento).
+  function saltar(destino: Estado, mensaje: string) {
+    setEstado(destino);
+    emitir(mensaje);
+    startTransition(() => fijarEstado(ordenId, destino));
+  }
+
+  // En Facturado el libramiento es OPCIONAL: hay instituciones que pagan directo.
+  if (estado === "facturado") {
+    return (
+      <div className="flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => avanzar("Avanzó la orden a Libramiento.")}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-ink shadow-card transition-colors hover:bg-primary-hover"
+        >
+          Registrar libramiento
+          <ArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            saltar("cobrado", "Validó el pago (sin libramiento). La orden queda cerrada.")
+          }
+          className="inline-flex items-center gap-1.5 rounded-md bg-ok px-3.5 py-2 text-sm font-medium text-white shadow-card transition-colors hover:opacity-90"
+        >
+          Cobrar directo
+          <BadgeCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </button>
+        <span className="w-full text-xs text-muted sm:w-auto">
+          Si esta institución paga sin libramiento, usa “Cobrar directo”.
+        </span>
+      </div>
+    );
+  }
+
+  const esHandoff = estado === "listo_facturar";
+  const esPago = estado === "libramiento"; // libramiento → cobrado = validar pago
+  const etiqueta = esHandoff
+    ? "Marcar facturado en Odoo"
+    : esPago
+      ? "Validar pago y cerrar"
+      : `Avanzar a ${ESTADO_LABEL[proximo]}`;
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       <button
         type="button"
-        onClick={avanzar}
+        onClick={() =>
+          avanzar(
+            esPago
+              ? "Validó el pago. La orden queda cerrada."
+              : `Avanzó la orden a ${ESTADO_LABEL[proximo]}.`,
+          )
+        }
         className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-2 text-sm font-medium shadow-card transition-colors ${
           esPago
             ? "bg-ok text-white hover:opacity-90"
@@ -77,11 +113,6 @@ export default function EstadoControl({
       {esHandoff && (
         <span className="text-xs text-muted">
           La factura / e-CF se emite en Odoo, fuera del sistema.
-        </span>
-      )}
-      {esLibramiento && (
-        <span className="text-xs text-muted">
-          La institución emite el libramiento (orden de pago) antes de pagar.
         </span>
       )}
       {esPago && (
