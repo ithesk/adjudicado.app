@@ -9,6 +9,7 @@ import {
   siguienteEstado,
   tipoPorArchivo,
   type Estado,
+  type Item,
   type SuplidorEstado,
   type TipoBitacora,
 } from "@/lib/types";
@@ -106,6 +107,74 @@ export async function actualizarColaboradores(
     .from("orden")
     .update({ colaboradores: userIds })
     .eq("id", ordenId);
+  refrescar(ordenId);
+}
+
+// ---------- Editar la orden (corregir lo creado mal) ----------
+
+const CAMPOS_ORDEN = new Set([
+  "numero_oc",
+  "institucion",
+  "codigo_expediente",
+  "monto",
+  "moneda",
+  "fecha_oc",
+  "plazo_entrega",
+]);
+
+export async function actualizarOrden(
+  ordenId: string,
+  patch: Record<string, unknown>,
+) {
+  if (isDemo()) return;
+  const limpio: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (CAMPOS_ORDEN.has(k)) limpio[k] = v === "" ? null : v;
+  }
+  if (Object.keys(limpio).length === 0) return;
+  const supabase = await createClient();
+  const { error } = await supabase.from("orden").update(limpio).eq("id", ordenId);
+  if (error) {
+    console.error("actualizarOrden falló:", error.message);
+    return;
+  }
+  refrescar(ordenId);
+}
+
+// Crea un ítem nuevo en la orden y lo devuelve (con su id real).
+export async function agregarItem(ordenId: string): Promise<Item | null> {
+  if (isDemo()) return null;
+  const supabase = await createClient();
+  const { data: ult } = await supabase
+    .from("item")
+    .select("orden_indice")
+    .eq("orden_id", ordenId)
+    .order("orden_indice", { ascending: false })
+    .limit(1);
+  const indice = ((ult?.[0]?.orden_indice as number | undefined) ?? -1) + 1;
+  const { data, error } = await supabase
+    .from("item")
+    .insert({
+      orden_id: ordenId,
+      nombre: "Nuevo ítem",
+      tipo: "licencia",
+      cantidad: 1,
+      orden_indice: indice,
+    })
+    .select("*")
+    .single();
+  if (error) {
+    console.error("agregarItem falló:", error.message);
+    return null;
+  }
+  refrescar(ordenId);
+  return data as Item;
+}
+
+export async function eliminarItem(ordenId: string, itemId: string) {
+  if (isDemo()) return;
+  const supabase = await createClient();
+  await supabase.from("item").delete().eq("id", itemId);
   refrescar(ordenId);
 }
 

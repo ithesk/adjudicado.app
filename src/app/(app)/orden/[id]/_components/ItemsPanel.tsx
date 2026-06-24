@@ -26,6 +26,7 @@ import {
   diasRestantes,
   estadoItemLabel,
   flujoDeItem,
+  FLUJO_ITEM,
   formatFecha,
   formatRD,
   itemEntregado,
@@ -55,6 +56,8 @@ import {
   actualizarItem,
   agregarCoordinacionItem,
   adjuntarDocumentoBitacora,
+  agregarItem,
+  eliminarItem,
 } from "../actions";
 
 const TIPO_ICON: Record<TipoItem, LucideIcon> = {
@@ -110,6 +113,20 @@ export default function ItemsPanel({
   function save(id: string, patch: Partial<Item>) {
     update(id, patch);
     persist(id, patch as Record<string, unknown>);
+  }
+
+  async function addItem() {
+    const nuevo = await agregarItem(ordenId);
+    if (nuevo) {
+      setItems((prev) => [...prev, nuevo]);
+      emitir("Agregó un ítem a la orden.");
+    }
+  }
+
+  function delItem(it: Item) {
+    setItems((prev) => prev.filter((x) => x.id !== it.id));
+    emitir(`Eliminó el ítem “${it.nombre}”.`);
+    startTransition(() => eliminarItem(ordenId, it.id));
   }
 
   function avanzar(it: Item) {
@@ -249,10 +266,21 @@ export default function ItemsPanel({
               onSetEstado={setEstado}
               onCoord={addCoord}
               onAdjuntar={adjuntarItem}
+              onDelItem={delItem}
             />
           ))}
         </ul>
       )}
+      <div className="border-t border-line p-3">
+        <button
+          type="button"
+          onClick={addItem}
+          className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-line px-2.5 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+          Agregar ítem
+        </button>
+      </div>
     </Panel>
   );
 }
@@ -266,6 +294,7 @@ function ItemRow({
   onSetEstado,
   onCoord,
   onAdjuntar,
+  onDelItem,
 }: {
   item: Item;
   currentUser: Persona;
@@ -275,6 +304,7 @@ function ItemRow({
   onSetEstado: (it: Item, key: string) => void;
   onCoord: (id: string, tipo: TipoBitacora, texto: string) => void;
   onAdjuntar: (itemId: string, files: File[]) => void;
+  onDelItem: (it: Item) => void;
 }) {
   const { suplidores, agregarSuplidor, emitir } = useActividad();
   const supInicial = useRef(item.suplidor ?? "");
@@ -450,6 +480,54 @@ function ItemRow({
       {/* Detalle expandido */}
       {abierto && (
         <div className="space-y-4 bg-canvas/40 px-4 pb-4 pt-1">
+          {/* Identidad del ítem (corregir lo creado mal) */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <div className="sm:col-span-2">
+              <Campo label="Nombre del ítem">
+                <input
+                  value={item.nombre}
+                  onChange={(e) => onUpdate(item.id, { nombre: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  onBlur={() => onPersist(item.id, { nombre: item.nombre })}
+                  className={inputBase}
+                />
+              </Campo>
+            </div>
+            <Campo label="Tipo">
+              <select
+                value={item.tipo}
+                onChange={(e) => {
+                  const tipo = e.target.value as TipoItem;
+                  const patch = { tipo, estado_item: FLUJO_ITEM[tipo][0].key, entregado: false };
+                  onUpdate(item.id, patch);
+                  onPersist(item.id, patch);
+                }}
+                className={inputBase}
+              >
+                <option value="licencia">Licencia</option>
+                <option value="fisico">Físico</option>
+                <option value="servicio">Servicio</option>
+              </select>
+            </Campo>
+            <Campo label="Cantidad">
+              <input
+                type="number"
+                min={1}
+                value={item.cantidad}
+                onChange={(e) =>
+                  onUpdate(item.id, { cantidad: Number(e.target.value) || 1 })
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                onBlur={() => onPersist(item.id, { cantidad: item.cantidad })}
+                className={inputBase}
+              />
+            </Campo>
+          </div>
+
           <Hint tipo={item.tipo} />
 
           {/* Datalist compartido de suplidores (lo usan los campos de abajo). */}
@@ -610,6 +688,20 @@ function ItemRow({
             onCoord={onCoord}
             onAdjuntar={(files) => onAdjuntar(item.id, files)}
           />
+
+          <div className="flex justify-end border-t border-line pt-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`¿Eliminar el ítem “${item.nombre}”? No se puede deshacer.`))
+                  onDelItem(item);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              Eliminar ítem
+            </button>
+          </div>
         </div>
       )}
     </li>

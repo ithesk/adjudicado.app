@@ -27,6 +27,7 @@ import ItemsPanel from "./_components/ItemsPanel";
 import BitacoraPanel from "./_components/BitacoraPanel";
 import DocumentosPanel from "./_components/DocumentosPanel";
 import PlazosPanel from "./_components/PlazosPanel";
+import EditarOrden from "./_components/EditarOrden";
 import ResponsableControl from "./_components/ResponsableControl";
 import ColaboradoresControl from "./_components/ColaboradoresControl";
 import MarcadoresControl from "./_components/MarcadoresControl";
@@ -105,13 +106,27 @@ export default async function OrdenDetallePage({
               </p>
             )}
           </div>
-          <div className="text-right">
-            <p className="font-mono text-2xl font-semibold tracking-tight text-ink">
-              {formatRD(orden.monto, orden.moneda)}
-            </p>
-            <p className="text-[11px] uppercase tracking-wide text-muted">
-              Monto adjudicado
-            </p>
+          <div className="flex flex-col items-end gap-2.5">
+            <EditarOrden
+              ordenId={orden.id}
+              inicial={{
+                numero_oc: orden.numero_oc ?? "",
+                institucion: orden.institucion ?? "",
+                codigo_expediente: orden.codigo_expediente ?? "",
+                moneda: orden.moneda === "USD" ? "USD" : "DOP",
+                monto: orden.monto != null ? String(orden.monto) : "",
+                fecha_oc: orden.fecha_oc ?? "",
+                plazo_entrega: orden.plazo_entrega ?? "",
+              }}
+            />
+            <div className="text-right">
+              <p className="font-mono text-2xl font-semibold tracking-tight text-ink">
+                {formatRD(orden.monto, orden.moneda)}
+              </p>
+              <p className="text-[11px] uppercase tracking-wide text-muted">
+                Monto adjudicado
+              </p>
+            </div>
           </div>
         </div>
 
