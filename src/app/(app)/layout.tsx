@@ -105,8 +105,17 @@ export default async function AppLayout({
           </div>
         </details>
 
+        {/* Acción primaria */}
+        <Link
+          href="/orden/nueva"
+          className="mt-2.5 flex items-center justify-center gap-1.5 rounded-lg bg-primary px-2.5 py-2 text-[13px] font-semibold text-primary-ink shadow-card transition-colors hover:bg-primary-hover"
+        >
+          <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+          Nueva orden
+        </Link>
+
         {/* Buscador global (Cmd/Ctrl+K) */}
-        <BotonBuscar className="mt-2.5 mb-1 flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-muted transition-colors hover:border-line-strong">
+        <BotonBuscar className="mt-1.5 mb-1 flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-muted transition-colors hover:border-line-strong">
           <Search className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           Buscar en todo…
           <kbd className="ml-auto rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted">
@@ -137,12 +146,6 @@ export default async function AppLayout({
             icon={<FolderClosed className="h-[15px] w-[15px]" strokeWidth={2} />}
           >
             Documentos
-          </NavLink>
-          <NavLink
-            href="/orden/nueva"
-            icon={<Plus className="h-[15px] w-[15px]" strokeWidth={2} />}
-          >
-            Nueva orden
           </NavLink>
         </nav>
 
