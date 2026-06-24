@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { X } from "lucide-react";
-import { calcularMetricas, listarActividad, listarOrdenes } from "@/lib/queries";
+import { listarActividad, listarOrdenes } from "@/lib/queries";
 import { getMiembro } from "@/lib/auth";
 import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
 import MetricBar from "./_components/MetricBar";
@@ -18,7 +18,6 @@ export default async function TableroPage({
   const filtro = estado as Estado | undefined;
   const ordenes = await listarOrdenes();
   const miembro = await getMiembro();
-  const metricas = calcularMetricas(ordenes);
   const actividad = await listarActividad();
 
   const vivas = filtro
@@ -28,7 +27,7 @@ export default async function TableroPage({
 
   return (
     <div className="space-y-6">
-      <MetricBar m={metricas} />
+      <MetricBar ordenes={ordenes} />
 
       {!filtro && <ActividadReciente actividad={actividad} />}
 
