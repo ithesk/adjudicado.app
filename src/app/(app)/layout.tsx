@@ -18,6 +18,7 @@ import { cerrarSesion } from "@/lib/actions/sesion";
 import { isDemo } from "@/lib/demo";
 import { ESTADO_LABEL, esViva, nombreLegible, type Estado } from "@/lib/types";
 import NavLink from "./_components/NavLink";
+import BuscadorGlobal, { BotonBuscar } from "./_components/BuscadorGlobal";
 
 const ESTADOS_NAV: { key: Estado; dot: string }[] = [
   { key: "orden_recibida", dot: "bg-muted/50" },
@@ -103,14 +104,14 @@ export default async function AppLayout({
           </div>
         </details>
 
-        {/* Buscador → al tablero (que tiene el filtro real) */}
-        <Link
-          href="/"
-          className="mt-2.5 mb-1 flex items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-muted transition-colors hover:border-line-strong"
-        >
+        {/* Buscador global (Cmd/Ctrl+K) */}
+        <BotonBuscar className="mt-2.5 mb-1 flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-muted transition-colors hover:border-line-strong">
           <Search className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-          Buscar órdenes…
-        </Link>
+          Buscar en todo…
+          <kbd className="ml-auto rounded border border-line bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted">
+            ⌘K
+          </kbd>
+        </BotonBuscar>
 
         {/* Nav principal */}
         <nav className="mt-2 flex flex-col gap-px">
@@ -253,6 +254,12 @@ export default async function AppLayout({
           </span>
         </Link>
         <div className="flex items-center gap-2">
+          <BotonBuscar
+            className="grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          >
+            <Search className="h-5 w-5" strokeWidth={2} aria-hidden />
+            <span className="sr-only">Buscar en todo</span>
+          </BotonBuscar>
           <Link
             href="/orden/nueva"
             className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1.5 text-[13px] font-medium text-primary-ink"
@@ -272,6 +279,9 @@ export default async function AppLayout({
           {children}
         </div>
       </main>
+
+      {/* Buscador global (Cmd/Ctrl+K), montado una vez */}
+      <BuscadorGlobal />
     </div>
   );
 }
