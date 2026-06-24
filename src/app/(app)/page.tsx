@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { listarActividad, listarOrdenes } from "@/lib/queries";
 import { getMiembro } from "@/lib/auth";
 import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
+import { metricaPorKey } from "@/lib/metricas";
 import MetricBar from "./_components/MetricBar";
 import TriageTable from "./_components/TriageTable";
 import ActividadReciente from "./_components/ActividadReciente";
@@ -12,24 +13,33 @@ export const dynamic = "force-dynamic";
 export default async function TableroPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string }>;
+  searchParams: Promise<{ estado?: string; filtro?: string }>;
 }) {
-  const { estado } = await searchParams;
-  const filtro = estado as Estado | undefined;
+  const { estado, filtro } = await searchParams;
   const ordenes = await listarOrdenes();
   const miembro = await getMiembro();
   const actividad = await listarActividad();
 
-  const vivas = filtro
-    ? ordenes.filter((o) => o.estado === filtro)
-    : ordenes.filter((o) => esViva(o.estado));
-  const cerradas = filtro ? [] : ordenes.filter((o) => !esViva(o.estado));
+  // El filtro puede venir de una métrica (?filtro=) o de un estado (?estado=).
+  const metrica = metricaPorKey(filtro);
+  const hayFiltro = Boolean(metrica || estado);
+  const titulo = metrica
+    ? metrica.label
+    : estado
+      ? ESTADO_LABEL[estado as Estado]
+      : "Órdenes vivas";
+  const lista = metrica
+    ? ordenes.filter(metrica.predicado)
+    : estado
+      ? ordenes.filter((o) => o.estado === estado)
+      : ordenes.filter((o) => esViva(o.estado));
+  const cerradas = hayFiltro ? [] : ordenes.filter((o) => !esViva(o.estado));
 
   return (
     <div className="space-y-6">
       <MetricBar ordenes={ordenes} />
 
-      {!filtro && <ActividadReciente actividad={actividad} />}
+      {!hayFiltro && <ActividadReciente actividad={actividad} />}
 
       {ordenes.length === 0 ? (
         <EmptyState />
@@ -38,11 +48,11 @@ export default async function TableroPage({
           <section className="space-y-2.5">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wide text-muted">
-                {filtro ? (
+                {hayFiltro ? (
                   <>
-                    <span className="text-ink">{ESTADO_LABEL[filtro]}</span>
+                    <span className="text-ink">{titulo}</span>
                     <span aria-hidden>·</span>
-                    <span className="tabular-nums">{vivas.length}</span>
+                    <span className="tabular-nums">{lista.length}</span>
                     <Link
                       href="/"
                       className="inline-flex items-center gap-0.5 rounded-full bg-surface-2 px-1.5 py-0.5 normal-case tracking-normal text-muted transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
@@ -54,7 +64,7 @@ export default async function TableroPage({
                 ) : (
                   <>
                     Órdenes vivas <span aria-hidden>·</span>{" "}
-                    <span className="tabular-nums">{vivas.length}</span>
+                    <span className="tabular-nums">{lista.length}</span>
                   </>
                 )}
               </h2>
@@ -62,13 +72,13 @@ export default async function TableroPage({
                 Ordena por cualquier columna y filtra al instante
               </span>
             </div>
-            {vivas.length === 0 ? (
+            {lista.length === 0 ? (
               <p className="rounded-md border border-dashed border-line p-6 text-center text-sm text-muted">
-                {filtro ? "No hay órdenes en este estado." : "No hay órdenes vivas."}
+                {hayFiltro ? "No hay órdenes en este filtro." : "No hay órdenes vivas."}
               </p>
             ) : (
               <TriageTable
-                ordenes={vivas}
+                ordenes={lista}
                 controls
                 currentUserId={miembro?.user_id}
               />
