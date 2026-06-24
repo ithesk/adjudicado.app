@@ -205,12 +205,12 @@ export default function BuscadorGlobal() {
       onClick={cerrar}
     >
       <div
-        className="w-full max-w-xl overflow-hidden rounded-xl border border-line bg-surface shadow-raised"
+        className="flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-raised"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
         {/* Campo de búsqueda */}
-        <div className="flex items-center gap-2.5 border-b border-line px-4">
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4">
           <Search className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} aria-hidden />
           <input
             ref={inputRef}
@@ -229,7 +229,7 @@ export default function BuscadorGlobal() {
         </div>
 
         {/* Resultados */}
-        <div className="max-h-[60vh] overflow-y-auto py-1.5">
+        <div className="min-h-0 flex-1 overflow-y-auto py-1.5">
           {q.trim().length < 2 ? (
             <p className="px-4 py-8 text-center text-[13px] text-muted">
               Escribe al menos 2 letras para buscar en todo el sistema.
@@ -291,7 +291,7 @@ export default function BuscadorGlobal() {
         </div>
 
         {/* Pie con ayuda de navegación */}
-        <div className="flex items-center gap-3 border-t border-line px-4 py-2 text-[11px] text-muted">
+        <div className="flex shrink-0 items-center gap-3 border-t border-line px-4 py-2 text-[11px] text-muted">
           <span className="inline-flex items-center gap-1">
             <kbd className="rounded border border-line bg-surface-2 px-1 font-mono">↑</kbd>
             <kbd className="rounded border border-line bg-surface-2 px-1 font-mono">↓</kbd>
