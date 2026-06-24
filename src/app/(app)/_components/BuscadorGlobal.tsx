@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -17,6 +24,54 @@ import {
 import { buscarGlobal, type Hit, type ResultadoBusqueda } from "@/lib/actions/buscar";
 
 const EVENTO = "adjudica:abrir-buscador";
+
+const sinAcento = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+// "Pliega" el texto carácter a carácter manteniendo el mapeo a índices
+// originales, para resaltar coincidencias aunque difieran en acentos.
+function plegar(s: string): { folded: string; map: { s: number; e: number }[] } {
+  let folded = "";
+  const map: { s: number; e: number }[] = [];
+  let i = 0;
+  for (const ch of s) {
+    const piece = sinAcento(ch) || ch.toLowerCase();
+    const start = i;
+    const end = i + ch.length;
+    for (let k = 0; k < piece.length; k++) map.push({ s: start, e: end });
+    folded += piece;
+    i = end;
+  }
+  return { folded, map };
+}
+
+// Devuelve el texto con las coincidencias de `query` resaltadas.
+function resaltar(texto: string, query: string): ReactNode {
+  const q = sinAcento(query.trim());
+  if (q.length < 1 || !texto) return texto;
+  const { folded, map } = plegar(texto);
+  const partes: ReactNode[] = [];
+  let cursor = 0;
+  let from = 0;
+  let key = 0;
+  for (;;) {
+    const idx = folded.indexOf(q, from);
+    if (idx === -1) break;
+    const oStart = map[idx].s;
+    const oEnd = map[idx + q.length - 1].e;
+    if (cursor < oStart) partes.push(texto.slice(cursor, oStart));
+    partes.push(
+      <mark key={key++} className="rounded-[2px] bg-primary/20 text-ink">
+        {texto.slice(oStart, oEnd)}
+      </mark>,
+    );
+    cursor = oEnd;
+    from = idx + q.length;
+  }
+  if (partes.length === 0) return texto;
+  if (cursor < texto.length) partes.push(texto.slice(cursor));
+  return partes;
+}
 
 // Botón disparador (sidebar / móvil). Abre el buscador global.
 export function BotonBuscar({
@@ -211,11 +266,11 @@ export default function BuscadorGlobal() {
                         <Icon className="h-4 w-4 shrink-0 text-muted" strokeWidth={2} aria-hidden />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] text-ink">
-                            {hit.titulo}
+                            {resaltar(hit.titulo, q)}
                           </span>
                           {hit.sub && (
                             <span className="block truncate text-[11px] text-muted">
-                              {hit.sub}
+                              {resaltar(hit.sub, q)}
                             </span>
                           )}
                         </span>
