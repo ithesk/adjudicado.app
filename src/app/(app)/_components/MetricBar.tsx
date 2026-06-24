@@ -3,7 +3,7 @@ import type { Metricas } from "@/lib/queries";
 
 export default function MetricBar({ m }: { m: Metricas }) {
   return (
-    <div className="grid grid-cols-2 divide-line overflow-hidden rounded-lg border border-line bg-surface shadow-card sm:grid-cols-4 sm:divide-x">
+    <dl className="grid grid-cols-2 divide-x divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface shadow-card sm:grid-cols-4 sm:divide-y-0">
       <Metrica label="Órdenes vivas" valor={String(m.vivas)} />
       <Metrica
         label="Vencen ≤ 5 días"
@@ -16,7 +16,7 @@ export default function MetricBar({ m }: { m: Metricas }) {
         tono={m.atascado > 0 ? "aviso" : undefined}
       />
       <Metrica label="Por cobrar" valor={formatRD(m.porCobrar)} />
-    </div>
+    </dl>
   );
 }
 
@@ -39,13 +39,17 @@ function Metrica({
     tono === "alerta" ? "bg-danger" : tono === "aviso" ? "bg-warn" : null;
   return (
     <div className="px-4 py-3.5">
-      <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
-        {dot && <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />}
-        {label}
-      </p>
-      <p className={`mt-1 font-mono text-xl font-semibold tracking-tight ${color}`}>
+      <dt className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+        {dot && <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />}
+        <span className="truncate" title={label}>
+          {label}
+        </span>
+      </dt>
+      <dd
+        className={`mt-1 font-mono text-xl font-semibold tracking-tight tabular-nums ${color}`}
+      >
         {valor}
-      </p>
+      </dd>
     </div>
   );
 }

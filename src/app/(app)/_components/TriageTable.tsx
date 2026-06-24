@@ -49,7 +49,7 @@ const COLS: ColDef[] = [
     key: "plazo",
     label: "Plazo",
     alwaysOn: true,
-    width: "w-28",
+    width: "w-[120px]",
     sort: (o) => diasRestantes(plazoDominante(o)) ?? Number.MAX_SAFE_INTEGER,
   },
   { key: "oc", label: "Orden", alwaysOn: true, sort: (o) => o.numero_oc ?? "" },
@@ -57,19 +57,21 @@ const COLS: ColDef[] = [
     key: "responsable",
     label: "Responsable",
     defaultOn: true,
-    width: "w-40",
+    width: "w-[180px]",
     sort: (o) => o.responsable?.nombre ?? "￿",
   },
   {
     key: "institucion",
     label: "Institución",
     defaultOn: true,
+    width: "w-[22%]",
     sort: (o) => o.institucion ?? "",
   },
   {
     key: "estado",
     label: "Estado",
     defaultOn: true,
+    width: "w-[150px]",
     sort: (o) => ESTADOS.indexOf(o.estado),
   },
   {
@@ -77,7 +79,7 @@ const COLS: ColDef[] = [
     label: "Ítems",
     defaultOn: true,
     align: "center",
-    width: "w-28",
+    width: "w-[120px]",
     sort: (o) =>
       o.item.length ? o.item.filter((i) => i.entregado).length / o.item.length : -1,
   },
@@ -85,6 +87,7 @@ const COLS: ColDef[] = [
     key: "suplidor",
     label: "Suplidores",
     defaultOn: false,
+    width: "w-[150px]",
     sort: (o) => suplidoresDistintos(o).length,
   },
   {
@@ -92,7 +95,7 @@ const COLS: ColDef[] = [
     label: "Monto",
     alwaysOn: true,
     align: "right",
-    width: "w-36",
+    width: "w-[150px]",
     sort: (o) => o.monto ?? 0,
   },
 ];
@@ -188,8 +191,8 @@ export default function TriageTable({
   return (
     <div className="space-y-2">
       {controls && (
-        <div className="flex items-center justify-between gap-2">
-          <label className="relative flex max-w-xs flex-1 items-center">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="relative flex min-w-0 max-w-sm flex-1 items-center">
             <Search
               className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted"
               strokeWidth={2}
@@ -198,8 +201,9 @@ export default function TriageTable({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              aria-label="Filtrar órdenes"
               placeholder="Filtrar por OC, institución, suplidor…"
-              className="w-full rounded-md border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] text-ink shadow-card outline-none placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-[var(--ring)]"
+              className="w-full rounded-md border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] text-ink shadow-card outline-none placeholder:text-muted/70 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             />
           </label>
 
@@ -209,10 +213,10 @@ export default function TriageTable({
               type="button"
               onClick={() => setMisOrdenes((v) => !v)}
               aria-pressed={misOrdenes}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[13px] font-medium shadow-card transition-colors ${
+              className={`inline-flex min-h-9 touch-manipulation items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[13px] font-medium shadow-card transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
                 misOrdenes
                   ? "border-primary bg-primary text-primary-ink"
-                  : "border-line bg-surface text-ink-soft hover:text-ink"
+                  : "border-line bg-surface text-ink-soft hover:border-line-strong hover:text-ink"
               }`}
             >
               <UserCheck className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -221,11 +225,14 @@ export default function TriageTable({
           )}
 
           <details className="relative">
-            <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] font-medium text-ink-soft shadow-card transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+            <summary className="inline-flex min-h-9 cursor-pointer touch-manipulation list-none items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] font-medium text-ink-soft shadow-card transition-colors hover:border-line-strong hover:text-ink focus-visible:ring-2 focus-visible:ring-[var(--ring)] [&::-webkit-details-marker]:hidden">
               <Columns3 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               Columnas
             </summary>
-            <div className="absolute right-0 z-20 mt-1 w-48 rounded-md border border-line bg-surface p-1 shadow-raised">
+            <div className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-line bg-surface p-1 shadow-raised">
+              <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+                Mostrar columnas
+              </p>
               {COLS.map((c) => {
                 const on = visible.includes(c.key);
                 return (
@@ -233,8 +240,9 @@ export default function TriageTable({
                     key={c.key}
                     type="button"
                     disabled={c.alwaysOn}
+                    aria-pressed={on}
                     onClick={() => toggleCol(c.key)}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
+                    className="flex w-full touch-manipulation items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-ink transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:opacity-50"
                   >
                     <span
                       className={`grid h-3.5 w-3.5 place-items-center rounded-sm border ${
@@ -271,17 +279,32 @@ export default function TriageTable({
         </div>
       )}
 
+      {controls && (
+        <p className="sr-only" role="status" aria-live="polite">
+          {filas.length} {filas.length === 1 ? "orden" : "órdenes"}
+          {query ? ` que coinciden con ${query}` : ""}
+        </p>
+      )}
+
       <div
         className={`overflow-hidden rounded-lg border border-line bg-surface shadow-card ${
           apagado ? "opacity-60" : ""
         }`}
       >
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-surface-2 text-left text-[11px] uppercase tracking-wide text-muted">
               {cols.map((c) => (
                 <th
                   key={c.key}
+                  scope="col"
+                  aria-sort={
+                    sortKey === c.key
+                      ? sortDir === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : "none"
+                  }
                   className={`px-3 py-2 font-medium ${c.width ?? ""} ${
                     c.align === "right"
                       ? "text-right"
@@ -293,20 +316,24 @@ export default function TriageTable({
                   <button
                     type="button"
                     onClick={() => sortBy(c.key)}
-                    className={`inline-flex items-center gap-1 transition-colors hover:text-ink ${
-                      c.align === "right" ? "flex-row-reverse" : ""
+                    className={`inline-flex max-w-full touch-manipulation items-center gap-1 rounded-sm uppercase transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+                      c.align === "right"
+                        ? "flex-row-reverse"
+                        : c.align === "center"
+                          ? "mx-auto"
+                          : ""
                     } ${sortKey === c.key ? "text-ink" : ""}`}
                   >
-                    {c.label}
+                    <span className="truncate">{c.label}</span>
                     {sortKey === c.key ? (
                       sortDir === "asc" ? (
-                        <ChevronUp className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                        <ChevronUp className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
                       ) : (
-                        <ChevronDown className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                        <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
                       )
                     ) : (
                       <ChevronsUpDown
-                        className="h-3 w-3 opacity-40"
+                        className="h-3 w-3 shrink-0 opacity-40"
                         strokeWidth={2}
                         aria-hidden
                       />
@@ -399,7 +426,10 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
 
   const cell: Record<ColKey, React.ReactNode> = {
     plazo: (
-      <Link href={href} className="flex items-center gap-2">
+      <Link
+        href={href}
+        className="flex items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+      >
         <span className={`h-2 w-2 shrink-0 rounded-full ${urgenciaDot(nivel)}`} />
         <span
           className={`rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(
@@ -411,12 +441,15 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       </Link>
     ),
     oc: (
-      <Link href={href} className="block">
-        <span className="font-mono text-[13px] font-medium text-ink group-hover:text-primary">
+      <Link
+        href={href}
+        className="block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+      >
+        <span className="block truncate font-mono text-[13px] font-medium text-ink group-hover:text-primary">
           {orden.numero_oc || "OC s/n"}
         </span>
         {espera && (
-          <span className="mt-0.5 flex min-w-0 max-w-[20rem] items-center gap-1 text-[11px] text-muted">
+          <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-muted">
             <Clock className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
             <span className="min-w-0 flex-1 truncate" title={espera.nombre ?? undefined}>
               espera: {espera.nombre}
@@ -445,7 +478,7 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       </Link>
     ),
     responsable: orden.responsable ? (
-      <span className="flex min-w-0 max-w-[11rem] items-center gap-1.5">
+      <span className="flex min-w-0 items-center gap-1.5">
         <span className="shrink-0">
           <Avatar nombre={orden.responsable.nombre} size={20} />
         </span>
@@ -460,7 +493,10 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       <span className="text-xs text-muted">Sin asignar</span>
     ),
     institucion: (
-      <span className="truncate text-[13px] text-ink-soft">
+      <span
+        className="block truncate text-[13px] text-ink-soft"
+        title={orden.institucion || undefined}
+      >
         {orden.institucion || "—"}
       </span>
     ),
@@ -478,21 +514,23 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
     ),
     suplidor: (() => {
       const s = suplidoresDistintos(orden);
+      const txt =
+        s.length === 0 ? "—" : s.length === 1 ? s[0] : `${s.length} suplidores`;
       return (
-        <span className="truncate text-xs text-muted">
-          {s.length === 0 ? "—" : s.length === 1 ? s[0] : `${s.length} suplidores`}
+        <span className="block truncate text-xs text-muted" title={txt}>
+          {txt}
         </span>
       );
     })(),
     monto: (
-      <span className="font-mono text-[13px] font-medium text-ink">
+      <span className="font-mono text-[13px] font-medium tabular-nums text-ink">
         {formatRD(orden.monto, orden.moneda)}
       </span>
     ),
   };
 
   return (
-    <tr className="group border-b border-line last:border-0 odd:bg-surface-2/35 hover:bg-surface-2">
+    <tr className="group border-b border-line transition-colors last:border-0 odd:bg-surface-2/35 hover:bg-surface-2 focus-within:bg-surface-2">
       {cols.map((c) => (
         <td
           key={c.key}

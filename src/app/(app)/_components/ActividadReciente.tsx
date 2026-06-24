@@ -37,7 +37,7 @@ export default function ActividadReciente({
         </h2>
         <Link
           href="/actividad"
-          className="inline-flex items-center gap-0.5 text-[12px] font-medium text-muted transition-colors hover:text-primary"
+          className="inline-flex items-center gap-0.5 rounded-sm text-[12px] font-medium text-muted transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
         >
           Ver toda
           <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -53,7 +53,7 @@ export default function ActividadReciente({
               <li key={a.id}>
                 <Link
                   href={`/orden/${a.ordenId}`}
-                  className="flex items-center gap-2.5 px-3.5 py-2 transition-colors hover:bg-surface-2"
+                  className="flex touch-manipulation items-center gap-2.5 px-3.5 py-2 transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)]"
                 >
                   <Avatar nombre={a.autor?.nombre} size={22} />
                   <span className="shrink-0 text-[12px] font-medium text-ink">

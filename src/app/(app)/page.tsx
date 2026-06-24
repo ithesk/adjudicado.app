@@ -27,7 +27,7 @@ export default async function TableroPage({
   const cerradas = filtro ? [] : ordenes.filter((o) => !esViva(o.estado));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <MetricBar m={metricas} />
 
       {!filtro && <ActividadReciente actividad={actividad} />}
@@ -36,27 +36,31 @@ export default async function TableroPage({
         <EmptyState />
       ) : (
         <>
-          <section className="space-y-2">
-            <div className="flex items-baseline justify-between">
+          <section className="space-y-2.5">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wide text-muted">
                 {filtro ? (
                   <>
-                    <span className="text-ink">{ESTADO_LABEL[filtro]}</span>·{" "}
-                    {vivas.length}
+                    <span className="text-ink">{ESTADO_LABEL[filtro]}</span>
+                    <span aria-hidden>·</span>
+                    <span className="tabular-nums">{vivas.length}</span>
                     <Link
                       href="/"
-                      className="inline-flex items-center gap-0.5 rounded-full bg-surface-2 px-1.5 py-0.5 normal-case tracking-normal text-muted hover:text-ink"
+                      className="inline-flex items-center gap-0.5 rounded-full bg-surface-2 px-1.5 py-0.5 normal-case tracking-normal text-muted transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
                     >
                       <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-                      quitar
+                      quitar filtro
                     </Link>
                   </>
                 ) : (
-                  <>Órdenes vivas · {vivas.length}</>
+                  <>
+                    Órdenes vivas <span aria-hidden>·</span>{" "}
+                    <span className="tabular-nums">{vivas.length}</span>
+                  </>
                 )}
               </h2>
               <span className="text-xs text-muted">
-                ordena y filtra como quieras
+                Ordena por cualquier columna y filtra al instante
               </span>
             </div>
             {vivas.length === 0 ? (
@@ -73,9 +77,10 @@ export default async function TableroPage({
           </section>
 
           {cerradas.length > 0 && (
-            <section className="space-y-2">
+            <section className="space-y-2.5">
               <h2 className="font-mono text-xs uppercase tracking-wide text-muted">
-                Cobradas / cerradas · {cerradas.length}
+                Cobradas / cerradas <span aria-hidden>·</span>{" "}
+                <span className="tabular-nums">{cerradas.length}</span>
               </h2>
               <TriageTable ordenes={cerradas} apagado />
             </section>
