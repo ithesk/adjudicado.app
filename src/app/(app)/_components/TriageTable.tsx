@@ -10,6 +10,7 @@ import {
   Search,
   UserCheck,
   Clock,
+  X,
 } from "lucide-react";
 import { Avatar } from "@/components/ui";
 import type { ItemResumen } from "@/lib/queries";
@@ -40,7 +41,10 @@ interface ColDef {
   alwaysOn?: boolean;
   defaultOn?: boolean;
   align?: "right" | "center";
-  width?: string;
+  // Peso relativo del ancho. Se reparte el 100% entre las columnas VISIBLES,
+  // así un número chico no ocupa lo mismo que un monto grande, y al togglear
+  // columnas todo se reacomoda sin romper la cuadrícula.
+  peso: number;
   sort: (o: OrdenConItems) => number | string;
 }
 
@@ -49,29 +53,29 @@ const COLS: ColDef[] = [
     key: "plazo",
     label: "Plazo",
     alwaysOn: true,
-    width: "w-[120px]",
+    peso: 1.1,
     sort: (o) => diasRestantes(plazoDominante(o)) ?? Number.MAX_SAFE_INTEGER,
   },
-  { key: "oc", label: "Orden", alwaysOn: true, sort: (o) => o.numero_oc ?? "" },
+  { key: "oc", label: "Orden", alwaysOn: true, peso: 2.4, sort: (o) => o.numero_oc ?? "" },
   {
     key: "responsable",
     label: "Responsable",
     defaultOn: true,
-    width: "w-[180px]",
+    peso: 1.7,
     sort: (o) => o.responsable?.nombre ?? "￿",
   },
   {
     key: "institucion",
     label: "Institución",
     defaultOn: true,
-    width: "w-[22%]",
+    peso: 2.6,
     sort: (o) => o.institucion ?? "",
   },
   {
     key: "estado",
     label: "Estado",
     defaultOn: true,
-    width: "w-[150px]",
+    peso: 1.4,
     sort: (o) => ESTADOS.indexOf(o.estado),
   },
   {
@@ -79,7 +83,7 @@ const COLS: ColDef[] = [
     label: "Ítems",
     defaultOn: true,
     align: "center",
-    width: "w-[120px]",
+    peso: 1.3,
     sort: (o) =>
       o.item.length ? o.item.filter((i) => i.entregado).length / o.item.length : -1,
   },
@@ -87,7 +91,7 @@ const COLS: ColDef[] = [
     key: "suplidor",
     label: "Suplidores",
     defaultOn: false,
-    width: "w-[150px]",
+    peso: 1.6,
     sort: (o) => suplidoresDistintos(o).length,
   },
   {
@@ -95,7 +99,7 @@ const COLS: ColDef[] = [
     label: "Monto",
     alwaysOn: true,
     align: "right",
-    width: "w-[150px]",
+    peso: 1.7,
     sort: (o) => o.monto ?? 0,
   },
 ];
@@ -110,11 +114,13 @@ export default function TriageTable({
   apagado = false,
   controls = false,
   currentUserId,
+  filtroActivo,
 }: {
   ordenes: OrdenConItems[];
   apagado?: boolean;
   controls?: boolean;
   currentUserId?: string;
+  filtroActivo?: string;
 }) {
   const [visible, setVisible] = useState<ColKey[]>(DEFAULT_VISIBLE);
   const [sortKey, setSortKey] = useState<ColKey>("plazo");
@@ -164,6 +170,9 @@ export default function TriageTable({
   }
 
   const cols = COLS.filter((c) => visible.includes(c.key));
+  // Reparte el ancho proporcional al peso de cada columna visible (suma 100%).
+  const totalPeso = cols.reduce((s, c) => s + c.peso, 0) || 1;
+  const anchoDe = (c: ColDef) => `${((c.peso / totalPeso) * 100).toFixed(3)}%`;
 
   const filas = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -192,20 +201,34 @@ export default function TriageTable({
     <div className="space-y-2">
       {controls && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <label className="relative flex min-w-0 max-w-sm flex-1 items-center">
-            <Search
-              className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted"
-              strokeWidth={2}
-              aria-hidden
-            />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="Filtrar órdenes"
-              placeholder="Filtrar por OC, institución, suplidor…"
-              className="w-full rounded-md border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] text-ink shadow-card outline-none placeholder:text-muted/70 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-            />
-          </label>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <label className="relative flex min-w-0 max-w-sm flex-1 items-center">
+              <Search
+                className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted"
+                strokeWidth={2}
+                aria-hidden
+              />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Filtrar órdenes"
+                placeholder="Filtrar por OC, institución, suplidor…"
+                className="w-full rounded-md border border-line bg-surface py-1.5 pl-8 pr-3 text-[13px] text-ink shadow-card outline-none placeholder:text-muted/70 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              />
+            </label>
+            {filtroActivo && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 py-1 pl-2 pr-1 text-[12px] font-medium text-primary">
+                {filtroActivo}
+                <Link
+                  href="/"
+                  aria-label="Quitar filtro"
+                  className="grid h-4 w-4 place-items-center rounded-sm text-primary/80 transition-colors hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+                >
+                  <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                </Link>
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
           {currentUserId && (
@@ -298,6 +321,7 @@ export default function TriageTable({
                 <th
                   key={c.key}
                   scope="col"
+                  style={{ width: anchoDe(c) }}
                   aria-sort={
                     sortKey === c.key
                       ? sortDir === "asc"
@@ -305,7 +329,7 @@ export default function TriageTable({
                         : "descending"
                       : "none"
                   }
-                  className={`px-3 py-2 font-medium ${c.width ?? ""} ${
+                  className={`px-3 py-2 font-medium ${
                     c.align === "right"
                       ? "text-right"
                       : c.align === "center"
@@ -523,7 +547,7 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       );
     })(),
     monto: (
-      <span className="font-mono text-[13px] font-medium tabular-nums text-ink">
+      <span className="block truncate whitespace-nowrap font-mono text-[13px] font-medium tabular-nums text-ink">
         {formatRD(orden.monto, orden.moneda)}
       </span>
     ),
