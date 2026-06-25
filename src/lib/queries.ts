@@ -364,17 +364,23 @@ export async function listarOrdenes(): Promise<OrdenConItems[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("orden")
-    .select("*, item(entregado, suplidor, nombre, tipo, estado_item, fecha_estim)")
+    .select(
+      "*, item(entregado, suplidor, nombre, tipo, estado_item, fecha_estim, parent_id)",
+    )
     .eq("org_id", miembro.org_id)
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
 
   // Resolver el responsable (el tablero muestra su nombre/avatar).
+  // El roll-up del tablero solo cuenta ítems de primer nivel (no componentes).
   const personas = await listarPersonas();
   const porId = new Map(personas.map((p) => [p.id, p]));
   const ordenes = (data as OrdenConItems[]).map((o) => ({
     ...o,
+    item: o.item.filter(
+      (i) => !(i as { parent_id?: string | null }).parent_id,
+    ),
     responsable: o.responsable_id ? porId.get(o.responsable_id) ?? null : null,
   }));
   return ordenarPorUrgencia(ordenes);
@@ -536,7 +542,7 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
       coordPorItem.set(itemId, arr);
     }
   }
-  orden.item = orden.item.map((it) => ({
+  const flat: Item[] = orden.item.map((it) => ({
     ...it,
     coordinacion: (coordPorItem.get(it.id) ?? []).sort(
       (a, b) =>
@@ -544,7 +550,22 @@ export async function obtenerOrden(id: string): Promise<OrdenDetalle | null> {
     ),
   }));
 
-  orden.item.sort((a, b) => a.orden_indice - b.orden_indice);
+  // Árbol de ítems: los que tienen parent_id se anidan como componentes de su
+  // padre. orden.item queda con los de primer nivel (con sus componentes).
+  const hijosDe = new Map<string, Item[]>();
+  for (const it of flat) {
+    if (it.parent_id) {
+      const arr = hijosDe.get(it.parent_id) ?? [];
+      arr.push(it);
+      hijosDe.set(it.parent_id, arr);
+    }
+  }
+  const porIndice = (a: Item, b: Item) => a.orden_indice - b.orden_indice;
+  const armar = (it: Item): Item => {
+    const hijos = (hijosDe.get(it.id) ?? []).sort(porIndice).map(armar);
+    return hijos.length ? { ...it, componentes: hijos } : it;
+  };
+  orden.item = flat.filter((i) => !i.parent_id).sort(porIndice).map(armar);
   orden.bitacora.sort(
     (a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),

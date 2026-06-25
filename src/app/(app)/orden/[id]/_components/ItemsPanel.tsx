@@ -18,6 +18,7 @@ import {
   Split,
   Trash2,
   Plus,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -35,6 +36,8 @@ import {
   proximoEstadoItem,
   resumenReparto,
   tieneReparto,
+  tieneComponentes,
+  componentesListos,
   tipoPorArchivo,
   nivelUrgencia,
   tiempoRelativo,
@@ -87,6 +90,28 @@ const HINT: Record<TipoItem, { icon: LucideIcon; texto: string }> = {
 let seq = 0;
 const nid = () => `local-item-${Date.now()}-${seq++}`;
 
+// Actualiza un ítem por id dentro del árbol (busca también en componentes).
+function mapArbol(items: Item[], id: string, fn: (it: Item) => Item): Item[] {
+  return items.map((it) => {
+    if (it.id === id) return fn(it);
+    if (it.componentes?.length) {
+      return { ...it, componentes: mapArbol(it.componentes, id, fn) };
+    }
+    return it;
+  });
+}
+
+// Quita un ítem por id en cualquier nivel del árbol.
+function quitarArbol(items: Item[], id: string): Item[] {
+  return items
+    .filter((it) => it.id !== id)
+    .map((it) =>
+      it.componentes?.length
+        ? { ...it, componentes: quitarArbol(it.componentes, id) }
+        : it,
+    );
+}
+
 export default function ItemsPanel({
   ordenId,
   items: itemsIniciales,
@@ -101,9 +126,9 @@ export default function ItemsPanel({
   const { emitir } = useActividad();
   const entregados = items.filter(itemEntregado).length;
 
-  // Actualiza el estado local (UI inmediata).
+  // Actualiza el estado local (UI inmediata), buscando en todo el árbol.
   function update(id: string, patch: Partial<Item>) {
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+    setItems((prev) => mapArbol(prev, id, (it) => ({ ...it, ...patch })));
   }
   // Persiste en Supabase (no-op en demo). Los campos no soportados se filtran.
   function persist(id: string, patch: Record<string, unknown>) {
@@ -123,9 +148,23 @@ export default function ItemsPanel({
     }
   }
 
+  // Agrega un componente (sub-ítem) dentro de otro ítem.
+  async function addComponente(parentId: string) {
+    const nuevo = await agregarItem(ordenId, parentId);
+    if (nuevo) {
+      setItems((prev) =>
+        mapArbol(prev, parentId, (it) => ({
+          ...it,
+          componentes: [...(it.componentes ?? []), nuevo],
+        })),
+      );
+      emitir("Agregó un componente a un ítem.");
+    }
+  }
+
   function delItem(it: Item) {
-    setItems((prev) => prev.filter((x) => x.id !== it.id));
-    emitir(`Eliminó el ítem “${it.nombre}”.`);
+    setItems((prev) => quitarArbol(prev, it.id));
+    emitir(`Eliminó “${it.nombre}”.`);
     startTransition(() => eliminarItem(ordenId, it.id));
   }
 
@@ -160,50 +199,42 @@ export default function ItemsPanel({
     for (const file of files) {
       const cid = nid();
       setItems((prev) =>
-        prev.map((it) =>
-          it.id === itemId
-            ? {
-                ...it,
-                coordinacion: [
-                  ...(it.coordinacion ?? []),
-                  {
-                    id: cid,
-                    orden_id: ordenId,
-                    item_id: itemId,
-                    autor_id: currentUser.id,
-                    autor: currentUser,
-                    tipo: tipoPorArchivo(file.name),
-                    texto: file.name,
-                    created_at: new Date().toISOString(),
-                    adjuntos: [{ nombre: file.name }],
-                  },
-                ],
-              }
-            : it,
-        ),
+        mapArbol(prev, itemId, (it) => ({
+          ...it,
+          coordinacion: [
+            ...(it.coordinacion ?? []),
+            {
+              id: cid,
+              orden_id: ordenId,
+              item_id: itemId,
+              autor_id: currentUser.id,
+              autor: currentUser,
+              tipo: tipoPorArchivo(file.name),
+              texto: file.name,
+              created_at: new Date().toISOString(),
+              adjuntos: [{ nombre: file.name }],
+            },
+          ],
+        })),
       );
       const fd = new FormData();
       fd.append("archivo", file);
       const res = await adjuntarDocumentoBitacora(ordenId, itemId, fd);
       if (res?.path) {
         setItems((prev) =>
-          prev.map((it) =>
-            it.id === itemId
-              ? {
-                  ...it,
-                  coordinacion: (it.coordinacion ?? []).map((c) =>
-                    c.id === cid
-                      ? {
-                          ...c,
-                          adjuntos: [
-                            { nombre: res.nombre, bucket: "documentos", path: res.path },
-                          ],
-                        }
-                      : c,
-                  ),
-                }
-              : it,
-          ),
+          mapArbol(prev, itemId, (it) => ({
+            ...it,
+            coordinacion: (it.coordinacion ?? []).map((c) =>
+              c.id === cid
+                ? {
+                    ...c,
+                    adjuntos: [
+                      { nombre: res.nombre, bucket: "documentos", path: res.path },
+                    ],
+                  }
+                : c,
+            ),
+          })),
         );
       }
     }
@@ -215,25 +246,22 @@ export default function ItemsPanel({
     // no duplicar.
     startTransition(() => agregarCoordinacionItem(ordenId, id, tipo, texto));
     setItems((prev) =>
-      prev.map((it) =>
-        it.id === id
-          ? {
-              ...it,
-              coordinacion: [
-                ...(it.coordinacion ?? []),
-                {
-                  id: nid(),
-                  orden_id: it.orden_id,
-                  autor_id: currentUser.id,
-                  autor: currentUser,
-                  tipo,
-                  texto,
-                  created_at: new Date().toISOString(),
-                },
-              ],
-            }
-          : it,
-      ),
+      mapArbol(prev, id, (it) => ({
+        ...it,
+        coordinacion: [
+          ...(it.coordinacion ?? []),
+          {
+            id: nid(),
+            orden_id: it.orden_id,
+            item_id: id,
+            autor_id: currentUser.id,
+            autor: currentUser,
+            tipo,
+            texto,
+            created_at: new Date().toISOString(),
+          },
+        ],
+      })),
     );
   }
 
@@ -267,6 +295,7 @@ export default function ItemsPanel({
               onCoord={addCoord}
               onAdjuntar={adjuntarItem}
               onDelItem={delItem}
+              onAddComponente={addComponente}
             />
           ))}
         </ul>
@@ -295,6 +324,8 @@ function ItemRow({
   onCoord,
   onAdjuntar,
   onDelItem,
+  onAddComponente,
+  profundidad = 0,
 }: {
   item: Item;
   currentUser: Persona;
@@ -305,6 +336,8 @@ function ItemRow({
   onCoord: (id: string, tipo: TipoBitacora, texto: string) => void;
   onAdjuntar: (itemId: string, files: File[]) => void;
   onDelItem: (it: Item) => void;
+  onAddComponente: (parentId: string) => void;
+  profundidad?: number;
 }) {
   const { suplidores, agregarSuplidor, emitir } = useActividad();
   const supInicial = useRef(item.suplidor ?? "");
@@ -317,6 +350,11 @@ function ItemRow({
   const supCatalogo = suplidores.find(
     (s) => s.nombre.toLowerCase() === (item.suplidor ?? "").toLowerCase(),
   );
+
+  // ---- Componentes (sub-ítems) ----
+  const componentes = item.componentes ?? [];
+  const compuesto = tieneComponentes(item);
+  const compsListos = componentesListos(item);
 
   // ---- Reparto entre suplidores ----
   const flujo = flujoDeItem(item);
@@ -423,7 +461,12 @@ function ItemRow({
               {item.nombre}
             </span>
             <span className="block truncate text-[11px] text-muted">
-              {split ? (
+              {compuesto ? (
+                <>
+                  <Layers className="mr-1 inline h-3 w-3 align-[-1px]" strokeWidth={2} aria-hidden />
+                  Compuesto · {compsListos}/{componentes.length} componentes
+                </>
+              ) : split ? (
                 <>
                   <Split className="mr-1 inline h-3 w-3 align-[-1px]" strokeWidth={2} aria-hidden />
                   {resumenReparto(item)}
@@ -449,8 +492,17 @@ function ItemRow({
         </span>
 
         {/* Acción directa: avanzar de estado sin tener que expandir.
-            Si el ítem está repartido, se gestiona por suplidor al expandir. */}
-        {split ? (
+            Si está repartido o compuesto, se gestiona al expandir. */}
+        {compuesto ? (
+          <button
+            type="button"
+            onClick={() => setAbierto(true)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:text-ink"
+          >
+            <Layers className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            {compsListos}/{componentes.length} comp.
+          </button>
+        ) : split ? (
           <button
             type="button"
             onClick={() => setAbierto(true)}
@@ -689,17 +741,70 @@ function ItemRow({
             onAdjuntar={(files) => onAdjuntar(item.id, files)}
           />
 
+          {/* Componentes (sub-ítems): cada uno con su propio proceso. */}
+          {profundidad < 4 && (
+            <div className="rounded-md border border-line bg-surface">
+              <div className="flex items-center justify-between border-b border-line px-3 py-2">
+                <p className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+                  <Layers className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  Componentes
+                  {componentes.length > 0 && ` · ${compsListos}/${componentes.length} listos`}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onAddComponente(item.id)}
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-primary transition-opacity hover:opacity-80"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                  Agregar componente
+                </button>
+              </div>
+              {componentes.length === 0 ? (
+                <p className="px-3 py-2.5 text-[12px] text-muted">
+                  Divide este ítem en piezas; cada una con su suplidor, proceso y
+                  entrega. El ítem se completa cuando todas llegan.
+                </p>
+              ) : (
+                <ul className="divide-y divide-line">
+                  {componentes.map((c) => (
+                    <ItemRow
+                      key={c.id}
+                      item={c}
+                      currentUser={currentUser}
+                      onUpdate={onUpdate}
+                      onPersist={onPersist}
+                      onAvanzar={onAvanzar}
+                      onSetEstado={onSetEstado}
+                      onCoord={onCoord}
+                      onAdjuntar={onAdjuntar}
+                      onDelItem={onDelItem}
+                      onAddComponente={onAddComponente}
+                      profundidad={profundidad + 1}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end border-t border-line pt-3">
             <button
               type="button"
               onClick={() => {
-                if (confirm(`¿Eliminar el ítem “${item.nombre}”? No se puede deshacer.`))
+                const qué = profundidad > 0 ? "el componente" : "el ítem";
+                if (
+                  confirm(
+                    `¿Eliminar ${qué} “${item.nombre}”?${
+                      compuesto ? " Se eliminan también sus componentes." : ""
+                    } No se puede deshacer.`,
+                  )
+                )
                   onDelItem(item);
               }}
               className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-danger-soft hover:text-danger"
             >
               <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              Eliminar ítem
+              {profundidad > 0 ? "Eliminar componente" : "Eliminar ítem"}
             </button>
           </div>
         </div>

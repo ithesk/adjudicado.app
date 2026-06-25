@@ -194,6 +194,8 @@ export interface Item {
   condiciones: string | null; // soporte, términos, tracking…
   coordinacion?: Bitacora[]; // hilo de coordinación propio (demo)
   asignaciones?: Asignacion[]; // reparto entre suplidores (demo)
+  parent_id?: string | null; // si está, es un componente/sub-ítem de otro ítem
+  componentes?: Item[]; // sub-ítems (cada uno con su propio proceso)
 }
 
 // Flujo (pipeline) por tipo de ítem. El último estado = entregado/activado.
@@ -239,13 +241,30 @@ export function tieneReparto(item: Item): boolean {
   return (item.asignaciones?.length ?? 0) > 0;
 }
 
+export function tieneComponentes(item: Item): boolean {
+  return (item.componentes?.length ?? 0) > 0;
+}
+
+// El ítem se entrega cuando TODAS sus piezas se entregan: sus componentes
+// (recursivo) y su reparto entre suplidores. Si no tiene ninguno, manda su
+// propio estado. Cubre los tres casos (directo, repartido, compuesto, mixto).
 export function itemEntregado(item: Item): boolean {
-  if (tieneReparto(item)) {
-    return item.asignaciones!.every((a) => asignacionEntregada(item, a));
+  const partes: boolean[] = [];
+  if (tieneComponentes(item)) {
+    partes.push(item.componentes!.every((c) => itemEntregado(c)));
   }
+  if (tieneReparto(item)) {
+    partes.push(item.asignaciones!.every((a) => asignacionEntregada(item, a)));
+  }
+  if (partes.length > 0) return partes.every(Boolean);
   const f = flujoDeItem(item);
   const terminal = f[f.length - 1].key;
   return item.entregado || item.estado_item === terminal;
+}
+
+// Cuántos componentes están listos (para el "X/Y" del padre).
+export function componentesListos(item: Item): number {
+  return (item.componentes ?? []).filter((c) => itemEntregado(c)).length;
 }
 
 // "1× Amazon · 4× eBay" — resumen legible del reparto.

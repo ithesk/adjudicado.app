@@ -141,22 +141,29 @@ export async function actualizarOrden(
   refrescar(ordenId);
 }
 
-// Crea un ítem nuevo en la orden y lo devuelve (con su id real).
-export async function agregarItem(ordenId: string): Promise<Item | null> {
+// Crea un ítem nuevo (o un componente si se pasa parentId) y lo devuelve.
+export async function agregarItem(
+  ordenId: string,
+  parentId: string | null = null,
+): Promise<Item | null> {
   if (isDemo()) return null;
   const supabase = await createClient();
-  const { data: ult } = await supabase
+  // Próximo índice entre los hermanos (mismo padre, o de primer nivel).
+  let qb = supabase
     .from("item")
     .select("orden_indice")
     .eq("orden_id", ordenId)
     .order("orden_indice", { ascending: false })
     .limit(1);
+  qb = parentId ? qb.eq("parent_id", parentId) : qb.is("parent_id", null);
+  const { data: ult } = await qb;
   const indice = ((ult?.[0]?.orden_indice as number | undefined) ?? -1) + 1;
   const { data, error } = await supabase
     .from("item")
     .insert({
       orden_id: ordenId,
-      nombre: "Nuevo ítem",
+      parent_id: parentId,
+      nombre: parentId ? "Nuevo componente" : "Nuevo ítem",
       tipo: "licencia",
       cantidad: 1,
       orden_indice: indice,
