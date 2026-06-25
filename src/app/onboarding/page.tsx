@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import OnboardingForm from "./OnboardingForm";
+import { LogoLockup } from "@/components/Logo";
 
 export default async function OnboardingPage() {
   const user = await getUser();
@@ -9,22 +10,8 @@ export default async function OnboardingPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-center gap-2.5">
-          <span className="grid h-7 w-7 place-items-center rounded-md bg-primary">
-            <svg width="16" height="16" viewBox="0 0 40 40" fill="none" aria-hidden>
-              <path
-                d="M12 20.5 L17.5 26 L28.5 14"
-                stroke="currentColor"
-                className="text-primary-ink"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          <span className="font-display text-base font-semibold tracking-tight">
-            adjudicado<span className="text-muted">.app</span>
-          </span>
+        <div className="mb-6 flex justify-center">
+          <LogoLockup markSize={28} textClass="text-base" />
         </div>
         <div className="mb-6 text-center">
           <h1 className="font-display text-xl font-semibold">

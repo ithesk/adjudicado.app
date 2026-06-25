@@ -19,6 +19,7 @@ import { isDemo } from "@/lib/demo";
 import { ESTADO_LABEL, esViva, nombreLegible, type Estado } from "@/lib/types";
 import NavLink from "./_components/NavLink";
 import BuscadorGlobal, { BotonBuscar } from "./_components/BuscadorGlobal";
+import { LogoMarca, LogoLockup } from "@/components/Logo";
 
 const ESTADOS_NAV: { key: Estado; dot: string }[] = [
   { key: "orden_recibida", dot: "bg-muted/50" },
@@ -48,17 +49,7 @@ export default async function AppLayout({
         {/* Selector de empresa (un usuario puede pertenecer a varias) */}
         <details className="group relative">
           <summary className="flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
-            <span className="grid h-6 w-6 flex-none place-items-center rounded-[11px] bg-primary text-primary-ink">
-              <svg width="14" height="14" viewBox="0 0 40 40" fill="none" aria-hidden>
-                <path
-                  d="M12 20.5 L17.5 26 L28.5 14"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
+            <LogoMarca size={22} className="flex-none text-ink" />
             <span className="truncate text-[13.5px] font-semibold text-ink">
               {miembro.organizacion?.nombre?.split(",")[0] ?? "Mi empresa"}
             </span>
@@ -241,21 +232,8 @@ export default async function AppLayout({
 
       {/* ===== Top bar (móvil) ===== */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-canvas/90 px-4 py-2.5 backdrop-blur md:hidden">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="grid h-6 w-6 place-items-center rounded-[11px] bg-primary text-primary-ink">
-            <svg width="13" height="13" viewBox="0 0 40 40" fill="none" aria-hidden>
-              <path
-                d="M12 20.5 L17.5 26 L28.5 14"
-                stroke="currentColor"
-                strokeWidth="4.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
-          <span className="font-display text-sm font-semibold tracking-tight">
-            adjudicado<span className="text-muted">.app</span>
-          </span>
+        <Link href="/" className="flex items-center">
+          <LogoLockup markSize={22} textClass="text-sm" />
         </Link>
         <div className="flex items-center gap-2">
           <BotonBuscar
