@@ -527,6 +527,27 @@ function ItemRow({
             Listo
           </span>
         )}
+
+        {/* Eliminar (visible en cada fila; borra solo este ítem/componente) */}
+        <button
+          type="button"
+          onClick={() => {
+            const qué = profundidad > 0 ? "el componente" : "el ítem";
+            if (
+              confirm(
+                `¿Eliminar ${qué} “${item.nombre}”?${
+                  compuesto ? " Se eliminan también sus componentes." : ""
+                } No se puede deshacer.`,
+              )
+            )
+              onDelItem(item);
+          }}
+          aria-label={profundidad > 0 ? "Eliminar componente" : "Eliminar ítem"}
+          title={profundidad > 0 ? "Eliminar componente" : "Eliminar ítem"}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+        >
+          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        </button>
       </div>
 
       {/* Detalle expandido */}
@@ -787,26 +808,6 @@ function ItemRow({
             </div>
           )}
 
-          <div className="flex justify-end border-t border-line pt-3">
-            <button
-              type="button"
-              onClick={() => {
-                const qué = profundidad > 0 ? "el componente" : "el ítem";
-                if (
-                  confirm(
-                    `¿Eliminar ${qué} “${item.nombre}”?${
-                      compuesto ? " Se eliminan también sus componentes." : ""
-                    } No se puede deshacer.`,
-                  )
-                )
-                  onDelItem(item);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-muted transition-colors hover:bg-danger-soft hover:text-danger"
-            >
-              <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              {profundidad > 0 ? "Eliminar componente" : "Eliminar ítem"}
-            </button>
-          </div>
         </div>
       )}
     </li>
