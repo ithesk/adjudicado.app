@@ -27,6 +27,7 @@ import {
 import { Avatar, Panel, SectionTitle } from "@/components/ui";
 import type { Adjunto } from "@/lib/types";
 import { isDemo } from "@/lib/demo";
+import { createClient } from "@/lib/supabase/client";
 import VisorDocumento from "@/components/VisorDocumento";
 import {
   agregarBitacora,
@@ -110,10 +111,12 @@ export default function BitacoraPanel({
   ordenId,
   entradas,
   currentUser,
+  personas,
 }: {
   ordenId: string;
   entradas: Bitacora[];
   currentUser: Persona;
+  personas: Persona[];
 }) {
   const [items, setItems] = useState<Entrada[]>(() =>
     sembrar(entradas as Entrada[]),
@@ -181,6 +184,97 @@ export default function BitacoraPanel({
   useEffect(() => {
     scrollAbajo();
   }, []);
+
+  // Tiempo real: notas/eventos y comentarios de OTROS usuarios aparecen sin
+  // recargar (Supabase Realtime; respeta la RLS por organización).
+  const personasRef = useRef(personas);
+  personasRef.current = personas;
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
+  useEffect(() => {
+    if (isDemo()) return;
+    const supabase = createClient();
+    const resolver = (autorId: string | null): Persona => {
+      if (autorId && autorId === currentUserRef.current.id) return currentUserRef.current;
+      return (
+        (autorId ? personasRef.current.find((p) => p.id === autorId) : null) ?? {
+          id: autorId ?? "",
+          nombre: "Miembro del equipo",
+        }
+      );
+    };
+
+    const canal = supabase
+      .channel(`bitacora-${ordenId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "bitacora", filter: `orden_id=eq.${ordenId}` },
+        (payload) => {
+          const r = payload.new as Bitacora;
+          if (r.item_id) return; // las de ítem no van al feed general
+          setItems((prev) => {
+            if (prev.some((b) => b.id === r.id)) return prev;
+            const nueva: Entrada = { ...r, autor: resolver(r.autor_id) };
+            // Eco de mi propia entrada optimista: la reemplazo (id local → real).
+            const i = prev.findIndex(
+              (b) =>
+                b.id.startsWith("local-") &&
+                b.autor_id === r.autor_id &&
+                b.texto === r.texto &&
+                b.tipo === r.tipo,
+            );
+            if (i >= 0) {
+              const c = [...prev];
+              c[i] = { ...c[i], ...nueva };
+              return c;
+            }
+            return [nueva, ...prev];
+          });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "bitacora_comentario" },
+        (payload) => {
+          const c = payload.new as {
+            id: string;
+            bitacora_id: string;
+            autor_id: string | null;
+            texto: string;
+            created_at: string;
+          };
+          setItems((prev) => {
+            if (!prev.some((b) => b.id === c.bitacora_id)) return prev;
+            return prev.map((b) => {
+              if (b.id !== c.bitacora_id) return b;
+              if ((b.comentarios ?? []).some((x) => x.id === c.id)) return b;
+              const nuevoC = {
+                id: c.id,
+                autor: resolver(c.autor_id),
+                texto: c.texto,
+                created_at: c.created_at,
+              };
+              const lista = [...(b.comentarios ?? [])];
+              const i = lista.findIndex(
+                (x) =>
+                  x.id.startsWith("local-") &&
+                  x.texto === c.texto &&
+                  x.autor.id === c.autor_id,
+              );
+              if (i >= 0) lista[i] = nuevoC;
+              else lista.push(nuevoC);
+              return { ...b, comentarios: lista };
+            });
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [ordenId]);
 
   function registrar() {
     if (!texto.trim()) return;
