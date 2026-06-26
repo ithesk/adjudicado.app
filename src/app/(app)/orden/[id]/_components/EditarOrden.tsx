@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil, X, Trash2 } from "lucide-react";
 import { inputBase } from "@/components/ui";
-import { actualizarOrden } from "../actions";
+import { actualizarOrden, eliminarOrden } from "../actions";
 
 interface Campos {
   numero_oc: string;
@@ -28,6 +28,16 @@ export default function EditarOrden({
 
   function set<K extends keyof Campos>(k: K, v: Campos[K]) {
     setF((p) => ({ ...p, [k]: v }));
+  }
+
+  function borrar() {
+    if (
+      !confirm(
+        `¿Eliminar la orden ${f.numero_oc || ""} y TODO su contenido (ítems, bitácora y documentos)? No se puede deshacer.`,
+      )
+    )
+      return;
+    start(() => eliminarOrden(ordenId));
   }
 
   function guardar() {
@@ -141,7 +151,17 @@ export default function EditarOrden({
               </Campo>
             </div>
 
-            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line px-4 py-3">
+              <button
+                type="button"
+                onClick={borrar}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium text-muted transition-colors hover:bg-danger-soft hover:text-danger disabled:opacity-60"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                Eliminar orden
+              </button>
+              <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setAbierto(false)}
@@ -157,6 +177,7 @@ export default function EditarOrden({
               >
                 {pending ? "Guardando…" : "Guardar cambios"}
               </button>
+              </div>
             </div>
           </div>
         </div>

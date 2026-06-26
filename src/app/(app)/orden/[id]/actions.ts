@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getMiembro, getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { isDemo } from "@/lib/demo";
@@ -139,6 +140,19 @@ export async function actualizarOrden(
     return;
   }
   refrescar(ordenId);
+}
+
+// Elimina una orden completa (ítems, bitácora y documentos se borran en cascada).
+export async function eliminarOrden(ordenId: string) {
+  if (isDemo()) return;
+  const supabase = await createClient();
+  const { error } = await supabase.from("orden").delete().eq("id", ordenId);
+  if (error) {
+    console.error("eliminarOrden falló:", error.message);
+    return;
+  }
+  revalidatePath("/");
+  redirect("/");
 }
 
 // Crea un ítem nuevo (o un componente si se pasa parentId) y lo devuelve.
