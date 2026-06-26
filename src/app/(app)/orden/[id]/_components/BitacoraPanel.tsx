@@ -194,7 +194,14 @@ export default function BitacoraPanel({
 
   useEffect(() => {
     if (isDemo()) return;
-    const supabase = createClient();
+    const supabase = (() => {
+      try {
+        return createClient();
+      } catch {
+        return null; // sin realtime, la app sigue funcionando (se ve al recargar)
+      }
+    })();
+    if (!supabase) return;
     const resolver = (autorId: string | null): Persona => {
       if (autorId && autorId === currentUserRef.current.id) return currentUserRef.current;
       return (
