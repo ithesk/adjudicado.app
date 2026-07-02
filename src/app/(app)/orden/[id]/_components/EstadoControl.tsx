@@ -81,7 +81,7 @@ export default function EstadoControl({
   const esHandoff = estado === "listo_facturar";
   const esPago = estado === "libramiento"; // libramiento → cobrado = validar pago
   const etiqueta = esHandoff
-    ? "Marcar facturado en Odoo"
+    ? "Marcar facturado"
     : esPago
       ? "Validar pago y cerrar"
       : `Avanzar a ${ESTADO_LABEL[proximo]}`;
@@ -112,7 +112,7 @@ export default function EstadoControl({
       </button>
       {esHandoff && (
         <span className="text-xs text-muted">
-          La factura / e-CF se emite en Odoo, fuera del sistema.
+          La factura / e-CF se emite en tu sistema de facturación, fuera de aquí.
         </span>
       )}
       {esPago && (

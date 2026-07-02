@@ -294,3 +294,66 @@ create policy comentario_all on bitacora_comentario for all
 --   values ('00000000-0000-0000-0000-000000000001','Innovación Tecnológica SK, SRL');
 -- insert into miembro (org_id, user_id, nombre, rol)
 --   values ('00000000-0000-0000-0000-000000000001', auth.uid(), 'Tu Nombre', 'admin');
+
+-- ============================================================
+--  MIGRACIONES POSTERIORES AL v0 (aplicadas en producción)
+--  Mantener sincronizado: esto reproduce el estado actual.
+-- ============================================================
+
+-- Ítems: componentes (sub-ítems) — jerarquía recursiva
+alter table item add column if not exists parent_id uuid references item(id) on delete cascade;
+create index if not exists idx_item_parent on item(parent_id);
+
+-- Bitácora: entradas editables + adjunto vinculado
+alter table bitacora add column if not exists editada boolean not null default false;
+alter table bitacora add column if not exists documento_id uuid references documento(id) on delete set null;
+
+-- Grupos / equipos dentro de la empresa
+create table if not exists grupo (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizacion(id) on delete cascade,
+  nombre text not null,
+  color text,
+  created_at timestamptz not null default now()
+);
+alter table grupo enable row level security;
+create policy grupo_all on grupo for all
+  using (es_miembro(org_id)) with check (es_miembro(org_id));
+
+create table if not exists grupo_miembro (
+  grupo_id uuid not null references grupo(id) on delete cascade,
+  user_id uuid not null,
+  primary key (grupo_id, user_id)
+);
+alter table grupo_miembro enable row level security;
+create policy grupo_miembro_all on grupo_miembro for all
+  using (es_miembro((select org_id from grupo where id = grupo_id)))
+  with check (es_miembro((select org_id from grupo where id = grupo_id)));
+
+alter table orden add column if not exists grupo_id uuid references grupo(id) on delete set null;
+
+-- Buzón de correo entrante por orden (oc-<buzon>@dominio)
+alter table orden add column if not exists buzon text unique;
+update orden set buzon = substr(md5(id::text), 1, 8) where buzon is null;
+create or replace function public.set_buzon() returns trigger
+language plpgsql as $fn$
+begin
+  if new.buzon is null then new.buzon := substr(md5(new.id::text), 1, 8); end if;
+  return new;
+end $fn$;
+drop trigger if exists orden_buzon on orden;
+create trigger orden_buzon before insert on orden
+  for each row execute function public.set_buzon();
+
+-- Integración Odoo (factura vinculada)
+alter table orden add column if not exists odoo_factura_id bigint;
+alter table orden add column if not exists odoo_factura_estado text;
+
+-- Búsqueda global insensible a acentos (Cmd/Ctrl+K)
+create extension if not exists unaccent with schema extensions;
+-- La función buscar_global(p_org, p_q) vive en la BD (security definer,
+-- guard es_miembro, execute solo para authenticated). Ver commit 38ab351.
+
+-- Tiempo real de la bitácora
+alter publication supabase_realtime add table bitacora;
+alter publication supabase_realtime add table bitacora_comentario;

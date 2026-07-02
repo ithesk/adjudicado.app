@@ -14,7 +14,12 @@ async function origenActual(): Promise<string> {
   const h = await headers();
   const host = h.get("host");
   const proto = h.get("x-forwarded-proto") || "https";
-  return host ? `${proto}://${host}` : "https://adjudicado-app.vercel.app";
+  if (host) return `${proto}://${host}`;
+  // Sin header host (raro): usa la URL configurada del despliegue.
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+  );
 }
 
 // Invita por correo. Si el correo YA existe (usuario fantasma o de otra empresa),

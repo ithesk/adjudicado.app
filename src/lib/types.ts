@@ -113,7 +113,7 @@ export interface Institucion {
 
 // Nombre legible para mostrar. Si el "nombre" es en realidad un correo
 // (caso típico de un invitado que aún no puso su nombre), usa la parte local
-// capitalizada: "acosta@innova.com" → "Acosta", "juan.perez@x.com" → "Juan Perez".
+// capitalizada: "ana@empresa.com" → "Ana", "juan.perez@x.com" → "Juan Perez".
 export function nombreLegible(nombre: string | null | undefined): string {
   const n = (nombre ?? "").trim();
   if (!n) return "—";
