@@ -342,6 +342,40 @@ export async function agregarComentario(
   if (error) console.error("agregarComentario falló:", error.message);
 }
 
+// Edita el texto de una entrada propia (estilo Notion). Solo el autor puede.
+export async function editarBitacora(
+  _ordenId: string,
+  bitacoraId: string,
+  texto: string,
+) {
+  if (isDemo()) return;
+  const limpio = texto.trim();
+  if (!limpio) return;
+  const user = await getUser();
+  if (!user) return;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("bitacora")
+    .update({ texto: limpio, editada: true })
+    .eq("id", bitacoraId)
+    .eq("autor_id", user.id); // solo el autor
+  if (error) console.error("editarBitacora falló:", error.message);
+}
+
+// Elimina una entrada propia (y sus reacciones/comentarios en cascada).
+export async function eliminarBitacora(_ordenId: string, bitacoraId: string) {
+  if (isDemo()) return;
+  const user = await getUser();
+  if (!user) return;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("bitacora")
+    .delete()
+    .eq("id", bitacoraId)
+    .eq("autor_id", user.id); // solo el autor
+  if (error) console.error("eliminarBitacora falló:", error.message);
+}
+
 export async function actualizarSuplidor(
   ordenId: string,
   suplidor: string,

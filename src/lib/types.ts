@@ -55,6 +55,10 @@ export interface Orden {
   plazo_pago_dias: number | null;
   responsable_id: string | null;
   colaboradores?: string[]; // user_ids de colaboradores (además del responsable)
+  grupo_id?: string | null; // grupo/equipo responsable de la orden
+  buzon?: string | null; // código del buzón de correo entrante (oc-<buzon>@dominio)
+  odoo_factura_id?: number | null; // factura vinculada en Odoo
+  odoo_factura_estado?: string | null; // payment_state de la factura en Odoo
   etiquetas: string[];
   oc_archivo_url: string | null;
   ocr_raw: unknown;
@@ -87,6 +91,16 @@ export interface Suplidor {
   canal: CanalItem | null;
   notas: string | null;
   contactos: Contacto[];
+}
+
+// Grupo/equipo dentro de la empresa (Logística, Facturación…). Se asignan
+// órdenes al grupo además de a personas.
+export interface Grupo {
+  id: string;
+  org_id: string;
+  nombre: string;
+  color: string | null;
+  miembros: Persona[];
 }
 
 // Institución del Estado (INABIE…). Tiene sus propios contactos.
@@ -310,6 +324,7 @@ export interface Bitacora {
   autor_id: string | null;
   tipo: TipoBitacora;
   texto: string;
+  editada?: boolean; // el autor la corrigió después de publicarla
   created_at: string;
   autor?: Persona | null;
 }

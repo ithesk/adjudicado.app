@@ -5,6 +5,7 @@ import {
   obtenerOrden,
   listarPersonas,
   listarSuplidores,
+  listarGrupos,
   institucionPorNombre,
 } from "@/lib/queries";
 import { getMiembro } from "@/lib/auth";
@@ -31,6 +32,9 @@ import EditarOrden from "./_components/EditarOrden";
 import ResponsableControl from "./_components/ResponsableControl";
 import ColaboradoresControl from "./_components/ColaboradoresControl";
 import MarcadoresControl from "./_components/MarcadoresControl";
+import GrupoControl from "./_components/GrupoControl";
+import OdooSync from "./_components/OdooSync";
+import BuzonOrden from "./_components/BuzonOrden";
 import ActividadProvider from "./_components/Actividad";
 
 export const dynamic = "force-dynamic";
@@ -57,10 +61,13 @@ export default async function OrdenDetallePage({
   );
   const diasSuplidor = diasRestantes(itemMasTarde?.fecha_estim ?? null);
 
-  const personas = await listarPersonas();
-  const suplidores = await listarSuplidores();
-  const institucion = await institucionPorNombre(orden.institucion);
-  const miembro = await getMiembro();
+  const [personas, suplidores, grupos, institucion, miembro] = await Promise.all([
+    listarPersonas(),
+    listarSuplidores(),
+    listarGrupos(),
+    institucionPorNombre(orden.institucion),
+    getMiembro(),
+  ]);
   const currentUser = {
     id: miembro?.user_id ?? "yo",
     nombre: miembro?.nombre ? nombreLegible(miembro.nombre) : "Tú",
@@ -203,12 +210,30 @@ export default async function OrdenDetallePage({
                   personas={personas}
                 />
               </Prop>
+              <Prop label="Grupo">
+                <GrupoControl
+                  ordenId={orden.id}
+                  grupoId={orden.grupo_id ?? null}
+                  grupos={grupos}
+                />
+              </Prop>
               <Prop label="Marcadores">
                 <MarcadoresControl ordenId={orden.id} etiquetas={orden.etiquetas} />
               </Prop>
             </div>
           </Panel>
           <PlazosPanel ordenId={orden.id} orden={orden} />
+          <OdooSync
+            ordenId={orden.id}
+            numeroOc={orden.numero_oc ?? ""}
+            facturaEstado={orden.odoo_factura_estado ?? null}
+            facturaId={orden.odoo_factura_id ?? null}
+            facturaNombre={null}
+          />
+          <BuzonOrden
+            buzon={orden.buzon ?? null}
+            dominio={process.env.INBOUND_DOMAIN ?? null}
+          />
           <DocumentosPanel
             ordenId={orden.id}
             documentos={orden.documento}

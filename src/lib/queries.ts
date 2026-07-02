@@ -28,6 +28,7 @@ import {
   type Institucion,
   type Item,
   type Orden,
+  type Grupo,
   type Persona,
   type Suplidor,
   type TipoBitacora,
@@ -46,6 +47,7 @@ export interface ItemResumen {
 export type OrdenConItems = Orden & {
   item: ItemResumen[];
   responsable?: Persona | null;
+  grupo?: { nombre: string } | null;
 };
 
 // ---------- Repositorio global de documentos ----------
@@ -231,6 +233,41 @@ export async function listarPendientes(): Promise<Pendiente[]> {
     }));
 }
 
+// Grupos/equipos de la empresa, con sus miembros resueltos.
+export async function listarGrupos(): Promise<Grupo[]> {
+  if (isDemo()) return [];
+  const miembro = await getMiembro();
+  if (!miembro) return [];
+  const supabase = await createClient();
+  const [{ data }, personas] = await Promise.all([
+    supabase
+      .from("grupo")
+      .select("id, org_id, nombre, color, grupo_miembro(user_id)")
+      .eq("org_id", miembro.org_id)
+      .order("nombre"),
+    listarPersonas(),
+  ]);
+  const porId = new Map(personas.map((p) => [p.id, p]));
+  return ((data as unknown[] | null) ?? []).map((row) => {
+    const g = row as {
+      id: string;
+      org_id: string;
+      nombre: string;
+      color: string | null;
+      grupo_miembro?: { user_id: string }[];
+    };
+    return {
+      id: g.id,
+      org_id: g.org_id,
+      nombre: g.nombre,
+      color: g.color,
+      miembros: (g.grupo_miembro ?? [])
+        .map((m) => porId.get(m.user_id))
+        .filter((p): p is Persona => Boolean(p)),
+    };
+  });
+}
+
 // Personas asignables como responsable (miembros de la org).
 export async function listarPersonas(): Promise<Persona[]> {
   if (isDemo()) return demoPersonas();
@@ -365,7 +402,7 @@ export async function listarOrdenes(): Promise<OrdenConItems[]> {
   const { data, error } = await supabase
     .from("orden")
     .select(
-      "*, item(entregado, suplidor, nombre, tipo, estado_item, fecha_estim, parent_id)",
+      "*, item(entregado, suplidor, nombre, tipo, estado_item, fecha_estim, parent_id), grupo(nombre)",
     )
     .eq("org_id", miembro.org_id)
     .order("created_at", { ascending: false });

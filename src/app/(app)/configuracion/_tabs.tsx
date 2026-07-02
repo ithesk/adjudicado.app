@@ -7,6 +7,8 @@ const TABS = [
   { href: "/configuracion", label: "Suplidores", exact: true },
   { href: "/configuracion/canales", label: "Canales", exact: false },
   { href: "/configuracion/equipo", label: "Equipo", exact: false },
+  { href: "/configuracion/grupos", label: "Grupos", exact: false },
+  { href: "/configuracion/integraciones", label: "Integraciones", exact: false },
 ];
 
 export default function ConfigTabs() {

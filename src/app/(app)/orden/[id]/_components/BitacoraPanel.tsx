@@ -14,6 +14,10 @@ import {
   FileText,
   X,
   Search,
+  Pencil,
+  Trash2,
+  Square,
+  CheckSquare,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -34,6 +38,8 @@ import {
   agregarComentario,
   alternarReaccion,
   adjuntarDocumentoBitacora,
+  editarBitacora,
+  eliminarBitacora,
 } from "../actions";
 import { useActividad } from "./Actividad";
 
@@ -41,6 +47,92 @@ import { useActividad } from "./Actividad";
 // de forma persistente; las locales (recién creadas en la sesión) son optimistas.
 const esUUID = (id: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+// ---------- Texto rico estilo Notion (markdown ligero + @menciones) ----------
+
+const plegar = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+// ¿"@Nombre" corresponde a un miembro real? (insensible a acentos/mayúsculas)
+function esMencion(candidato: string, nombres: string[]): boolean {
+  const c = plegar(candidato);
+  return nombres.some((n) => plegar(n).startsWith(c) || c.startsWith(plegar(n)));
+}
+
+// Formato en línea: **negrita**, *cursiva*, @Mención.
+function renderInline(texto: string, nombres: string[], keyBase: string) {
+  const out: React.ReactNode[] = [];
+  const re =
+    /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|@[\p{L}][\p{L}.'-]*(?: [\p{L}][\p{L}.'-]*)?)/gu;
+  let cursor = 0;
+  let m: RegExpExecArray | null;
+  let k = 0;
+  while ((m = re.exec(texto))) {
+    if (m.index > cursor) out.push(texto.slice(cursor, m.index));
+    const t = m[0];
+    if (t.startsWith("**")) {
+      out.push(
+        <strong key={`${keyBase}-${k++}`} className="font-semibold text-ink">
+          {t.slice(2, -2)}
+        </strong>,
+      );
+    } else if (t.startsWith("*")) {
+      out.push(<em key={`${keyBase}-${k++}`}>{t.slice(1, -1)}</em>);
+    } else if (esMencion(t.slice(1), nombres)) {
+      out.push(
+        <span
+          key={`${keyBase}-${k++}`}
+          className="rounded bg-primary/10 px-1 py-px font-medium text-primary"
+        >
+          {t}
+        </span>,
+      );
+    } else {
+      out.push(t);
+    }
+    cursor = m.index + t.length;
+  }
+  if (cursor < texto.length) out.push(texto.slice(cursor));
+  return out;
+}
+
+// Render por líneas: checklists (- [ ] / - [x]), viñetas (- / *), párrafos.
+function TextoRico({ texto, nombres }: { texto: string; nombres: string[] }) {
+  const lineas = texto.split("\n");
+  return (
+    <div className="mt-0.5 space-y-0.5 text-[13px] leading-relaxed text-ink-soft">
+      {lineas.map((linea, i) => {
+        const check = linea.match(/^\s*[-*]\s*\[([ xX])\]\s?(.*)$/);
+        if (check) {
+          const hecho = check[1].toLowerCase() === "x";
+          return (
+            <div key={i} className="flex items-start gap-1.5">
+              {hecho ? (
+                <CheckSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2} aria-hidden />
+              ) : (
+                <Square className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted" strokeWidth={2} aria-hidden />
+              )}
+              <span className={hecho ? "text-muted line-through" : ""}>
+                {renderInline(check[2], nombres, `l${i}`)}
+              </span>
+            </div>
+          );
+        }
+        const vineta = linea.match(/^\s*[-*]\s+(.*)$/);
+        if (vineta) {
+          return (
+            <div key={i} className="flex items-start gap-1.5 pl-0.5">
+              <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-muted" aria-hidden />
+              <span>{renderInline(vineta[1], nombres, `l${i}`)}</span>
+            </div>
+          );
+        }
+        if (!linea.trim()) return <div key={i} className="h-1.5" />;
+        return <p key={i}>{renderInline(linea, nombres, `l${i}`)}</p>;
+      })}
+    </div>
+  );
+}
 
 const META: Record<TipoBitacora, { icon: LucideIcon; label: string; tono: string }> =
   {
@@ -129,7 +221,46 @@ export default function BitacoraPanel({
   const [, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
   const feedRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const seq = useRef(0);
+
+  // ---- @Menciones en el composer ----
+  const [menc, setMenc] = useState<{ q: string; desde: number } | null>(null);
+  const [mencIdx, setMencIdx] = useState(0);
+  const nombres = personas.map((p) => p.nombre);
+
+  const candidatos = menc
+    ? personas
+        .filter((p) => plegar(p.nombre).includes(plegar(menc.q)))
+        .slice(0, 5)
+    : [];
+
+  // Detecta "@algo" justo antes del cursor para abrir el autocompletar.
+  function detectarMencion(valor: string, caret: number) {
+    const antes = valor.slice(0, caret);
+    const m = antes.match(/(?:^|[\s(])@([\p{L}]{0,24}(?: [\p{L}]{0,24})?)$/u);
+    if (m) {
+      setMenc({ q: m[1], desde: caret - m[1].length - 1 });
+      setMencIdx(0);
+    } else {
+      setMenc(null);
+    }
+  }
+
+  function insertarMencion(p: Persona) {
+    if (!menc) return;
+    const el = composerRef.current;
+    const caret = el?.selectionStart ?? texto.length;
+    const nuevo =
+      texto.slice(0, menc.desde) + "@" + p.nombre + " " + texto.slice(caret);
+    setTexto(nuevo);
+    setMenc(null);
+    requestAnimationFrame(() => {
+      el?.focus();
+      const pos = menc.desde + p.nombre.length + 2;
+      el?.setSelectionRange(pos, pos);
+    });
+  }
 
   // Sube archivos arrastrados/elegidos: cada uno se guarda como documento de la
   // orden y crea su propia entrada en la bitácora (optimista + persistente).
@@ -349,6 +480,26 @@ export default function BitacoraPanel({
     }
   }
 
+  // Editar una entrada propia (estilo Notion): local + persistente.
+  function editarEntrada(id: string, nuevoTexto: string) {
+    const limpio = nuevoTexto.trim();
+    if (!limpio) return;
+    setItems((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, texto: limpio, editada: true } : b)),
+    );
+    if (esUUID(id)) {
+      startTransition(() => editarBitacora(ordenId, id, limpio));
+    }
+  }
+
+  // Eliminar una entrada propia.
+  function borrarEntrada(id: string) {
+    setItems((prev) => prev.filter((b) => b.id !== id));
+    if (esUUID(id)) {
+      startTransition(() => eliminarBitacora(ordenId, id));
+    }
+  }
+
   const visibles = useMemo(() => {
     const q = query.trim().toLowerCase();
     return [...items, ...(eventos as Entrada[])]
@@ -458,8 +609,11 @@ export default function BitacoraPanel({
           <Timeline
             entradas={visibles}
             currentUser={currentUser}
+            nombres={nombres}
             onReact={toggleReaccion}
             onComment={comentar}
+            onEdit={editarEntrada}
+            onDelete={borrarEntrada}
           />
         )}
       </div>
@@ -467,16 +621,67 @@ export default function BitacoraPanel({
       {/* Composer (fijo abajo, como los grandes) */}
       <div className="border-t border-line p-3">
         <div className="rounded-md border border-line focus-within:border-primary focus-within:ring-2 focus-within:ring-[var(--ring)]">
-          <textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") registrar();
-            }}
-            placeholder="Escribe lo que pasó… el tipo se detecta solo."
-            rows={2}
-            className="w-full resize-none rounded-t-md bg-surface px-3 py-2.5 text-[13px] text-ink outline-none placeholder:text-muted/70"
-          />
+          <div className="relative">
+            {menc && candidatos.length > 0 && (
+              <div className="absolute bottom-full left-3 z-30 mb-1 w-60 rounded-md border border-line bg-surface p-1 shadow-raised">
+                <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+                  Mencionar
+                </p>
+                {candidatos.map((p, i) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onMouseEnter={() => setMencIdx(i)}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // no perder el foco del textarea
+                      insertarMencion(p);
+                    }}
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-ink transition-colors ${
+                      i === mencIdx ? "bg-surface-2" : "hover:bg-surface-2"
+                    }`}
+                  >
+                    <Avatar nombre={p.nombre} size={20} />
+                    <span className="truncate">{p.nombre}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <textarea
+              ref={composerRef}
+              value={texto}
+              onChange={(e) => {
+                setTexto(e.target.value);
+                detectarMencion(e.target.value, e.target.selectionStart ?? 0);
+              }}
+              onKeyDown={(e) => {
+                if (menc && candidatos.length > 0) {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setMencIdx((i) => (i + 1) % candidatos.length);
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setMencIdx((i) => (i - 1 + candidatos.length) % candidatos.length);
+                    return;
+                  }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    insertarMencion(candidatos[mencIdx]);
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    setMenc(null);
+                    return;
+                  }
+                }
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") registrar();
+              }}
+              placeholder="Escribe lo que pasó… @menciona, **negrita**, - [ ] pendiente"
+              rows={2}
+              className="w-full resize-none rounded-t-md bg-surface px-3 py-2.5 text-[13px] text-ink outline-none placeholder:text-muted/70"
+            />
+          </div>
           <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5">
             <div className="flex flex-wrap items-center gap-1.5">
               {(() => {
@@ -534,13 +739,19 @@ export default function BitacoraPanel({
 function Timeline({
   entradas,
   currentUser,
+  nombres,
   onReact,
   onComment,
+  onEdit,
+  onDelete,
 }: {
   entradas: Entrada[];
   currentUser: Persona;
+  nombres: string[];
   onReact: (id: string, emoji: string) => void;
   onComment: (id: string, texto: string) => void;
+  onEdit: (id: string, texto: string) => void;
+  onDelete: (id: string) => void;
 }) {
   let ultimoDia = "";
   return (
@@ -562,8 +773,11 @@ function Timeline({
               <Registro
                 b={b}
                 currentUser={currentUser}
+                nombres={nombres}
                 onReact={onReact}
                 onComment={onComment}
+                onEdit={onEdit}
+                onDelete={onDelete}
               />
             )}
           </li>
@@ -576,20 +790,36 @@ function Timeline({
 function Registro({
   b,
   currentUser,
+  nombres,
   onReact,
   onComment,
+  onEdit,
+  onDelete,
 }: {
   b: Entrada;
   currentUser: Persona;
+  nombres: string[];
   onReact: (id: string, emoji: string) => void;
   onComment: (id: string, texto: string) => void;
+  onEdit: (id: string, texto: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const m = META[b.tipo];
   const Icon = m.icon;
   const [picker, setPicker] = useState(false);
   const [abrir, setAbrir] = useState(false);
   const [reply, setReply] = useState("");
+  const [editando, setEditando] = useState(false);
+  const [borrador, setBorrador] = useState(b.texto);
   const comentarios = b.comentarios ?? [];
+  const esMia = b.autor_id === currentUser.id;
+
+  function guardarEdicion() {
+    if (borrador.trim() && borrador.trim() !== b.texto) {
+      onEdit(b.id, borrador);
+    }
+    setEditando(false);
+  }
 
   return (
     <div className="group flex gap-3 py-2.5">
@@ -612,15 +842,77 @@ function Registro({
               {b.itemNombre}
             </span>
           )}
-          <time className="ml-auto shrink-0 text-[11px] text-muted">
-            {tiempoRelativo(b.created_at)}
-          </time>
+          {b.editada && (
+            <span className="text-[10px] italic text-muted">(editada)</span>
+          )}
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            {esMia && !editando && (
+              <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBorrador(b.texto);
+                    setEditando(true);
+                  }}
+                  aria-label="Editar entrada"
+                  title="Editar"
+                  className="grid h-5 w-5 place-items-center rounded text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                >
+                  <Pencil className="h-3 w-3" strokeWidth={2} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm("¿Eliminar esta entrada? No se puede deshacer."))
+                      onDelete(b.id);
+                  }}
+                  aria-label="Eliminar entrada"
+                  title="Eliminar"
+                  className="grid h-5 w-5 place-items-center rounded text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+                >
+                  <Trash2 className="h-3 w-3" strokeWidth={2} aria-hidden />
+                </button>
+              </span>
+            )}
+            <time className="text-[11px] text-muted">
+              {tiempoRelativo(b.created_at)}
+            </time>
+          </span>
         </div>
 
-        {b.texto && (
-          <p className="mt-0.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-soft">
-            {b.texto}
-          </p>
+        {editando ? (
+          <div className="mt-1 space-y-1.5">
+            <textarea
+              value={borrador}
+              onChange={(e) => setBorrador(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") guardarEdicion();
+                if (e.key === "Escape") setEditando(false);
+              }}
+              rows={Math.min(6, Math.max(2, borrador.split("\n").length))}
+              autoFocus
+              className="w-full resize-none rounded-md border border-primary bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={guardarEdicion}
+                className="rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-ink transition-colors hover:bg-primary-hover"
+              >
+                Guardar
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditando(false)}
+                className="rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:text-ink"
+              >
+                Cancelar
+              </button>
+              <span className="text-[10px] text-muted">Esc cancela · ⌘↵ guarda</span>
+            </div>
+          </div>
+        ) : (
+          b.texto && <TextoRico texto={b.texto} nombres={nombres} />
         )}
 
         {b.adjuntos && b.adjuntos.length > 0 && (
@@ -700,15 +992,19 @@ function Registro({
           <button
             type="button"
             onClick={() => setAbrir((v) => !v)}
-            className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors hover:text-ink"
+            className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-[11px] transition-colors hover:text-ink ${
+              comentarios.length > 0 ? "font-medium text-primary" : "text-muted"
+            }`}
           >
             <MessageCircle className="h-3 w-3" strokeWidth={2} aria-hidden />
-            {comentarios.length > 0 ? `${comentarios.length} comentarios` : "Comentar"}
+            {comentarios.length > 0
+              ? `${comentarios.length} ${comentarios.length === 1 ? "respuesta" : "respuestas"}`
+              : "Responder"}
           </button>
         </div>
 
-        {(abrir || comentarios.length > 0) && (
-          <div className="mt-2 space-y-2 border-l border-line pl-3">
+        {abrir && (
+          <div className="mt-2 space-y-2 border-l-2 border-line pl-3">
             {comentarios.map((c) => (
               <div key={c.id} className="flex gap-2">
                 <Avatar nombre={c.autor.nombre} size={20} />

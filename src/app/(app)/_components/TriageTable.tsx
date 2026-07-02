@@ -29,6 +29,7 @@ type ColKey =
   | "plazo"
   | "oc"
   | "responsable"
+  | "grupo"
   | "institucion"
   | "estado"
   | "items"
@@ -63,6 +64,13 @@ const COLS: ColDef[] = [
     defaultOn: true,
     peso: 1.7,
     sort: (o) => o.responsable?.nombre ?? "￿",
+  },
+  {
+    key: "grupo",
+    label: "Grupo",
+    defaultOn: false,
+    peso: 1.3,
+    sort: (o) => o.grupo?.nombre ?? "￿",
   },
   {
     key: "institucion",
@@ -181,7 +189,14 @@ export default function TriageTable({
       if (misOrdenes && currentUserId && o.responsable?.id !== currentUserId)
         return false;
       if (!q) return true;
-      return [o.numero_oc, o.institucion, o.suplidor, o.responsable?.nombre, ...o.etiquetas]
+      return [
+        o.numero_oc,
+        o.institucion,
+        o.suplidor,
+        o.responsable?.nombre,
+        o.grupo?.nombre,
+        ...o.etiquetas,
+      ]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q));
     });
@@ -434,7 +449,7 @@ function ItemsProgreso({ items }: { items: ItemResumen[] }) {
 
 // Responsivo: oculta columnas secundarias en pantallas chicas.
 function colHidden(key: ColKey): string {
-  if (key === "suplidor") return "hidden lg:table-cell";
+  if (key === "suplidor" || key === "grupo") return "hidden lg:table-cell";
   if (key === "estado" || key === "institucion") return "hidden md:table-cell";
   if (key === "items" || key === "responsable") return "hidden sm:table-cell";
   return "";
@@ -515,6 +530,16 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       </span>
     ) : (
       <span className="text-xs text-muted">Sin asignar</span>
+    ),
+    grupo: orden.grupo ? (
+      <span
+        className="block truncate rounded bg-surface-2 px-1.5 py-0.5 text-center text-[11px] font-medium text-ink-soft"
+        title={orden.grupo.nombre}
+      >
+        {orden.grupo.nombre}
+      </span>
+    ) : (
+      <span className="text-xs text-muted">—</span>
     ),
     institucion: (
       <span
