@@ -10,6 +10,7 @@ import type {
   DetallePrecio,
   FacetasPrecios,
   FiltrosPrecios,
+  ListaPrecio,
   ProductoPrecio,
   ResumenPrecios,
 } from "./tipos";
@@ -158,6 +159,65 @@ export async function resumenPrecios(): Promise<ResumenPrecios> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("precios_resumen", { p_org: miembro.org_id });
   return (data as ResumenPrecios | null) ?? vacio;
+}
+
+// Todas las listas importadas (vigentes e historial), más recientes primero.
+export async function listarListasPrecios(): Promise<ListaPrecio[]> {
+  if (isDemo()) {
+    return [
+      {
+        id: "lista-demo",
+        suplidor_id: DEMO_SUPLIDOR.id,
+        suplidor_nombre: DEMO_SUPLIDOR.nombre,
+        filename: "lista-demo.xlsx",
+        vigencia: "2026-06-01",
+        importada_at: "2026-06-01T00:00:00Z",
+        row_count: demoProductos().length,
+        is_active: true,
+      },
+    ];
+  }
+  const miembro = await getMiembro();
+  if (!miembro) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lista_precio")
+    .select("id, suplidor_id, filename, vigencia, importada_at, row_count, is_active, suplidor(nombre)")
+    .eq("org_id", miembro.org_id)
+    .order("importada_at", { ascending: false });
+  type Fila = Omit<ListaPrecio, "suplidor_nombre"> & { suplidor: { nombre: string } | null };
+  return (((data as unknown as Fila[] | null) ?? []).map((f) => ({
+    ...f,
+    suplidor_nombre: f.suplidor?.nombre ?? "—",
+  })) as ListaPrecio[]);
+}
+
+// Vuelve vigente una lista (rollback a una anterior, o re-activar).
+export async function activarListaPrecio(listaId: string): Promise<string | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  if (!miembro) return "Sin sesión.";
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("precios_activar_lista", {
+    p_org: miembro.org_id,
+    p_lista: listaId,
+  });
+  return error ? error.message : null;
+}
+
+// Elimina una lista y todos sus productos (cascade). Las anotaciones del
+// equipo (marcas/comentarios) no se tocan: viven por (suplidor, sku).
+export async function eliminarListaPrecio(listaId: string): Promise<string | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  if (!miembro) return "Sin sesión.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lista_precio")
+    .delete()
+    .eq("id", listaId)
+    .eq("org_id", miembro.org_id);
+  return error ? error.message : null;
 }
 
 // ===== Mutaciones (anotaciones del equipo) =====

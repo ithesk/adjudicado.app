@@ -11,19 +11,9 @@ export default async function PreciosPage() {
   ]);
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-xl font-semibold">Precios</h1>
-        <p className="text-sm text-muted">
-          Busca precios por SKU o descripción en las listas vigentes de tus
-          suplidores. Importa el Excel de cada suplidor y compara términos de
-          contrato e historial.
-        </p>
-      </div>
-      <BuscadorPrecios
-        resumen={resumen}
-        suplidores={suplidores.map((s) => ({ id: s.id, nombre: s.nombre }))}
-      />
-    </div>
+    <BuscadorPrecios
+      resumen={resumen}
+      suplidores={suplidores.map((s) => ({ id: s.id, nombre: s.nombre }))}
+    />
   );
 }

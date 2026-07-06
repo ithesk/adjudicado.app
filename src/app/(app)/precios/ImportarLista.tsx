@@ -26,7 +26,7 @@ export default function ImportarLista({
 }: {
   suplidores: SuplidorOpcion[];
   listas: ListaVigente[];
-  onCerrar: () => void;
+  onCerrar?: () => void; // sin onCerrar el panel queda fijo (vista Listas)
 }) {
   const [suplidorId, setSuplidorId] = useState(suplidores[0]?.id ?? "");
   const [archivo, setArchivo] = useState<File | null>(null);
@@ -76,14 +76,16 @@ export default function ImportarLista({
             historial.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onCerrar}
-          aria-label="Cerrar importación"
-          className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-        >
-          <X className="h-4 w-4" strokeWidth={2} />
-        </button>
+        {onCerrar && (
+          <button
+            type="button"
+            onClick={onCerrar}
+            aria-label="Cerrar importación"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          >
+            <X className="h-4 w-4" strokeWidth={2} />
+          </button>
+        )}
       </div>
 
       {suplidores.length === 0 ? (

@@ -52,6 +52,38 @@ export interface DetallePrecio {
   comentarios: ComentarioPrecio[];
 }
 
+export interface ListaPrecio {
+  id: string;
+  suplidor_id: string;
+  suplidor_nombre: string;
+  filename: string | null;
+  vigencia: string | null;
+  importada_at: string;
+  row_count: number;
+  is_active: boolean;
+}
+
+/** Frescura de una lista respecto a su vigencia (o fecha de importación).
+ *  Las listas suelen ser trimestrales: verde ≤ 100 días, ámbar ≤ 200,
+ *  rojo más vieja. */
+export function edadLista(
+  vigencia: string | null,
+  importada: string,
+): { dias: number; label: string; nivel: "ok" | "warn" | "danger" } {
+  const ref = new Date(vigencia ?? importada).getTime();
+  const dias = Math.max(0, Math.floor((Date.now() - ref) / 86_400_000));
+  const label =
+    dias === 0
+      ? "hoy"
+      : dias < 30
+        ? `hace ${dias} día${dias === 1 ? "" : "s"}`
+        : dias < 365
+          ? `hace ${Math.round(dias / 30)} mes${Math.round(dias / 30) === 1 ? "" : "es"}`
+          : `hace ${(dias / 365).toFixed(1)} años`;
+  const nivel = dias <= 100 ? "ok" : dias <= 200 ? "warn" : "danger";
+  return { dias, label, nivel };
+}
+
 export interface ListaVigente {
   suplidor_id: string;
   suplidor: string;

@@ -3,11 +3,14 @@
 // Server actions de la herramienta Precios: puente entre los componentes
 // cliente (búsqueda instantánea, peek, anotaciones) y la capa de datos.
 
+import { revalidatePath } from "next/cache";
 import {
+  activarListaPrecio,
   buscarPrecios,
   comentarPrecio,
   detallePrecio,
   eliminarComentarioPrecio,
+  eliminarListaPrecio,
   marcarPrecio,
 } from "@/lib/precios/queries";
 import type {
@@ -50,4 +53,16 @@ export async function comentarPrecioAction(
 
 export async function eliminarComentarioPrecioAction(id: string): Promise<void> {
   return eliminarComentarioPrecio(id);
+}
+
+export async function activarListaAction(listaId: string): Promise<string | null> {
+  const error = await activarListaPrecio(listaId);
+  if (!error) revalidatePath("/precios", "layout");
+  return error;
+}
+
+export async function eliminarListaAction(listaId: string): Promise<string | null> {
+  const error = await eliminarListaPrecio(listaId);
+  if (!error) revalidatePath("/precios", "layout");
+  return error;
 }
