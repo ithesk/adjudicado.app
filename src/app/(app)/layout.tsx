@@ -4,6 +4,7 @@ import {
   Users,
   Plus,
   Search,
+  Tags,
   ChevronsUpDown,
   LogOut,
   Settings,
@@ -137,6 +138,12 @@ export default async function AppLayout({
             icon={<FolderClosed className="h-[15px] w-[15px]" strokeWidth={2} />}
           >
             Documentos
+          </NavLink>
+          <NavLink
+            href="/precios"
+            icon={<Tags className="h-[15px] w-[15px]" strokeWidth={2} />}
+          >
+            Precios
           </NavLink>
         </nav>
 
