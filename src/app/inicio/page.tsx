@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LogoLockup } from "@/components/Logo";
+import {
+  BandaPuntos,
+  Resalte,
+  btnAzul,
+  btnBorde,
+  btnNav,
+} from "@/components/landing-ui";
 import { urgenciaChip } from "@/lib/ui";
 import Reveal from "./Reveal";
 
@@ -9,27 +16,6 @@ export const metadata: Metadata = {
   description:
     "Registro único del trayecto post-adjudicación para empresas que ejecutan contratos del Estado dominicano. Plazos vigilados, documentos en su sitio y todo el equipo viendo lo mismo.",
 };
-
-// Botones estilo referencia: pequeños, mayúsculas, tracking amplio.
-const btnCta =
-  "inline-flex items-center justify-center gap-2 rounded-[5px] px-5 py-3 text-[11px] font-semibold tracking-[0.09em] uppercase transition-[opacity,transform] hover:opacity-90 active:scale-[0.98]";
-const btnAzul = `${btnCta} bg-primary text-primary-ink`;
-const btnBorde = `${btnCta} border border-line-strong bg-surface text-ink-soft hover:text-ink`;
-
-// Frase resaltada: texto azul sobre azul pálido, como el highlight verde de la
-// referencia.
-function Resalte({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="rounded-sm px-1.5 text-primary [box-decoration-break:clone]"
-      style={{
-        background: "color-mix(in srgb, var(--primary) 11%, transparent)",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
 
 export default function InicioPage() {
   return (
@@ -70,10 +56,7 @@ function Nav() {
           >
             Crear cuenta
           </Link>
-          <Link
-            href="/login"
-            className="rounded-[5px] border border-primary px-4 py-1.5 text-[11px] font-semibold tracking-[0.09em] text-primary uppercase transition-colors hover:bg-primary hover:text-primary-ink"
-          >
+          <Link href="/login" className={btnNav}>
             Entrar
           </Link>
         </nav>
@@ -107,35 +90,6 @@ function Hero() {
       </div>
       <IlustracionHero />
     </section>
-  );
-}
-
-/* --------------------------------------------- banda de puntos (divisor) */
-
-// Banda decorativa de puntos con huecos irregulares (deterministas), como el
-// divisor de la referencia.
-function BandaPuntos() {
-  const filas = 6;
-  const cols = 46;
-  const puntos: React.ReactNode[] = [];
-  for (let f = 0; f < filas; f++) {
-    for (let c = 0; c < cols; c++) {
-      if ((f * 31 + c * 17) % 13 < 3) continue;
-      puntos.push(
-        <circle key={`${f}-${c}`} cx={14 + c * 26} cy={14 + f * 22} r={1.8} />,
-      );
-    }
-  }
-  return (
-    <div aria-hidden className="overflow-hidden">
-      <svg
-        viewBox="0 0 1200 132"
-        className="mx-auto block h-[132px] w-[1200px] max-w-none fill-line-strong"
-        preserveAspectRatio="xMidYMid slice"
-      >
-        {puntos}
-      </svg>
-    </div>
   );
 }
 

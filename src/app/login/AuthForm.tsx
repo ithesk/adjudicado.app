@@ -5,45 +5,58 @@ import { useActionState } from "react";
 import { autenticar, type AuthState } from "./actions";
 import { inputBase } from "@/components/ui";
 import { LogoLockup } from "@/components/Logo";
+import { BandaPuntos, Resalte, btnAzul, btnNav } from "@/components/landing-ui";
 
-// Formulario compartido de /login y /registro: mismos campos y server action.
-// El modo lo fija la ruta (las pestañas navegan entre ambas páginas), así la
-// URL y el <title> siempre corresponden a lo que se muestra.
+// Formulario compartido de /login y /registro, en la misma línea visual de la
+// landing. El modo lo fija la ruta, así la URL y el <title> siempre
+// corresponden a lo que se muestra.
 export default function AuthForm({ modo }: { modo: "entrar" | "crear" }) {
   const [state, formAction, pending] = useActionState<AuthState, FormData>(
     autenticar,
     {},
   );
+  const entrar = modo === "entrar";
 
   return (
-    <main className="grid min-h-screen place-items-center px-4 py-10">
-      <div className="w-full max-w-[22rem]">
-        <Link href="/" className="inline-block">
-          <LogoLockup className="mb-7" markSize={30} />
-        </Link>
+    <div className="flex min-h-screen flex-col bg-surface text-ink">
+      <header>
+        <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between px-5">
+          <Link href="/" aria-label="adjudicado.app">
+            <LogoLockup markSize={24} textClass="text-base" />
+          </Link>
+          <Link href={entrar ? "/registro" : "/login"} className={btnNav}>
+            {entrar ? "Crear cuenta" : "Entrar"}
+          </Link>
+        </div>
+      </header>
 
-        <div className="rounded-lg border border-line bg-surface p-6 shadow-raised">
-          <h1 className="font-display text-lg font-semibold text-ink">
-            {modo === "entrar" ? "Entra a tu cuenta" : "Crea la cuenta de tu empresa"}
-          </h1>
-          <p className="mt-1 mb-5 text-[13px] text-muted">
-            {modo === "entrar"
-              ? "Seguimiento de licitaciones, de la OC al cobro."
-              : "Crea el espacio de tu empresa y trabaja en equipo."}
-          </p>
-
-          <div className="mb-5 grid grid-cols-2 gap-1 rounded-md bg-surface-2 p-0.5 text-[13px] font-medium">
-            <Tab href="/login" activo={modo === "entrar"}>
-              Entrar
-            </Tab>
-            <Tab href="/registro" activo={modo === "crear"}>
-              Crear cuenta
-            </Tab>
+      <main className="grid flex-1 place-items-center px-4 py-12">
+        <div className="w-full max-w-[24rem]">
+          <div className="text-center">
+            <h1 className="font-display text-[1.7rem] leading-snug font-bold tracking-[-0.01em] text-ink">
+              {entrar ? (
+                <>
+                  Entra a <Resalte>tu cuenta</Resalte>
+                </>
+              ) : (
+                <>
+                  Crea la cuenta de <Resalte>tu empresa</Resalte>
+                </>
+              )}
+            </h1>
+            <p className="mt-2 text-[13px] text-muted">
+              {entrar
+                ? "Seguimiento de licitaciones, de la OC al cobro."
+                : "Crea el espacio de tu empresa y trabaja en equipo."}
+            </p>
           </div>
 
-          <form action={formAction} className="space-y-3.5">
+          <form
+            action={formAction}
+            className="mt-8 space-y-3.5 rounded-lg border border-line bg-surface p-6 shadow-raised"
+          >
             <input type="hidden" name="modo" value={modo} />
-            {modo === "crear" && (
+            {!entrar && (
               <>
                 <Campo
                   label="Tu nombre"
@@ -75,9 +88,7 @@ export default function AuthForm({ modo }: { modo: "entrar" | "crear" }) {
               name="password"
               type="password"
               placeholder="••••••••"
-              autoComplete={
-                modo === "entrar" ? "current-password" : "new-password"
-              }
+              autoComplete={entrar ? "current-password" : "new-password"}
               required
             />
 
@@ -90,43 +101,30 @@ export default function AuthForm({ modo }: { modo: "entrar" | "crear" }) {
             <button
               type="submit"
               disabled={pending}
-              className="mt-1 w-full rounded-md bg-primary py-2.5 text-sm font-medium text-primary-ink shadow-card transition-colors hover:bg-primary-hover disabled:opacity-55"
+              className={`${btnAzul} mt-1 w-full disabled:opacity-55`}
             >
-              {pending
-                ? "Un momento…"
-                : modo === "entrar"
-                  ? "Entrar"
-                  : "Crear cuenta"}
+              {pending ? "Un momento…" : entrar ? "Entrar" : "Crear cuenta"}
             </button>
           </form>
+
+          <p className="mt-5 text-center text-[13px] text-muted">
+            {entrar ? "¿Primera vez aquí? " : "¿Ya tienes cuenta? "}
+            <Link
+              href={entrar ? "/registro" : "/login"}
+              className="font-semibold text-primary hover:underline"
+            >
+              {entrar ? "Crea la cuenta de tu empresa" : "Entra"}
+            </Link>
+          </p>
+
+          <p className="mt-8 text-center text-[11px] text-muted">
+            Para empresas que ejecutan contratos del Estado dominicano.
+          </p>
         </div>
+      </main>
 
-        <p className="mt-5 text-center text-[11px] text-muted">
-          Para empresas que ejecutan contratos del Estado dominicano.
-        </p>
-      </div>
-    </main>
-  );
-}
-
-function Tab({
-  href,
-  activo,
-  children,
-}: {
-  href: string;
-  activo: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`rounded-[5px] py-1.5 text-center transition-colors ${
-        activo ? "bg-surface text-ink shadow-card" : "text-muted hover:text-ink"
-      }`}
-    >
-      {children}
-    </Link>
+      <BandaPuntos filas={3} />
+    </div>
   );
 }
 
