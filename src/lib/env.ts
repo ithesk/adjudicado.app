@@ -1,7 +1,8 @@
 // Acceso centralizado a variables de entorno con mensajes claros si falta alguna.
+// OJO: el acceso debe ser estático (process.env.NOMBRE literal). Un lookup
+// dinámico (process.env[nombre]) no se inlinea y llega vacío al proxy.
 
-function required(name: string): string {
-  const v = process.env[name];
+function required(name: string, v: string | undefined): string {
   if (!v) {
     throw new Error(
       `Falta la variable de entorno ${name}. Revisa tu .env.local (ver .env.example).`,
@@ -12,16 +13,25 @@ function required(name: string): string {
 
 export const env = {
   get supabaseUrl() {
-    return required("NEXT_PUBLIC_SUPABASE_URL");
+    return required(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+    );
   },
   get supabaseAnonKey() {
-    return required("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    return required(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    );
   },
   get supabaseServiceRoleKey() {
-    return required("SUPABASE_SERVICE_ROLE_KEY");
+    return required(
+      "SUPABASE_SERVICE_ROLE_KEY",
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+    );
   },
   get anthropicApiKey() {
-    return required("ANTHROPIC_API_KEY");
+    return required("ANTHROPIC_API_KEY", process.env.ANTHROPIC_API_KEY);
   },
   // OpenAI. Opcional: si está, el OCR usa OpenAI.
   get openaiApiKey() {

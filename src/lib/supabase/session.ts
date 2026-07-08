@@ -4,7 +4,10 @@ import { env } from "@/lib/env";
 import { isDemo } from "@/lib/demo";
 
 // Rutas públicas (no requieren sesión).
-const PUBLIC_PATHS = ["/login", "/auth"];
+const PUBLIC_PATHS = ["/login", "/registro", "/inicio", "/auth"];
+
+// Páginas de auth/marketing que no aplican con sesión activa → al tablero.
+const SOLO_ANONIMO = ["/login", "/registro", "/inicio"];
 
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -22,15 +25,23 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  // En modo demo no hay sesión: el login/onboarding no aplican → al tablero.
+  // En modo demo no hay sesión: login/registro/landing/onboarding no aplican → al tablero.
   if (isDemo()) {
-    const p = request.nextUrl.pathname;
-    if (p === "/login" || p === "/onboarding") {
+    if (SOLO_ANONIMO.includes(path) || path === "/onboarding") {
       const url = request.nextUrl.clone();
       url.pathname = "/";
       return NextResponse.redirect(url);
     }
     return NextResponse.next({ request });
+  }
+
+  // Sin cookies de Supabase no puede haber sesión: decide solo por ruta, sin
+  // construir el cliente ni llamar a getUser() (la landing es el hot path).
+  const tieneCookiesAuth = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-"));
+  if (!tieneCookiesAuth) {
+    return respuestaAnonima(request, path);
   }
 
   let supabaseResponse = NextResponse.next({ request });
@@ -57,21 +68,46 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/"));
+  // Los Set-Cookie acumulados en supabaseResponse (refresh o limpieza de la
+  // sesión) deben viajar en CUALQUIER respuesta; si se descartan, el navegador
+  // conserva cookies vencidas y repite el refresh en cada request.
+  const conCookies = (res: NextResponse) => {
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
+  };
 
-  // Sin sesión y ruta protegida → al login.
-  if (!user && !isPublic) {
+  if (!user) {
+    return conCookies(respuestaAnonima(request, path));
+  }
+
+  // Con sesión y en login/registro/landing → al tablero.
+  if (SOLO_ANONIMO.includes(path)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    return conCookies(NextResponse.redirect(url));
+  }
+
+  return supabaseResponse;
+}
+
+// Qué ve un visitante sin sesión: la landing en la raíz (solo GET — un POST a
+// "/" es una server action con sesión vencida y debe ir al login), las rutas
+// públicas tal cual, y el resto al login.
+function respuestaAnonima(request: NextRequest, path: string) {
+  if (path === "/" && request.method === "GET") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/inicio";
+    return NextResponse.rewrite(url, { request });
+  }
+
+  const isPublic = PUBLIC_PATHS.some(
+    (p) => path === p || path.startsWith(p + "/"),
+  );
+  if (!isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Con sesión y en /login → al tablero.
-  if (user && path === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
-  }
-
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
