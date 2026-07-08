@@ -108,7 +108,7 @@ export default function MetricBar({ ordenes }: { ordenes: OrdenConItems[] }) {
           return (
             <Metrica
               key={c.key}
-              href={activo ? "/" : `/?filtro=${c.key}`}
+              href={activo ? "/tablero" : `/tablero?filtro=${c.key}`}
               label={c.label}
               valor={c.fmt === "monto" ? formatRD(v) : String(v)}
               tono={c.tono?.(v)}

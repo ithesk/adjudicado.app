@@ -17,7 +17,7 @@ export async function cambiarOrg(orgId: string) {
   const cookieStore = await cookies();
   cookieStore.set(ORG_COOKIE, orgId, { path: "/", maxAge: UN_ANO });
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/tablero");
 }
 
 // Fija una empresa como activa (uso interno tras crear/unirse).

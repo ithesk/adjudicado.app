@@ -235,7 +235,7 @@ export default function TriageTable({
               <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 py-1 pl-2 pr-1 text-[12px] font-medium text-primary">
                 {filtroActivo}
                 <Link
-                  href="/"
+                  href="/tablero"
                   aria-label="Quitar filtro"
                   className="grid h-4 w-4 place-items-center rounded-sm text-primary/80 transition-colors hover:bg-primary/15 hover:text-primary focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
                 >

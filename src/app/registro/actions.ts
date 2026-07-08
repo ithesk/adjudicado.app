@@ -4,36 +4,37 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fijarOrgActiva } from "@/lib/actions/org";
+import {
+  DIAS_PRUEBA,
+  PLAN_POR_DEFECTO,
+  esPlanValido,
+  type PlanId,
+} from "@/lib/planes";
 
-export type AuthState = { error?: string };
+export type RegistroState = { error?: string };
 
-// Entrar, o crear cuenta. Crear cuenta SIEMPRE abre una empresa nueva (eres
-// admin). Unirse a una empresa existente es solo por invitación de correo.
-export async function autenticar(
-  _prev: AuthState,
+// Registro self-service: crea la cuenta del usuario Y la empresa (queda como
+// admin), dejando registrado el plan elegido en la landing y arrancando el
+// período de prueba. El cobro real es una capa aparte.
+export async function registrar(
+  _prev: RegistroState,
   formData: FormData,
-): Promise<AuthState> {
-  const modo = String(formData.get("modo") || "entrar");
-  const email = String(formData.get("email") || "").trim();
-  const password = String(formData.get("password") || "");
-  if (!email || !password) return { error: "Escribe correo y contraseña." };
-
-  const supabase = await createClient();
-
-  // ---------- ENTRAR ----------
-  if (modo !== "crear") {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: "Credenciales incorrectas." };
-    redirect("/tablero");
-  }
-
-  // ---------- CREAR CUENTA (= crear empresa) ----------
-  if (password.length < 6)
-    return { error: "La contraseña debe tener al menos 6 caracteres." };
+): Promise<RegistroState> {
   const nombre = String(formData.get("nombre") || "").trim();
   const empresa = String(formData.get("empresa") || "").trim();
-  if (!empresa) return { error: "Escribe el nombre de tu empresa." };
+  const email = String(formData.get("email") || "").trim();
+  const password = String(formData.get("password") || "");
+  const planRaw = String(formData.get("plan") || "");
+  const plan: PlanId = esPlanValido(planRaw) ? planRaw : PLAN_POR_DEFECTO;
 
+  if (!nombre) return { error: "Escribe tu nombre." };
+  if (!empresa) return { error: "Escribe el nombre de tu empresa." };
+  if (!email || !email.includes("@"))
+    return { error: "Escribe un correo válido." };
+  if (password.length < 6)
+    return { error: "La contraseña debe tener al menos 6 caracteres." };
+
+  const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -47,10 +48,19 @@ export async function autenticar(
     };
   }
 
+  const trialEndsAt = new Date(
+    Date.now() + DIAS_PRUEBA * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
   const admin = createAdminClient();
   const { data: org, error: e1 } = await admin
     .from("organizacion")
-    .insert({ nombre: empresa })
+    .insert({
+      nombre: empresa,
+      plan,
+      estado_cuenta: "prueba",
+      trial_ends_at: trialEndsAt,
+    })
     .select("id")
     .single();
   if (e1 || !org) return { error: "No se pudo crear la empresa." };

@@ -118,7 +118,7 @@ export default async function AppLayout({
         {/* Nav principal */}
         <nav className="mt-2 flex flex-col gap-px">
           <NavLink
-            href="/"
+            href="/tablero"
             exact
             icon={<LayoutList className="h-[15px] w-[15px]" strokeWidth={2} />}
           >
@@ -155,7 +155,7 @@ export default async function AppLayout({
           {ESTADOS_NAV.map((e) => (
             <Link
               key={e.key}
-              href={`/?estado=${e.key}`}
+              href={`/tablero?estado=${e.key}`}
               className="flex items-center gap-2.5 rounded-[11px] px-2.5 py-1.5 text-[12.5px] text-ink-soft transition-colors hover:bg-surface-2"
             >
               <span className={`h-2 w-2 flex-none rounded-full ${e.dot}`} />
@@ -239,7 +239,7 @@ export default async function AppLayout({
 
       {/* ===== Top bar (móvil) ===== */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-canvas/90 px-4 py-2.5 backdrop-blur md:hidden">
-        <Link href="/" className="flex items-center">
+        <Link href="/tablero" className="flex items-center">
           <LogoLockup markSize={22} textClass="text-sm" />
         </Link>
         <div className="flex items-center gap-2">

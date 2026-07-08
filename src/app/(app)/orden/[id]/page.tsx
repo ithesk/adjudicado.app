@@ -81,7 +81,7 @@ export default async function OrdenDetallePage({
     >
       <div className="space-y-5">
         <Link
-          href="/"
+          href="/tablero"
           className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-ink"
         >
           <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden />

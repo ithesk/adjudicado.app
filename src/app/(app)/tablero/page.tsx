@@ -3,9 +3,9 @@ import { listarActividad, listarOrdenes } from "@/lib/queries";
 import { getMiembro } from "@/lib/auth";
 import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
 import { metricaPorKey } from "@/lib/metricas";
-import MetricBar from "./_components/MetricBar";
-import TriageTable from "./_components/TriageTable";
-import ActividadReciente from "./_components/ActividadReciente";
+import MetricBar from "../_components/MetricBar";
+import TriageTable from "../_components/TriageTable";
+import ActividadReciente from "../_components/ActividadReciente";
 
 export const dynamic = "force-dynamic";
 

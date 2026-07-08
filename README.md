@@ -34,6 +34,9 @@ compra al cobro.
 2. En **SQL Editor**, corre en este orden:
    - `supabase_schema.sql` — tablas, funciones, triggers y RLS.
    - `supabase_storage.sql` — buckets `ordenes-oc` y `documentos` + policies.
+   - `supabase_saas.sql` — capa comercial: plan, estado de cuenta y período de
+     prueba por organización. (En proyectos nuevos ya viene en el schema; corre
+     esta migración solo si tu base es anterior al modo SaaS.)
 3. En **Authentication → Providers**, deja activo *Email*. Para uso interno puedes
    **desactivar “Confirm email”** (Authentication → Settings) para que las cuentas
    queden activas al instante. Si lo dejas activo, los usuarios deben confirmar por
@@ -69,11 +72,15 @@ Abre http://localhost:3000.
 
 ### 4. Primer uso
 
-1. Entra a `/login` → **Crear cuenta**.
-2. En **Onboarding**, elige **Crear nueva** organización (quedas como `admin`).
-3. Para invitar a alguien: ve a la organización (arriba a la derecha) → copia el
-   **código de invitación** → la otra persona crea su cuenta y elige **Unirme**.
-4. **+ Nueva orden** → sube el PDF de una OC → confirma los datos → listo.
+1. La raíz `/` es la **landing pública** (marketing + planes). Desde ahí,
+   **Crear cuenta** lleva al registro self-service (`/registro`), que crea tu
+   usuario y la empresa (quedas como `admin`) con el plan elegido y un período
+   de prueba. El tablero de la app queda en `/tablero`.
+2. Para invitar a tu equipo: **Configuración → Equipo → Invitar** (por correo).
+3. **+ Nueva orden** → sube el PDF de una OC → confirma los datos → listo.
+
+> Rutas públicas (sin sesión): `/` (landing), `/registro`, `/login`, `/auth`.
+> Los planes y sus límites viven en `src/lib/planes.ts`.
 
 ---
 

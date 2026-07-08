@@ -3,8 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { isDemo } from "@/lib/demo";
 
-// Rutas públicas (no requieren sesión).
-const PUBLIC_PATHS = ["/login", "/auth"];
+// Rutas públicas (no requieren sesión): landing, registro, login y callbacks.
+const PUBLIC_PATHS = ["/", "/registro", "/login", "/auth"];
 
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -22,12 +22,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  // En modo demo no hay sesión: el login/onboarding no aplican → al tablero.
+  // En modo demo no hay sesión: la landing/login/onboarding no aplican → al tablero.
   if (isDemo()) {
     const p = request.nextUrl.pathname;
-    if (p === "/login" || p === "/onboarding") {
+    if (p === "/" || p === "/login" || p === "/onboarding") {
       const url = request.nextUrl.clone();
-      url.pathname = "/";
+      url.pathname = "/tablero";
       return NextResponse.redirect(url);
     }
     return NextResponse.next({ request });
@@ -66,10 +66,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Con sesión y en /login → al tablero.
-  if (user && path === "/login") {
+  // Con sesión y en la landing o /login → directo al tablero.
+  if (user && (path === "/" || path === "/login")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/tablero";
     return NextResponse.redirect(url);
   }
 

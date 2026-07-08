@@ -19,5 +19,5 @@ export async function establecerClave(
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: error.message };
 
-  redirect("/");
+  redirect("/tablero");
 }

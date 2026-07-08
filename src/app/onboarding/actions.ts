@@ -37,7 +37,7 @@ export async function crearOrganizacion(
   if (e2) return { error: "No se pudo registrar tu membresía." };
 
   await fijarOrgActiva(org.id);
-  redirect("/");
+  redirect("/tablero");
 }
 
 // Unirse a una organización existente con su código (= id de la organización).
@@ -69,5 +69,5 @@ export async function unirseOrganizacion(
   });
   // unique(org_id, user_id) → si ya era miembro, igual la fijamos como activa.
   await fijarOrgActiva(org.id);
-  redirect("/");
+  redirect("/tablero");
 }

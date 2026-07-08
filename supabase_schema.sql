@@ -16,9 +16,18 @@ create extension if not exists "pgcrypto";
 --  1. ORGANIZACIÓN  (multi-tenant)
 -- ============================================================
 create table organizacion (
-  id          uuid primary key default gen_random_uuid(),
-  nombre      text not null,
-  created_at  timestamptz not null default now()
+  id            uuid primary key default gen_random_uuid(),
+  nombre        text not null,
+  -- Plan comercial (SaaS). Ver src/lib/planes.ts.
+  plan          text not null default 'empresa',
+  -- Ciclo de vida de la cuenta: prueba | activa | suspendida | cancelada.
+  estado_cuenta text not null default 'prueba',
+  -- Fin del período de prueba (null = sin prueba / ya activa).
+  trial_ends_at timestamptz,
+  created_at    timestamptz not null default now(),
+  constraint plan_valido check (plan in ('equipo','empresa','corporativo')),
+  constraint estado_cuenta_valido check (
+    estado_cuenta in ('prueba','activa','suspendida','cancelada'))
 );
 
 -- ============================================================

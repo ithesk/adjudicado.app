@@ -151,8 +151,8 @@ export async function eliminarOrden(ordenId: string) {
     console.error("eliminarOrden falló:", error.message);
     return;
   }
-  revalidatePath("/");
-  redirect("/");
+  revalidatePath("/tablero");
+  redirect("/tablero");
 }
 
 // Crea un ítem nuevo (o un componente si se pasa parentId) y lo devuelve.
