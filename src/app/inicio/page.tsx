@@ -10,20 +10,37 @@ export const metadata: Metadata = {
     "Registro único del trayecto post-adjudicación para empresas que ejecutan contratos del Estado dominicano. Plazos vigilados, documentos en su sitio y todo el equipo viendo lo mismo.",
 };
 
-const btnSolido = (pad = "px-5 py-2.5") =>
-  `inline-flex items-center justify-center rounded-md bg-ink ${pad} text-sm font-medium text-canvas transition-[opacity,transform] hover:opacity-90 active:scale-[0.98]`;
-const btnBorde =
-  "inline-flex items-center justify-center rounded-md border border-line-strong bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-surface-2";
+// Botones estilo referencia: pequeños, mayúsculas, tracking amplio.
+const btnCta =
+  "inline-flex items-center justify-center gap-2 rounded-[5px] px-5 py-3 text-[11px] font-semibold tracking-[0.09em] uppercase transition-[opacity,transform] hover:opacity-90 active:scale-[0.98]";
+const btnAzul = `${btnCta} bg-primary text-primary-ink`;
+const btnBorde = `${btnCta} border border-line-strong bg-surface text-ink-soft hover:text-ink`;
+
+// Frase resaltada: texto azul sobre azul pálido, como el highlight verde de la
+// referencia.
+function Resalte({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="rounded-sm px-1.5 text-primary [box-decoration-break:clone]"
+      style={{
+        background: "color-mix(in srgb, var(--primary) 11%, transparent)",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
 
 export default function InicioPage() {
   return (
-    <div className="bg-canvas text-ink">
+    <div className="bg-surface text-ink">
       <Nav />
       <main>
         <Hero />
-        <Problema />
-        <Funciones />
-        <ComoFunciona />
+        <BandaPuntos />
+        <Personas />
+        <Pasos />
+        <Producto />
         <CierreCta />
       </main>
       <Pie />
@@ -35,20 +52,29 @@ export default function InicioPage() {
 
 function Nav() {
   return (
-    <header className="sticky top-0 z-20 border-b border-line bg-canvas/85 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-5">
+    <header className="bg-surface">
+      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
         <Link href="/" aria-label="adjudicado.app">
           <LogoLockup markSize={24} textClass="text-base" />
         </Link>
-        <nav className="flex items-center gap-2">
+        <nav className="flex items-center gap-6">
+          <a
+            href="#como-funciona"
+            className="hidden text-[13px] text-ink-soft transition-colors hover:text-ink sm:block"
+          >
+            Cómo funciona
+          </a>
+          <Link
+            href="/registro"
+            className="hidden text-[13px] text-ink-soft transition-colors hover:text-ink sm:block"
+          >
+            Crear cuenta
+          </Link>
           <Link
             href="/login"
-            className="rounded-md px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:text-ink"
+            className="rounded-[5px] border border-primary px-4 py-1.5 text-[11px] font-semibold tracking-[0.09em] text-primary uppercase transition-colors hover:bg-primary hover:text-primary-ink"
           >
             Entrar
-          </Link>
-          <Link href="/registro" className={btnSolido("px-3.5 py-2")}>
-            Crear cuenta
           </Link>
         </nav>
       </div>
@@ -60,54 +86,169 @@ function Nav() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(52rem 30rem at 70% -8rem, color-mix(in srgb, var(--primary) 6%, transparent), transparent 70%)",
-        }}
-      />
-      <div className="relative mx-auto max-w-5xl px-5 pt-20 pb-24 sm:pt-28">
-        <div className="max-w-2xl">
-          <p className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-[11px] font-medium tracking-[0.05em] text-muted uppercase">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-            Licitaciones públicas · República Dominicana
-          </p>
-          <h1 className="font-display mt-6 text-4xl leading-[1.08] font-semibold tracking-[-0.03em] text-ink sm:text-5xl md:text-[3.4rem]">
-            De la orden de compra al cobro, sin que nada se caiga.
-          </h1>
-          <p className="mt-6 max-w-xl text-[15px] leading-[1.65] text-ink-soft sm:text-base">
-            Registro único del trayecto post-adjudicación para empresas que
-            ejecutan contratos del Estado dominicano. Los plazos se vigilan
-            solos, los documentos viven con su orden y todo el equipo ve lo
-            mismo.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link href="/registro" className={btnSolido()}>
-              Crear la cuenta de tu empresa
-            </Link>
-            <Link href="/login" className={btnBorde}>
-              Entrar
-            </Link>
-          </div>
-          <p className="mt-4 text-[12px] text-muted">
-            Sin tarjeta. Tu equipo entra por invitación de correo.
-          </p>
+    <section className="mx-auto grid max-w-5xl items-center gap-10 px-5 pt-10 pb-16 sm:grid-cols-[1fr_1.1fr] sm:pt-14">
+      <div className="max-w-md">
+        <h1 className="font-display text-4xl leading-[1.08] font-bold tracking-[-0.02em] text-ink sm:text-[2.9rem]">
+          Adiós al seguimiento de memoria
+        </h1>
+        <p className="mt-5 max-w-xs text-[14px] leading-[1.6] text-muted">
+          Sigue cada orden de compra adjudicada hasta el cobro, sin perder
+          plazos ni documentos en el camino.
+        </p>
+        <div className="mt-7 flex flex-wrap items-center gap-3">
+          <Link href="/registro" className={btnAzul}>
+            Crea tu cuenta
+          </Link>
+          <a href="#como-funciona" className={btnBorde}>
+            <IconoOjo />
+            Ve cómo funciona
+          </a>
         </div>
+      </div>
+      <IlustracionHero />
+    </section>
+  );
+}
 
-        <Reveal className="mt-16">
-          <VentanaTriage />
-        </Reveal>
+/* --------------------------------------------- banda de puntos (divisor) */
+
+// Banda decorativa de puntos con huecos irregulares (deterministas), como el
+// divisor de la referencia.
+function BandaPuntos() {
+  const filas = 6;
+  const cols = 46;
+  const puntos: React.ReactNode[] = [];
+  for (let f = 0; f < filas; f++) {
+    for (let c = 0; c < cols; c++) {
+      if ((f * 31 + c * 17) % 13 < 3) continue;
+      puntos.push(
+        <circle key={`${f}-${c}`} cx={14 + c * 26} cy={14 + f * 22} r={1.8} />,
+      );
+    }
+  }
+  return (
+    <div aria-hidden className="overflow-hidden">
+      <svg
+        viewBox="0 0 1200 132"
+        className="mx-auto block h-[132px] w-[1200px] max-w-none fill-line-strong"
+        preserveAspectRatio="xMidYMid slice"
+      >
+        {puntos}
+      </svg>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ personas */
+
+const PERSONAS = [
+  {
+    etiqueta: "Gerencia",
+    texto:
+      "Ve el estado real de cada orden sin pedir informes: etapas, montos y plazos en una sola vista.",
+    ilustracion: IlustracionGerencia,
+  },
+  {
+    etiqueta: "Ventas y operaciones",
+    texto:
+      "El triage ordena el día por urgencia y la bitácora guarda cada llamada, correo y entrega.",
+    ilustracion: IlustracionOperaciones,
+  },
+  {
+    etiqueta: "Equipos",
+    texto:
+      "Todos ven lo mismo: documentos, contactos e historial compartidos, con invitaciones por correo.",
+    ilustracion: IlustracionEquipos,
+  },
+];
+
+function Personas() {
+  return (
+    <section className="mx-auto max-w-5xl px-5 pt-6 pb-24 text-center">
+      <Reveal>
+        <h2 className="font-display mx-auto max-w-2xl text-[1.6rem] leading-snug font-bold tracking-[-0.01em] text-ink sm:text-3xl">
+          Hecho para empresas que ejecutan{" "}
+          <Resalte>contratos del Estado</Resalte> dominicano
+        </h2>
+      </Reveal>
+      <div className="mt-16 grid gap-12 sm:grid-cols-3">
+        {PERSONAS.map((p, i) => (
+          <Reveal key={p.etiqueta} delay={i * 80}>
+            <div className="mx-auto flex h-[130px] max-w-[200px] items-end justify-center">
+              <p.ilustracion />
+            </div>
+            <h3 className="mt-5 text-[12px] font-bold tracking-[0.12em] text-ink uppercase">
+              {p.etiqueta}
+            </h3>
+            <p className="mx-auto mt-3 max-w-[17rem] text-[13px] leading-[1.65] text-muted">
+              {p.texto}
+            </p>
+          </Reveal>
+        ))}
       </div>
     </section>
   );
 }
 
-// Mini maqueta del triage real: ventana estilo escritorio con la bandeja
-// ordenada por urgencia. Contenido ilustrativo, misma semántica de semáforo.
-function VentanaTriage() {
+/* --------------------------------------------------------------- pasos */
+
+const PASOS = [
+  { n: "1", titulo: "Registra la orden adjudicada" },
+  { n: "2", titulo: "Da seguimiento con tu equipo" },
+  { n: "3", titulo: "Cobra con todo documentado" },
+];
+
+function Pasos() {
+  return (
+    <section id="como-funciona" className="mx-auto max-w-5xl px-5 py-24 text-center">
+      <Reveal>
+        <h2 className="font-display mx-auto max-w-2xl text-[1.6rem] leading-snug font-bold tracking-[-0.01em] text-ink sm:text-3xl">
+          El trayecto completo en <Resalte>3 pasos simples</Resalte>
+        </h2>
+      </Reveal>
+      <Reveal className="relative mx-auto mt-14 max-w-3xl">
+        {/* Línea discontinua detrás de los círculos */}
+        <div
+          aria-hidden
+          className="absolute top-[17px] right-[16%] left-[16%] hidden border-t-2 border-dashed border-line-strong sm:block"
+        />
+        <ol className="relative grid gap-10 sm:grid-cols-3 sm:gap-6">
+          {PASOS.map((p) => (
+            <li key={p.n} className="flex flex-col items-center">
+              <span className="grid h-9 w-9 place-items-center rounded-full border-2 border-ink bg-surface text-[13px] font-bold text-ink">
+                {p.n}
+              </span>
+              <span className="mt-4 max-w-[11rem] text-[13px] leading-snug font-semibold text-ink">
+                {p.titulo}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------ producto */
+
+function Producto() {
+  return (
+    <section className="mx-auto max-w-5xl px-5 py-24 text-center">
+      <Reveal>
+        <h2 className="font-display mx-auto max-w-2xl text-[1.6rem] leading-snug font-bold tracking-[-0.01em] text-ink sm:text-3xl">
+          Todas tus órdenes en <Resalte>un solo lugar</Resalte>
+        </h2>
+      </Reveal>
+      <Reveal className="mt-12">
+        <MaquetaApp />
+      </Reveal>
+    </section>
+  );
+}
+
+// Maqueta del producto: ventana con sidebar y bandeja de triage, contenido
+// ilustrativo con la misma semántica de semáforo del producto real.
+function MaquetaApp() {
   const filas = [
     {
       oc: "OC-2026-0148",
@@ -140,209 +281,55 @@ function VentanaTriage() {
   ];
 
   return (
-    <figure className="mx-auto max-w-3xl">
-      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-raised">
-        <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
-          <span className="flex gap-1.5" aria-hidden>
-            <i className="h-2.5 w-2.5 rounded-full bg-line-strong" />
-            <i className="h-2.5 w-2.5 rounded-full bg-line-strong" />
-            <i className="h-2.5 w-2.5 rounded-full bg-line-strong" />
-          </span>
-          <span className="text-[12px] font-medium text-muted">
-            Órdenes en seguimiento
-          </span>
-        </div>
-        <ul className="divide-y divide-line text-[13px]">
-          {filas.map((f) => (
-            <li
-              key={f.oc}
-              className="grid grid-cols-[auto_1fr_auto] items-center gap-x-4 px-4 py-3 sm:grid-cols-[8.5rem_1fr_7rem_auto]"
-            >
-              <span className="font-mono text-[12px] text-ink-soft">{f.oc}</span>
-              <span className="truncate text-ink">{f.inst}</span>
-              <span className="hidden text-muted sm:block">{f.etapa}</span>
-              <span
-                className={`justify-self-end rounded-full px-2.5 py-0.5 text-[11px] font-medium ${urgenciaChip(f.tono)}`}
-              >
-                {f.plazo}
-              </span>
-            </li>
-          ))}
-        </ul>
+    <figure className="mx-auto max-w-3xl overflow-hidden rounded-lg border border-line bg-surface text-left shadow-raised">
+      <div className="flex items-center gap-1.5 border-b border-line px-4 py-2.5" aria-hidden>
+        <i className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+        <i className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+        <i className="h-2.5 w-2.5 rounded-full bg-line-strong" />
       </div>
-      <figcaption className="mt-3 text-center text-[12px] text-muted">
-        La bandeja se ordena sola por urgencia. El rojo se reserva para plazos
-        reales.
-      </figcaption>
-    </figure>
-  );
-}
-
-/* ----------------------------------------------------------- problema */
-
-function Problema() {
-  return (
-    <section className="border-t border-line">
-      <div className="mx-auto max-w-5xl px-5 py-24 sm:py-28">
-        <Reveal>
-          <p className="text-[11px] font-medium tracking-[0.08em] text-muted uppercase">
-            Por qué existe
-          </p>
-          <p className="font-display mt-5 max-w-3xl text-2xl leading-[1.35] font-medium tracking-[-0.015em] text-ink sm:text-[1.7rem]">
-            Entre la adjudicación y el cobro pasan semanas. Los documentos se
-            dispersan en correos, varias personas tocan la misma orden y una
-            ventana de subsanación sin vigilar puede tumbar el contrato.{" "}
-            <span className="text-muted">
-              adjudicado.app existe para que el estado de una orden nunca
-              dependa de la memoria de nadie.
+      <div className="grid sm:grid-cols-[10rem_1fr]">
+        <aside className="hidden border-r border-line bg-canvas px-3 py-4 sm:block">
+          <ul className="space-y-1 text-[12px] font-medium">
+            <li className="rounded-md bg-surface-2 px-2.5 py-1.5 text-ink">
+              Órdenes
+            </li>
+            <li className="px-2.5 py-1.5 text-muted">Actividad</li>
+            <li className="px-2.5 py-1.5 text-muted">Documentos</li>
+            <li className="px-2.5 py-1.5 text-muted">Precios</li>
+            <li className="px-2.5 py-1.5 text-muted">Miembros</li>
+          </ul>
+        </aside>
+        <div>
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
+            <span className="font-display text-[14px] font-semibold text-ink">
+              Hoy
             </span>
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ---------------------------------------------------------- funciones */
-
-const FUNCIONES = [
-  {
-    titulo: "Triage por urgencia",
-    texto:
-      "Una sola vista ordena el día. Las órdenes se acomodan por plazo y la que toca hoy salta sola; no hay que cazarla entre pestañas.",
-    icono: IconoTriage,
-    ancho: true,
-  },
-  {
-    titulo: "Expediente completo",
-    texto:
-      "Bitácora, documentos, contactos y montos de cada orden en un solo lugar, con historial de quién hizo qué y cuándo.",
-    icono: IconoExpediente,
-    ancho: false,
-  },
-  {
-    titulo: "Registro sin teclear",
-    texto:
-      "Pega la foto o el PDF de la orden de compra y el OCR extrae institución, ítems y montos por ti.",
-    icono: IconoOcr,
-    ancho: false,
-  },
-  {
-    titulo: "Correo integrado",
-    texto:
-      "Reenvía un correo a la dirección de la orden y queda registrado en su bitácora, con los adjuntos incluidos.",
-    icono: IconoCorreo,
-    ancho: true,
-  },
-  {
-    titulo: "Equipo al día",
-    texto:
-      "Invita a tu equipo por correo, con roles de administrador y colaborador, y grupos por área de trabajo.",
-    icono: IconoEquipo,
-    ancho: false,
-  },
-  {
-    titulo: "Precios de suplidores",
-    texto:
-      "Busca en las listas de precios de tus suplidores para cotizar y responder subsanaciones más rápido.",
-    icono: IconoPrecios,
-    ancho: true,
-  },
-];
-
-function Funciones() {
-  return (
-    <section className="border-t border-line bg-surface">
-      <div className="mx-auto max-w-5xl px-5 py-24 sm:py-28">
-        <Reveal>
-          <p className="text-[11px] font-medium tracking-[0.08em] text-muted uppercase">
-            Qué hace
-          </p>
-          <h2 className="font-display mt-4 max-w-xl text-3xl leading-[1.15] font-semibold tracking-[-0.02em] text-ink sm:text-4xl">
-            Todo el trayecto de la orden, en una herramienta.
-          </h2>
-        </Reveal>
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FUNCIONES.map((f, i) => (
-            <Reveal
-              key={f.titulo}
-              delay={(i % 3) * 80}
-              className={f.ancho ? "lg:col-span-2" : ""}
-            >
-              <article className="h-full rounded-lg border border-line bg-canvas p-6 transition-shadow hover:shadow-card sm:p-8">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-line bg-surface text-ink-soft">
-                  <f.icono />
+            <span className="rounded-full bg-danger-soft px-2.5 py-0.5 text-[11px] font-medium text-danger">
+              1 urgente
+            </span>
+          </div>
+          <ul className="divide-y divide-line text-[13px]">
+            {filas.map((f) => (
+              <li
+                key={f.oc}
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-x-4 px-4 py-3 sm:grid-cols-[7.5rem_1fr_6.5rem_auto]"
+              >
+                <span className="font-mono text-[12px] text-ink-soft">
+                  {f.oc}
                 </span>
-                <h3 className="font-display mt-4 text-[15px] font-semibold text-ink">
-                  {f.titulo}
-                </h3>
-                <p className="mt-2 text-[13px] leading-[1.6] text-muted">
-                  {f.texto}
-                </p>
-              </article>
-            </Reveal>
-          ))}
+                <span className="truncate text-ink">{f.inst}</span>
+                <span className="hidden text-muted sm:block">{f.etapa}</span>
+                <span
+                  className={`justify-self-end rounded-full px-2.5 py-0.5 text-[11px] font-medium ${urgenciaChip(f.tono)}`}
+                >
+                  {f.plazo}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------ cómo funciona */
-
-const PASOS = [
-  {
-    n: "01",
-    titulo: "Registra la orden",
-    texto:
-      "Pega la orden de compra adjudicada. El sistema la convierte en un expediente con institución, ítems, montos y fechas.",
-  },
-  {
-    n: "02",
-    titulo: "Da seguimiento en equipo",
-    texto:
-      "Etapas, plazos y bitácora compartida. El triage avisa qué toca hoy y nadie reconstruye el estado de memoria.",
-  },
-  {
-    n: "03",
-    titulo: "Cobra y cierra",
-    texto:
-      "Factura, vigila el pago y cierra la orden con todo el recorrido documentado, del primer correo al cobro.",
-  },
-];
-
-function ComoFunciona() {
-  return (
-    <section className="border-t border-line">
-      <div className="mx-auto max-w-5xl px-5 py-24 sm:py-28">
-        <Reveal>
-          <p className="text-[11px] font-medium tracking-[0.08em] text-muted uppercase">
-            Cómo funciona
-          </p>
-          <h2 className="font-display mt-4 max-w-xl text-3xl leading-[1.15] font-semibold tracking-[-0.02em] text-ink sm:text-4xl">
-            Tres pasos, ninguna orden perdida.
-          </h2>
-        </Reveal>
-        <ol className="mt-12 grid gap-x-10 sm:grid-cols-3">
-          {PASOS.map((p, i) => (
-            <li key={p.n}>
-              <Reveal
-                delay={i * 80}
-                className="border-t border-line-strong pt-5 pb-8"
-              >
-                <span className="font-mono text-[12px] text-primary">{p.n}</span>
-                <h3 className="font-display mt-2 text-[15px] font-semibold text-ink">
-                  {p.titulo}
-                </h3>
-                <p className="mt-2 text-[13px] leading-[1.6] text-muted">
-                  {p.texto}
-                </p>
-              </Reveal>
-            </li>
-          ))}
-        </ol>
-      </div>
-    </section>
+    </figure>
   );
 }
 
@@ -350,18 +337,18 @@ function ComoFunciona() {
 
 function CierreCta() {
   return (
-    <section className="border-t border-line bg-surface">
-      <div className="mx-auto max-w-5xl px-5 py-24 text-center sm:py-28">
+    <section className="border-t border-line bg-canvas">
+      <div className="mx-auto max-w-5xl px-5 py-20 text-center">
         <Reveal>
-          <h2 className="font-display mx-auto max-w-2xl text-3xl leading-[1.15] font-semibold tracking-[-0.02em] text-ink sm:text-4xl">
-            Que ninguna orden se caiga por un plazo no vigilado.
+          <h2 className="font-display mx-auto max-w-xl text-[1.6rem] leading-snug font-bold tracking-[-0.01em] text-ink sm:text-3xl">
+            Que ninguna orden se caiga por un plazo no vigilado
           </h2>
-          <p className="mx-auto mt-4 max-w-md text-[14px] leading-[1.6] text-muted">
+          <p className="mx-auto mt-3 max-w-md text-[13px] leading-[1.6] text-muted">
             Crea el espacio de tu empresa en minutos e invita a tu equipo
-            cuando quieras.
+            cuando quieras. Sin tarjeta.
           </p>
-          <Link href="/registro" className={`mt-8 ${btnSolido()}`}>
-            Crear la cuenta de tu empresa
+          <Link href="/registro" className={`mt-7 ${btnAzul}`}>
+            Crea tu cuenta
           </Link>
         </Reveal>
       </div>
@@ -371,7 +358,7 @@ function CierreCta() {
 
 function Pie() {
   return (
-    <footer className="border-t border-line">
+    <footer className="border-t border-line bg-canvas">
       <div className="mx-auto flex max-w-5xl flex-col items-start justify-between gap-6 px-5 py-10 sm:flex-row sm:items-center">
         <div>
           <LogoLockup markSize={22} textClass="text-sm" />
@@ -392,79 +379,217 @@ function Pie() {
   );
 }
 
-/* -------------------------------------------------------------- iconos */
-/* SVG propios, trazo 1.8 uniforme — sin librería de iconos en la landing. */
+/* ------------------------------------------------------- ilustraciones */
+/* Line-art propio (trazo uniforme, tinta + acento azul), estilo referencia. */
 
-function baseIcono(children: React.ReactNode) {
+function IconoOjo() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
     >
-      {children}
+      <path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="2.6" />
     </svg>
   );
 }
 
-function IconoTriage() {
-  return baseIcono(
-    <>
-      <path d="M4 6h12M4 12h16M4 18h9" />
-      <circle cx="19.5" cy="6" r="2" fill="currentColor" stroke="none" />
-    </>,
+// Persona serena con los brazos extendidos y tarjetas de órdenes flotando:
+// el caos post-adjudicación, bajo control.
+function IlustracionHero() {
+  return (
+    <svg
+      viewBox="0 0 480 390"
+      fill="none"
+      stroke="var(--ink-soft)"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-full"
+      role="img"
+      aria-label="Persona tranquila rodeada de órdenes de compra en orden"
+    >
+      {/* tarjetas flotantes */}
+      <g>
+        <rect x="52" y="38" width="92" height="64" rx="7" fill="var(--surface)" />
+        <path d="M66 56h48M66 70h64M66 84h36" strokeWidth="2" />
+        <circle cx="128" cy="56" r="7" fill="var(--primary)" stroke="none" />
+        <path d="M125 56l2.4 2.4 4-4.6" stroke="var(--primary-ink)" strokeWidth="1.7" />
+      </g>
+      <g>
+        <rect x="330" y="26" width="96" height="60" rx="7" fill="var(--surface)" />
+        <path d="M344 44h52M344 58h66M344 72h40" strokeWidth="2" />
+        <rect x="398" y="38" width="20" height="9" rx="4.5" fill="var(--primary)" stroke="none" />
+      </g>
+      <g>
+        <rect x="392" y="128" width="76" height="52" rx="7" fill="var(--surface)" />
+        <path d="M404 145h40M404 158h52" strokeWidth="2" />
+        <circle cx="452" cy="145" r="6" fill="var(--primary)" stroke="none" />
+        <path d="M449.5 145l2 2 3.4-3.8" stroke="var(--primary-ink)" strokeWidth="1.5" />
+      </g>
+      <g>
+        <rect x="176" y="14" width="84" height="30" rx="7" fill="var(--surface)" />
+        <path d="M190 29h34" strokeWidth="2" />
+        <circle cx="240" cy="29" r="5" fill="var(--primary)" stroke="none" />
+      </g>
+      {/* chispas */}
+      <path d="M300 60l0 10M295 65l10 0" strokeWidth="2" />
+      <path d="M40 150l0 8M36 154l8 0" strokeWidth="2" />
+      <circle cx="330" cy="110" r="2.4" fill="var(--ink-soft)" stroke="none" />
+      <circle cx="150" cy="120" r="2.4" fill="var(--ink-soft)" stroke="none" />
+
+      {/* persona */}
+      {/* piernas cruzadas (debajo del torso) */}
+      <path
+        d="M240 216c-19 0-36 9-42 25 13 7 27 10 42 10s29-3 42-10c-6-16-23-25-42-25Z"
+        fill="var(--surface)"
+      />
+      <path d="M221 243c8-10 21-13 31-6M259 243c-8-10-21-13-31-6" strokeWidth="2" />
+      {/* torso */}
+      <path
+        d="M240 174c-19 0-31 13-34 32l-2 14c23 7 49 7 72 0l-2-14c-3-19-15-32-34-32Z"
+        fill="var(--surface)"
+      />
+      {/* brazos extendidos */}
+      <path d="M210 191c-14 9-32 13-52 11" />
+      <circle cx="152" cy="203" r="5" fill="var(--surface)" />
+      <path d="M270 191c14 9 32 13 52 11" />
+      <circle cx="328" cy="203" r="5" fill="var(--surface)" />
+      {/* cabeza */}
+      <circle cx="240" cy="147" r="26" fill="var(--surface)" />
+      <path d="M217 138c4-13 15-19 25-18 11 1 19 8 21 18" fill="none" />
+      <circle cx="231" cy="149" r="5.2" />
+      <circle cx="249" cy="149" r="5.2" />
+      <path d="M236.2 149h7.6" strokeWidth="2" />
+      <path d="M234 162c3.6 2.6 8.4 2.6 12 0" strokeWidth="2" />
+      {/* alfombra */}
+      <path d="M180 264h120" />
+      {/* laptop al frente */}
+      <g>
+        <rect x="210" y="290" width="60" height="34" rx="4" fill="var(--surface)" />
+        <path d="M200 324h80l-8 12h-64l-8-12Z" fill="var(--surface)" />
+        <circle cx="240" cy="307" r="6.5" stroke="var(--primary)" />
+        <path d="M237.5 307l2 2 3.6-4" stroke="var(--primary)" strokeWidth="1.8" />
+      </g>
+      {/* planta izquierda */}
+      <g>
+        <path d="M96 330h44l-5 32h-34l-5-32Z" fill="var(--surface)" />
+        <path d="M118 330c0-20-10-34-24-40M118 330c0-22 8-38 22-44M118 330c-2-14-2-26 0-36" />
+      </g>
+      {/* mesa derecha con café y documentos */}
+      <g>
+        <path d="M344 336h84M356 336v26M416 336v26" />
+        <rect x="354" y="312" width="30" height="24" rx="3" fill="var(--surface)" />
+        <path d="M384 318h7c5 0 5 10 0 10h-7" fill="none" />
+        <path d="M396 336v-16h28v16" fill="var(--surface)" />
+        <path d="M396 326h28" strokeWidth="2" />
+      </g>
+    </svg>
   );
 }
 
-function IconoExpediente() {
-  return baseIcono(
-    <>
-      <path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z" />
-      <path d="M8 13h8M8 16h5" />
-    </>,
+function bustos(props: React.SVGProps<SVGSVGElement>) {
+  return {
+    viewBox: "0 0 200 150",
+    fill: "none",
+    stroke: "var(--ink-soft)",
+    strokeWidth: 2.2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className: "h-full",
+    "aria-hidden": true,
+    ...props,
+  };
+}
+
+// Gerencia: figura revisando un panel con gráfico.
+function IlustracionGerencia() {
+  return (
+    <svg {...bustos({})}>
+      <rect x="94" y="22" width="84" height="62" rx="7" fill="var(--surface)" />
+      <path d="M108 72v-16M124 72v-26M140 72v-10" strokeWidth="5" />
+      <path d="M156 72v-32" strokeWidth="5" stroke="var(--primary)" />
+      <path d="M104 34h36" strokeWidth="2" />
+      {/* figura */}
+      <circle cx="52" cy="78" r="20" fill="var(--surface)" />
+      <path d="M36 72c4-10 13-14 21-13 8 1 13 6 15 13" />
+      <circle cx="46" cy="80" r="1.8" fill="var(--ink-soft)" stroke="none" />
+      <circle cx="60" cy="80" r="1.8" fill="var(--ink-soft)" stroke="none" />
+      <path d="M49 89c2.4 1.8 5.6 1.8 8 0" strokeWidth="2" />
+      <path d="M52 98c-16 0-26 10-28 26l-2 24" fill="var(--surface)" />
+      <path d="M52 98c16 0 26 10 28 26l2 24" fill="none" />
+      {/* brazo señalando el panel */}
+      <path d="M74 112c8-8 16-16 24-22" />
+      <circle cx="102" cy="88" r="4" fill="var(--surface)" />
+    </svg>
   );
 }
 
-function IconoOcr() {
-  return baseIcono(
-    <>
-      <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2" />
-      <path d="M7 12h10" />
-    </>,
+// Operaciones: figura con lista de pendientes y reloj.
+function IlustracionOperaciones() {
+  return (
+    <svg {...bustos({})}>
+      <rect x="112" y="30" width="66" height="78" rx="7" fill="var(--surface)" />
+      <circle cx="126" cy="50" r="5" stroke="var(--primary)" />
+      <path d="M124 50l1.6 1.6 2.8-3.2" stroke="var(--primary)" strokeWidth="1.6" />
+      <path d="M138 50h30" strokeWidth="2" />
+      <circle cx="126" cy="70" r="5" stroke="var(--primary)" />
+      <path d="M124 70l1.6 1.6 2.8-3.2" stroke="var(--primary)" strokeWidth="1.6" />
+      <path d="M138 70h24" strokeWidth="2" />
+      <circle cx="126" cy="90" r="5" />
+      <path d="M138 90h28" strokeWidth="2" />
+      {/* reloj */}
+      <circle cx="176" cy="22" r="12" fill="var(--surface)" />
+      <path d="M176 15v7l5 3" strokeWidth="2" />
+      {/* figura */}
+      <circle cx="58" cy="76" r="20" fill="var(--surface)" />
+      <path d="M42 70c4-10 13-14 21-13 8 1 13 6 15 13" />
+      <path d="M44 74h10M60 74h10" strokeWidth="2" />
+      <circle cx="49" cy="78" r="1.8" fill="var(--ink-soft)" stroke="none" />
+      <circle cx="65" cy="78" r="1.8" fill="var(--ink-soft)" stroke="none" />
+      <path d="M54 87c2.4 1.8 5.6 1.8 8 0" strokeWidth="2" />
+      <path d="M58 96c-16 0-26 10-28 26l-2 26" fill="var(--surface)" />
+      <path d="M58 96c16 0 26 10 28 26l2 26" fill="none" />
+      <path d="M80 110c8-4 18-6 28-6" />
+      <circle cx="112" cy="104" r="4" fill="var(--surface)" />
+    </svg>
   );
 }
 
-function IconoCorreo() {
-  return baseIcono(
-    <>
-      <rect x="4" y="6" width="16" height="12" rx="2" />
-      <path d="m4 8 8 6 8-6" />
-    </>,
-  );
-}
-
-function IconoEquipo() {
-  return baseIcono(
-    <>
-      <circle cx="9" cy="9" r="3" />
-      <path d="M4 19c.6-3 2.4-4.5 5-4.5S13.4 16 14 19" />
-      <circle cx="16.5" cy="10" r="2.4" />
-      <path d="M16 14.7c2.2.2 3.5 1.6 4 4.3" />
-    </>,
-  );
-}
-
-function IconoPrecios() {
-  return baseIcono(
-    <>
-      <path d="M4 10V5a1 1 0 0 1 1-1h5l9 9-6 6-9-9Z" />
-      <circle cx="8.5" cy="8.5" r="1.4" fill="currentColor" stroke="none" />
-    </>,
+// Equipos: dos figuras chocando las manos en alto.
+function IlustracionEquipos() {
+  return (
+    <svg {...bustos({})}>
+      {/* choque */}
+      <path d="M100 32l0-12M92 36l-8-8M108 36l8-8" stroke="var(--primary)" strokeWidth="2.4" />
+      {/* figura izquierda */}
+      <circle cx="62" cy="72" r="18" fill="var(--surface)" />
+      <path d="M48 66c3-9 11-13 18-12 7 1 12 6 13 12" />
+      <circle cx="57" cy="74" r="1.7" fill="var(--ink-soft)" stroke="none" />
+      <circle cx="69" cy="74" r="1.7" fill="var(--ink-soft)" stroke="none" />
+      <path d="M58 82c2.2 1.6 5 1.6 7.2 0" strokeWidth="2" />
+      <path d="M62 90c-14 0-23 9-25 24l-2 32" fill="var(--surface)" />
+      <path d="M62 90c8 0 14 2 19 7" fill="none" />
+      <path d="M76 92c6-14 14-30 20-46" />
+      <circle cx="97" cy="42" r="4.4" fill="var(--surface)" />
+      {/* figura derecha */}
+      <circle cx="140" cy="72" r="18" fill="var(--surface)" />
+      <path d="M126 66c3-9 11-13 18-12 7 1 12 6 13 12" />
+      <path d="M128 70h9M144 70h9" strokeWidth="2" />
+      <circle cx="133" cy="74" r="1.7" fill="var(--ink-soft)" stroke="none" />
+      <circle cx="147" cy="74" r="1.7" fill="var(--ink-soft)" stroke="none" />
+      <path d="M136 82c2.2 1.6 5 1.6 7.2 0" strokeWidth="2" />
+      <path d="M140 90c14 0 23 9 25 24l2 32" fill="var(--surface)" />
+      <path d="M140 90c-8 0-14 2-19 7" fill="none" />
+      <path d="M126 92c-6-14-14-30-20-46" />
+      <circle cx="105" cy="42" r="4.4" fill="var(--surface)" />
+    </svg>
   );
 }
