@@ -106,10 +106,11 @@ supabase_<herramienta>.sql       SQL autocontenido y re-ejecutable
 1. ~~Firma: ¿imagen escaneada o certificado digital?~~ **RESUELTO (2026-07-14): imagen
    escaneada.** Estampado programático simple; `pdf-lib` (JS puro, corre en Vercel) cubre
    estampar imágenes y rellenar AcroForms.
-2. **Formato de salida: ¿.docx oficiales rellenados, PDFs firmados, o mixto?** Decide la
-   arquitectura del motor: .docx = docxtemplater en Vercel, cero infra nueva; PDF firmado =
-   servicio aparte en contenedor (Railway/Fly/Cloud Run), token de servicio, costo propio.
-   Si es mixto: empezar por la ruta .docx y añadir el servicio solo para lo que exija PDF.
+2. ~~Formato de salida~~ **RESUELTO (2026-07-14): la entidad entrega plantillas Word; se
+   sube en PDF firmado. El comité es exigente: el formato debe quedar idéntico al
+   oficial.** Pipeline: rellenar el .docx ORIGINAL (docxtemplater, Vercel) → convertir a
+   PDF (Gotenberg en contenedor chico, sin código propio) → estampar firma/sello imagen
+   (pdf-lib, Vercel) → ZIP. El .docx intermedio queda descargable como fallback humano.
 3. **`entidades` compartidas entre tenants vs `institucion` org-scoped existente.**
    Opciones: (a) mantener `institucion` por org y compartir solo `lic_entidad_patron`
    global — mínimo cambio; (b) catálogo global nuevo con puente. Recomendación: **(a)**

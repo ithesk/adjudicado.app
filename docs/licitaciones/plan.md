@@ -198,17 +198,25 @@ El núcleo del valor: convertir el JSON canónico en el paquete final.
 >    estampar imágenes y rellenar formularios PDF (AcroForm) lo hace `pdf-lib` (JS puro,
 >    corre en Vercel) — el servicio aparte solo sería necesario para render HTML→PDF de
 >    documentos propios, no para los formularios oficiales ni la firma.
-> 2. **¿Qué exige el portal al subir: .docx oficiales rellenados, o PDFs firmados?** Esta
->    respuesta decide la arquitectura: **.docx** = docxtemplater, JS puro, corre en Vercel
->    hoy, cero infraestructura nueva (decisión del plan de Formularios previo); **PDF
->    firmado** = servicio HTTP aparte (contenedor con render HTML→PDF y manipulación de
->    PDF, que no corre en serverless), token de servicio, deploy y costo propios.
->    Es plausible que la respuesta sea "ambos según el documento" — en ese caso, empezar
->    por la ruta .docx (barata) y añadir el servicio PDF solo para lo que lo exija.
+> 2. ~~¿Qué exige el portal?~~ **RESUELTO (2026-07-14, Pablo): la entidad entrega
+>    plantillas Word para rellenar con la información, y se sube en PDF firmado.**
 
-Si hay servicio aparte: HTTP **sin estado**, no habla con la base de datos, un endpoint
-`POST /generar` que recibe `{proceso: <JSON canónico>, assets: {…urls firmadas…}}` y
-devuelve archivos; token de servicio compartido.
+**Pipeline resuelto** (consecuencia de las decisiones 1 y 2):
+
+```
+plantilla .docx oficial
+  → rellenar con docxtemplater            (JS puro, corre en Vercel)
+  → convertir .docx → PDF                 (Gotenberg: contenedor listo, sin código propio)
+  → estampar firma + sello (imagen)       (pdf-lib, JS puro, corre en Vercel)
+  → carátula/índice + ZIP                 (Vercel)
+```
+
+El "servicio aparte" queda reducido a un **convertidor tonto y sin estado**: Gotenberg
+(imagen Docker off-the-shelf, LibreOffice headless detrás de un endpoint HTTP) en un
+contenedor chico (Fly.io/Railway, ~US$5/mes). No lleva código de negocio, no habla con la
+base de datos, recibe un .docx y devuelve un PDF. Si algún día muere, el fallback manual
+es abrir el .docx rellenado y exportarlo a PDF a mano — el sistema genera el .docx
+intermedio de todos modos y queda disponible para descarga/edición humana.
 
 Dos rutas de generación:
 
@@ -216,10 +224,16 @@ Dos rutas de generación:
    empresa (HTML→PDF), **reusarlo** envuelto como servicio. Convenciones: voz afirmativa,
    sin tablas "Cumple/No Cumple", **sin precios en la oferta técnica** (los precios van
    solo en la económica).
-2. **Formularios oficiales** (SNCC.F.033, F.034, F.042, D.045…): **no regenerar con diseño
-   propio** — el portal exige el formato oficial. Registro de plantillas: por formulario,
-   el original + un mapa de campos → variables del JSON canónico. Empezar por los 4 más
-   usados.
+2. **Formularios oficiales** (SNCC.F.033, F.034, F.042, D.045…): **regla dura de
+   fidelidad — el comité es exigente con los formatos: el documento entregado debe verse
+   idéntico al oficial.** Por eso NUNCA se regenera un formulario con diseño propio ni se
+   superpone texto por coordenadas sobre un PDF: se rellena **el .docx original de la
+   entidad** (docxtemplater conserva intacto todo lo que no es un marcador) y la
+   conversión a PDF es del documento ya relleno, así el formato es el del original por
+   construcción. Registro de plantillas: por formulario, el original + su versión
+   taggeada + fecha/fuente de descarga. Criterio de aceptación por plantilla: PDF generado
+   y original oficial comparados lado a lado sin diferencia visible fuera de los datos.
+   Empezar por los 4 más usados.
 
 Firma y sello por **rol** (de `lic_firmante` de la org): gerente_general firma ofertas
 técnicas y todo requisito no-subsanable; gerente_ventas firma comerciales y subsanables.
