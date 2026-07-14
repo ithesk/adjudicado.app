@@ -11,9 +11,12 @@ import {
   FolderClosed,
   Activity,
   Check,
+  BadgeCheck,
 } from "lucide-react";
 import { requireMiembro, getMembresias } from "@/lib/auth";
 import { listarOrdenes } from "@/lib/queries";
+import { listarDocsEmpresa } from "@/lib/empresa/queries";
+import { alertasDocumentacion } from "@/lib/empresa/documentos";
 import { cambiarOrg } from "@/lib/actions/org";
 import { cerrarSesion } from "@/lib/actions/sesion";
 import { isDemo } from "@/lib/demo";
@@ -42,6 +45,10 @@ export default async function AppLayout({
   const ordenes = await listarOrdenes();
   const cuenta = (e: Estado) => ordenes.filter((o) => o.estado === e).length;
   const vivas = ordenes.filter((o) => esViva(o.estado)).length;
+
+  // Documentación de la empresa por vencer o vencida: la insignia solo aparece
+  // si de verdad hay algo (el color de alarma es un recurso escaso).
+  const alertaDocs = alertasDocumentacion(await listarDocsEmpresa());
 
   return (
     <div className="min-h-screen md:flex">
@@ -144,6 +151,24 @@ export default async function AppLayout({
             icon={<Tags className="h-[15px] w-[15px]" strokeWidth={2} />}
           >
             Precios
+          </NavLink>
+          <NavLink
+            href="/configuracion/empresa"
+            icon={<BadgeCheck className="h-[15px] w-[15px]" strokeWidth={2} />}
+          >
+            Empresa
+            {alertaDocs.total > 0 && (
+              <span
+                className={`ml-auto rounded px-1.5 py-0.5 font-mono text-[10px] font-medium ${
+                  alertaDocs.urgente
+                    ? "bg-danger-soft text-danger"
+                    : "bg-warn-soft text-warn"
+                }`}
+                title="Documentos vencidos o por vencer"
+              >
+                {alertaDocs.total}
+              </span>
+            )}
           </NavLink>
         </nav>
 
