@@ -8,6 +8,32 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-14 — Licitaciones Fase 1: el contrato de datos (y los primeros tests del repo)
+
+**Contexto:** PR #4 (plan + hallazgos) fusionado = Fase 0 aprobada. Pablo resolvió las dos
+decisiones grandes: **firma con imagen escaneada**, y **la entidad entrega Word para
+rellenar / se sube PDF firmado, con formato idéntico al oficial** → pipeline:
+docxtemplater (Vercel) → Gotenberg docx→PDF (contenedor tonto) → pdf-lib estampa
+firma/sello (Vercel) → ZIP.
+
+**Hecho:**
+
+- `src/lib/licitaciones/contrato.ts` — el schema canónico del proceso (Zod), con las
+  4 reglas duras documentadas: `spec_cruda` inmutable (evidencia legal, ni un trim),
+  `subsanable` default false (fail-safe), oferente/firmantes/cotizador como snapshot,
+  firmantes por ROL (nunca nombres en enums). Validaciones cruzadas: una línea económica
+  debe apuntar a un ítem ofertado; un ítem descartado exige motivo.
+- **vitest bootstrapeado** — primer runner de tests del proyecto (`pnpm test`). 9 tests:
+  caso real válido + los inválidos del plan (cierre sin hora, requisito sin firmante,
+  spec_cruda vacía, precio negativo) + el default fail-safe y la no-normalización.
+- Dependencias nuevas: `zod`, `vitest` (dev).
+
+**Estado:** Fase 1 cumplida (el schema valida el ejemplo real y rechaza los inválidos).
+Sigue Fase 2: `supabase_licitaciones.sql` (tablas `lic_*` + RLS + test de aislamiento).
+Pendientes de Pablo: margen markup vs real, y confirmar seed de capabilities.
+
+---
+
 ## 2026-07-14 — Módulo de Licitaciones: plan adoptado y Fase 0 entregada
 
 **Contexto:** Pablo trajo un plan externo (`borrador-original.md`) para un módulo completo
