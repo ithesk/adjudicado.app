@@ -8,6 +8,34 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-14 — Módulo de Licitaciones: plan adoptado y Fase 0 entregada
+
+**Contexto:** Pablo trajo un plan externo (`borrador-original.md`) para un módulo completo
+de licitaciones (pre-adjudicación: expediente, requisitos subsanables/no-subsanables,
+paquete firmado). Sustituye al plan de Formularios de la sesión en la nube, **cuyo PR
+nunca llegó** — darlo por muerto.
+
+**Hecho:**
+
+- Revisión del borrador contra el repo real y plan corregido en `docs/licitaciones/plan.md`.
+  Correcciones principales: la tabla `assets` que proponía **duplicaba `documento_empresa`**
+  (se reutiliza y extiende con tipos firma/sello); firmantes por **rol** con mapeo por org,
+  no nombres propios hardcodeados (`pablo_gg` en un enum de un SaaS multi-tenant);
+  prefijo `lic_` obligatorio (`items` sin prefijo junto al `item` existente era confusión
+  garantizada); el **cotizador** (Precios: costo USD → tasa → margen → ITBIS → DOP, con
+  snapshot congelado por línea) injertado en `economico` — el borrador lo omitía;
+  `.docx vs PDF firmado` elevado a decisión bloqueante de la Fase 4.
+- **Fase 0 entregada**: `docs/licitaciones/00-hallazgos.md` — stack, tenancy, RLS, storage,
+  qué se reutiliza (documento_empresa, institucion, producto_precio, helpers de urgencia),
+  frontera del módulo, y las 5 decisiones que necesitan a Pablo.
+
+**Pendiente (bloquea la Fase 1):** revisión humana de los hallazgos, y las decisiones:
+(1) firma imagen vs certificada; (2) salida .docx vs PDF firmado vs mixto; (3) entidades
+compartidas vs `institucion` actual (recomendado: mantener `institucion`); (4) margen
+markup vs real; (5) confirmar seed de capabilities (sophos = blocker).
+
+---
+
 ## 2026-07-14 — Los precios de los ítems de la OC se descartaban al crear la orden
 
 **Contexto:** "en la orden recibida no puedo ver los precios que llegaron en la orden". El
