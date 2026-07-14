@@ -192,10 +192,12 @@ por el endpoint un JSON canónico válido.
 
 El núcleo del valor: convertir el JSON canónico en el paquete final.
 
-> ⚠️ **BLOQUEO DOBLE — confirmar antes de codificar:**
-> 1. **¿Firma imagen escaneada o firma digital certificada (PAdES)?** Si es imagen, el
->    estampado programático es simple. Si es certificada, hay que integrar el certificado
->    (PKCS#11) y el alcance cambia por completo.
+> ⚠️ **BLOQUEO — confirmar antes de codificar:**
+> 1. ~~¿Firma imagen escaneada o certificada?~~ **RESUELTO (2026-07-14, Pablo): imagen
+>    escaneada.** El estampado programático es válido y simple. Consecuencia técnica:
+>    estampar imágenes y rellenar formularios PDF (AcroForm) lo hace `pdf-lib` (JS puro,
+>    corre en Vercel) — el servicio aparte solo sería necesario para render HTML→PDF de
+>    documentos propios, no para los formularios oficiales ni la firma.
 > 2. **¿Qué exige el portal al subir: .docx oficiales rellenados, o PDFs firmados?** Esta
 >    respuesta decide la arquitectura: **.docx** = docxtemplater, JS puro, corre en Vercel
 >    hoy, cero infraestructura nueva (decisión del plan de Formularios previo); **PDF

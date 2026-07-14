@@ -103,9 +103,9 @@ supabase_<herramienta>.sql       SQL autocontenido y re-ejecutable
 
 ## Decisiones que requieren confirmación humana (bloquean fases)
 
-1. **Firma: ¿imagen escaneada o certificado digital (PAdES)?** Bloquea el estampado de la
-   Fase 4. Si es imagen → estampado programático simple. Si es certificada → PKCS#11 y el
-   alcance cambia.
+1. ~~Firma: ¿imagen escaneada o certificado digital?~~ **RESUELTO (2026-07-14): imagen
+   escaneada.** Estampado programático simple; `pdf-lib` (JS puro, corre en Vercel) cubre
+   estampar imágenes y rellenar AcroForms.
 2. **Formato de salida: ¿.docx oficiales rellenados, PDFs firmados, o mixto?** Decide la
    arquitectura del motor: .docx = docxtemplater en Vercel, cero infra nueva; PDF firmado =
    servicio aparte en contenedor (Railway/Fly/Cloud Run), token de servicio, costo propio.
