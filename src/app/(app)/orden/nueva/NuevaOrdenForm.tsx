@@ -9,6 +9,7 @@ interface ItemDraft {
   nombre: string;
   tipo: TipoItem;
   cantidad: number;
+  monto: number | null; // monto del ítem en la OC (lo extrae el OCR)
 }
 
 interface Datos {
@@ -103,6 +104,7 @@ export default function NuevaOrdenForm() {
               nombre: it.nombre ?? "",
               tipo: it.tipo ?? "licencia",
               cantidad: Number(it.cantidad) || 1,
+              monto: Number(it.monto) > 0 ? Number(it.monto) : null,
             }))
           : [],
       );
@@ -354,7 +356,10 @@ function Items({
         <button
           type="button"
           onClick={() =>
-            setItems([...items, { nombre: "", tipo: "licencia", cantidad: 1 }])
+            setItems([
+              ...items,
+              { nombre: "", tipo: "licencia", cantidad: 1, monto: null },
+            ])
           }
           className="text-sm font-medium text-muted hover:text-ink"
         >
@@ -389,6 +394,20 @@ function Items({
                 actualizar(i, { cantidad: Number(e.target.value) || 1 })
               }
               className="w-16 rounded-md border border-line px-2 py-2 text-sm outline-none focus:border-primary"
+            />
+            <input
+              type="number"
+              value={it.monto ?? ""}
+              min={0}
+              step="0.01"
+              placeholder="Monto"
+              title="Monto del ítem en la OC"
+              onChange={(e) =>
+                actualizar(i, {
+                  monto: e.target.value === "" ? null : Number(e.target.value),
+                })
+              }
+              className="w-28 rounded-md border border-line px-2 py-2 text-right text-sm tabular-nums outline-none focus:border-primary"
             />
             <button
               type="button"
