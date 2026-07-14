@@ -35,6 +35,29 @@ export async function getMembresias(): Promise<Miembro[]> {
   return (data as Miembro[] | null) ?? [];
 }
 
+// Solo el org_id activo, SIN viajes de red: lee la cookie. Para lecturas cuyo
+// guard real es es_miembro() dentro del RPC/RLS — un org_id falsificado o ajeno
+// devuelve vacío en SQL, la cookie no es la frontera de seguridad. Sin cookie
+// (primer login) cae a getMiembro() y la deja fijada para las siguientes.
+export async function orgActivaLigera(): Promise<string | null> {
+  if (isDemo()) return demoMiembro().org_id;
+  const cookieStore = await cookies();
+  const activa = cookieStore.get(ORG_COOKIE)?.value;
+  if (activa) return activa;
+
+  const miembro = await getMiembro();
+  if (!miembro) return null;
+  try {
+    // Solo es posible desde una Server Action / route handler; durante el
+    // render de una página no se puede escribir cookies y no pasa nada.
+    cookieStore.set(ORG_COOKIE, miembro.org_id, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  } catch {}
+  return miembro.org_id;
+}
+
 // La membresía ACTIVA: la org elegida (cookie) o la primera. Mantiene la misma
 // forma que antes, así el resto del código no cambia.
 export async function getMiembro(): Promise<Miembro | null> {
