@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
+  Loader2,
   MessageSquare,
   Search,
   Upload,
@@ -79,6 +80,11 @@ export default function BuscadorPrecios({
   const [importando, setImportando] = useState(false);
   const seqRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Caché de sesión: reescribir o volver a un término ya visto pinta al
+  // instante (y la respuesta fresca lo actualiza al llegar).
+  const cacheRef = useRef(
+    new Map<string, { productos: ProductoPrecio[]; facetas: FacetasPrecios | null }>(),
+  );
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -93,7 +99,13 @@ export default function BuscadorPrecios({
         setCargando(false);
         return;
       }
-      setCargando(true);
+      const clave = `${q.trim().toLowerCase()}|${suplidor}|${familia}|${term}|${ordenar}`;
+      const cacheada = cacheRef.current.get(clave);
+      if (cacheada) {
+        setResultados(cacheada.productos);
+        setFacetas(cacheada.facetas);
+      }
+      setCargando(!cacheada);
       buscarPreciosAction(q, {
         suplidor: suplidor || undefined,
         familia: familia || undefined,
@@ -101,6 +113,12 @@ export default function BuscadorPrecios({
         orden: ordenar,
       })
         .then((d) => {
+          cacheRef.current.set(clave, d);
+          if (cacheRef.current.size > 50) {
+            // Descarta la entrada más vieja (el Map itera en orden de inserción).
+            const primera = cacheRef.current.keys().next().value;
+            if (primera) cacheRef.current.delete(primera);
+          }
           if (seq !== seqRef.current) return; // llegó una búsqueda más nueva
           setResultados(d.productos);
           setFacetas(d.facetas);
@@ -151,11 +169,19 @@ export default function BuscadorPrecios({
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-              strokeWidth={2}
-              aria-hidden
-            />
+            {cargando ? (
+              <Loader2
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-primary motion-safe:animate-spin"
+                strokeWidth={2}
+                aria-hidden
+              />
+            ) : (
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                strokeWidth={2}
+                aria-hidden
+              />
+            )}
             <input
               ref={inputRef}
               type="text"
@@ -317,9 +343,14 @@ export default function BuscadorPrecios({
         </p>
       )}
 
-      {/* Resultados */}
+      {/* Resultados (atenuados mientras llega la búsqueda nueva) */}
       {resultados.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+        <div
+          className={`overflow-hidden rounded-lg border border-line bg-surface shadow-card transition-opacity ${
+            cargando ? "opacity-60" : ""
+          }`}
+          aria-busy={cargando}
+        >
           <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-2 text-left font-mono text-[10px] uppercase tracking-[0.1em] text-muted">

@@ -3,7 +3,7 @@
 // mutaciones directas sobre las tablas (RLS por organización).
 
 import { createClient } from "@/lib/supabase/server";
-import { getMiembro } from "@/lib/auth";
+import { getMiembro, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import type {
   ComentarioPrecio,
@@ -86,27 +86,26 @@ export async function buscarPrecios(
 ): Promise<{ productos: ProductoPrecio[]; facetas: FacetasPrecios | null }> {
   if (q.trim().length < 2) return { productos: [], facetas: null };
   if (isDemo()) return demoBuscar(q, filtros);
-  const miembro = await getMiembro();
-  if (!miembro) return { productos: [], facetas: null };
+  // org_id de la cookie (sin red): el guard real es es_miembro() en el RPC.
+  const orgId = await orgActivaLigera();
+  if (!orgId) return { productos: [], facetas: null };
   const supabase = await createClient();
-  const params = {
-    p_org: miembro.org_id,
+  // Un solo RPC (búsqueda + facetas en un escaneo) = un solo viaje por tecla.
+  const { data } = await supabase.rpc("precios_buscar_full", {
+    p_org: orgId,
     p_q: q,
     p_suplidor: filtros.suplidor ?? null,
     p_familia: filtros.familia ?? null,
     p_term: filtros.term ?? null,
-  };
-  const [res, fac] = await Promise.all([
-    supabase.rpc("precios_buscar", {
-      ...params,
-      p_orden: filtros.orden ?? "relevance",
-      p_limite: 100,
-    }),
-    supabase.rpc("precios_facetas", params),
-  ]);
+    p_orden: filtros.orden ?? "relevance",
+    p_limite: 100,
+  });
+  const full = data as
+    | { productos: ProductoPrecio[]; facetas: FacetasPrecios | null }
+    | null;
   return {
-    productos: (res.data as ProductoPrecio[] | null) ?? [],
-    facetas: (fac.data as FacetasPrecios | null) ?? null,
+    productos: full?.productos ?? [],
+    facetas: full?.facetas ?? null,
   };
 }
 
@@ -125,11 +124,11 @@ export async function detallePrecio(
       comentarios: [],
     };
   }
-  const miembro = await getMiembro();
-  if (!miembro) return null;
+  const orgId = await orgActivaLigera();
+  if (!orgId) return null;
   const supabase = await createClient();
   const { data } = await supabase.rpc("precios_detalle", {
-    p_org: miembro.org_id,
+    p_org: orgId,
     p_suplidor: suplidorId,
     p_sku: sku,
   });

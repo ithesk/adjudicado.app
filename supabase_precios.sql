@@ -31,11 +31,18 @@ create index if not exists idx_lista_precio_suplidor on lista_precio(suplidor_id
 --  2. PRODUCTO  (filas de la lista; bigint: son decenas de miles)
 -- ============================================================
 
--- Normaliza texto para indexar/buscar: minúsculas y solo alfanumérico,
--- así "FG-100F" y "fg 100f" tokenizan igual en ambos lados.
+-- Normaliza texto para indexar/buscar: translitera acentos y ñ, minúsculas y
+-- solo alfanumérico, así "FG-100F" y "fg 100f" tokenizan igual en ambos lados
+-- y "años"/"anos" o "cámara"/"camara" encuentran lo mismo. (La transliteración
+-- es indispensable: sin ella los acentos se vuelven separadores y "años"
+-- tokeniza como "a os" — tokens basura que casan con media tabla.)
 create or replace function precios_normalizar(t text)
 returns text language sql immutable as $$
-  select lower(regexp_replace(coalesce(t, ''), '[^a-zA-Z0-9]+', ' ', 'g'));
+  select lower(regexp_replace(
+    translate(coalesce(t, ''),
+      'áéíóúàèìòùâêîôûäëïöüñÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÄËÏÖÜÑçÇ',
+      'aeiouaeiouaeiouaeiounAEIOUAEIOUAEIOUAEIOUNcC'),
+    '[^a-zA-Z0-9]+', ' ', 'g'));
 $$;
 
 create table if not exists producto_precio (
@@ -53,7 +60,8 @@ create table if not exists producto_precio (
   busqueda     tsvector generated always as (
     to_tsvector('simple', precios_normalizar(
       sku || ' ' || coalesce(descripcion, '') || ' ' ||
-      coalesce(descripcion2, '') || ' ' || coalesce(familia, '')))
+      coalesce(descripcion2, '') || ' ' || coalesce(familia, '') || ' ' ||
+      coalesce(categoria, '')))
   ) stored
 );
 create index if not exists idx_producto_precio_lista    on producto_precio(lista_id);
@@ -109,11 +117,15 @@ create policy producto_comentario_all on producto_comentario for all
 -- ============================================================
 
 -- Texto libre → tsquery de prefijos: "FG-100F 3yr" → 'fg:* & 100f:* & 3yr:*'
+-- Los tokens de 1 carácter van exactos (sin :*): un prefijo de una letra
+-- expande a medio índice GIN y arruina ranking y latencia.
 create or replace function precios_tsquery(q text)
 returns tsquery language sql immutable as $$
   select case when agg is null then null else to_tsquery('simple', agg) end
   from (
-    select string_agg(tok || ':*', ' & ') as agg
+    select string_agg(
+             case when length(tok) >= 2 then tok || ':*' else tok end,
+             ' & ') as agg
     from unnest(regexp_split_to_array(trim(precios_normalizar(q)), '\s+')) as tok
     where tok <> ''
   ) t;
@@ -341,3 +353,139 @@ grant execute on function precios_facetas(uuid,text,uuid,text,text) to authentic
 grant execute on function precios_detalle(uuid,uuid,text) to authenticated;
 grant execute on function precios_resumen(uuid) to authenticated;
 grant execute on function precios_activar_lista(uuid,uuid) to authenticated;
+
+-- ============================================================
+--  MIGRACIÓN: buscador v2 (acentos + un solo escaneo por tecla)
+--  Re-ejecutable; en una base ya migrada no hace nada costoso.
+-- ============================================================
+
+-- La columna generada NO se recalcula sola al cambiar precios_normalizar:
+-- hay que reconstruirla. Se detecta por la ausencia de `categoria` en la
+-- expresión (las bases nuevas ya nacen con la definición correcta de arriba).
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_attrdef d
+    join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+    where d.adrelid = 'producto_precio'::regclass
+      and a.attname = 'busqueda'
+      and pg_get_expr(d.adbin, d.adrelid) like '%categoria%'
+  ) then
+    alter table producto_precio drop column busqueda;   -- se lleva su índice GIN
+    alter table producto_precio add column busqueda tsvector generated always as (
+      to_tsvector('simple', precios_normalizar(
+        sku || ' ' || coalesce(descripcion, '') || ' ' ||
+        coalesce(descripcion2, '') || ' ' || coalesce(familia, '') || ' ' ||
+        coalesce(categoria, '')))
+    ) stored;
+    create index idx_producto_precio_busqueda on producto_precio using gin(busqueda);
+  end if;
+end $$;
+
+-- Búsqueda + facetas en UNA llamada y UN solo escaneo del índice. Sustituye
+-- al par precios_buscar + precios_facetas para el buscador instantáneo (los
+-- RPC viejos quedan por compatibilidad; considerarlos obsoletos).
+create or replace function precios_buscar_full(
+  p_org uuid, p_q text,
+  p_suplidor uuid default null,
+  p_familia text default null,
+  p_term text default null,
+  p_orden text default 'relevance',
+  p_limite int default 100
+) returns jsonb language plpgsql security definer stable set search_path = public as $$
+declare
+  tsq tsquery := precios_tsquery(p_q);
+  resultado jsonb;
+begin
+  if not es_miembro(p_org) or tsq is null then
+    return jsonb_build_object('productos', '[]'::jsonb, 'facetas', null);
+  end if;
+
+  with m as (
+    -- Único escaneo @@ del índice: de aquí salen la página Y las facetas.
+    select p.id, p.sku, p.descripcion, p.descripcion2, p.familia, p.categoria,
+           p.precio, p.term_meses, p.suplidor_id, s.nombre as suplidor_nombre,
+           p.lista_id, l.vigencia, p.busqueda
+    from producto_precio p
+    join lista_precio l on l.id = p.lista_id and l.is_active
+    join suplidor s on s.id = p.suplidor_id
+    where p.org_id = p_org and p.busqueda @@ tsq
+  ),
+  filtrado as (
+    select * from m
+    where (p_suplidor is null or suplidor_id = p_suplidor)
+      and (p_familia is null or familia = p_familia)
+      and (p_term is null
+           or (p_term = 'none' and term_meses is null)
+           or (p_term <> 'none' and term_meses = p_term::int))
+  ),
+  pagina as (
+    select row_number() over () as rn, x.*
+    from (
+      select f.id, f.sku, f.descripcion, f.descripcion2, f.familia, f.categoria,
+             f.precio, f.term_meses, f.suplidor_id, f.suplidor_nombre,
+             f.lista_id, f.vigencia,
+             mk.color as marca_color,
+             (select count(*) from producto_comentario c
+               where c.org_id = p_org and c.suplidor_id = f.suplidor_id
+                 and c.sku = f.sku) as comentarios
+      from filtrado f
+      left join producto_marca mk
+        on mk.org_id = p_org and mk.suplidor_id = f.suplidor_id and mk.sku = f.sku
+      order by
+        (case when p_orden = 'price_asc'  then f.precio end) asc  nulls last,
+        (case when p_orden = 'price_desc' then f.precio end) desc nulls last,
+        (case when p_orden not in ('price_asc','price_desc')
+              then (upper(f.sku) like upper(trim(p_q)) || '%')::int end) desc nulls last,
+        (case when p_orden not in ('price_asc','price_desc')
+              then ts_rank(f.busqueda, tsq) end) desc nulls last,
+        f.sku
+      limit least(greatest(p_limite, 1), 300)
+    ) x
+  )
+  select jsonb_build_object(
+    'productos', coalesce((
+      select jsonb_agg((to_jsonb(pg) - 'rn') order by pg.rn) from pagina pg
+    ), '[]'::jsonb),
+    'facetas', jsonb_build_object(
+      'total',      (select count(*) from filtrado),
+      'min_precio', (select min(precio) from filtrado),
+      'max_precio', (select max(precio) from filtrado),
+      'familias', coalesce((
+        select jsonb_agg(jsonb_build_object('value', familia, 'count', n) order by n desc)
+        from (
+          select familia, count(*) as n from m
+          where familia is not null and familia <> ''
+            and (p_suplidor is null or suplidor_id = p_suplidor)
+            and (p_term is null
+                 or (p_term = 'none' and term_meses is null)
+                 or (p_term <> 'none' and term_meses = p_term::int))
+          group by familia order by n desc limit 12
+        ) f), '[]'::jsonb),
+      'suplidores', coalesce((
+        select jsonb_agg(jsonb_build_object('id', suplidor_id, 'nombre', suplidor_nombre, 'count', n) order by n desc)
+        from (
+          select suplidor_id, suplidor_nombre, count(*) as n from m
+          where (p_familia is null or familia = p_familia)
+            and (p_term is null
+                 or (p_term = 'none' and term_meses is null)
+                 or (p_term <> 'none' and term_meses = p_term::int))
+          group by suplidor_id, suplidor_nombre
+        ) s), '[]'::jsonb),
+      'terms', coalesce((
+        select jsonb_agg(jsonb_build_object('value', v, 'count', n)
+                         order by (v = 'none') desc, nullif(v, 'none')::int)
+        from (
+          select coalesce(term_meses::text, 'none') as v, count(*) as n from m
+          where (p_suplidor is null or suplidor_id = p_suplidor)
+            and (p_familia is null or familia = p_familia)
+          group by term_meses
+        ) t), '[]'::jsonb)
+    )
+  ) into resultado;
+  return resultado;
+end $$;
+
+revoke execute on function precios_buscar_full(uuid,text,uuid,text,text,text,int) from public, anon;
+grant  execute on function precios_buscar_full(uuid,text,uuid,text,text,text,int) to authenticated;

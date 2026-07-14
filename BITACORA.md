@@ -8,6 +8,48 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-14 — Buscador de Precios: acentos rotos y 4 viajes por tecla
+
+**Contexto:** "funciona muy mal y es lento". Se diagnosticó el camino completo y se midió
+contra producción (24,216 productos): el SQL tarda 4–12 ms — la lentitud no estaba ahí.
+
+**Causas encontradas (medidas):**
+
+- **Acentos destruidos.** `precios_normalizar` trataba `[^a-zA-Z0-9]` como separador, y las
+  vocales acentuadas/ñ no están en ese rango: `"cámara"` → tokens `c` + `mara`; `"3 años"`
+  genera `'a':*` que casa con **15,431 de 24,216 productos**. Causa #1 de "no encuentra".
+- **4 viajes a Supabase por tecla**: `auth.getUser()` (red) + `select miembro` en serie, y
+  luego 2 RPC que hacían el mismo escaneo dos veces (búsqueda y facetas por separado).
+- **El estado de carga existía pero nunca se renderizaba** — la UI se veía congelada.
+- `categoria` no estaba en el índice de búsqueda.
+
+**Arreglos:**
+
+- `precios_normalizar` v2 translitera (á→a, ñ→n) en vez de destruir. La columna generada
+  `busqueda` se reconstruye (no se recalcula sola al cambiar la función) — la migración lo
+  detecta por la ausencia de `categoria` en la expresión, y agrega `categoria` de paso.
+- `precios_tsquery` v2: tokens de 1 carácter van exactos, sin `:*` (un prefijo de una letra
+  expande a medio índice GIN).
+- **RPC nuevo `precios_buscar_full`**: búsqueda + facetas en un solo escaneo y una sola
+  llamada. Los RPC viejos quedan por compatibilidad (obsoletos).
+- **`orgActivaLigera()`** en `src/lib/auth.ts`: el org_id sale de la cookie sin viajes de
+  red; el guard real es `es_miembro()` dentro del RPC (un org_id falsificado devuelve
+  vacío). Solo para lecturas; las mutaciones siguen con `getMiembro()`. Resultado: **1 viaje
+  por tecla** contra 4.
+- Cliente: spinner en el input, resultados atenuados mientras busca, y caché de sesión
+  (Map, 50 entradas) — repetir un término pinta al instante.
+
+**Pendiente (bloqueante y ordenado):**
+
+1. **Aplicar la migración a producción** (correr `supabase_precios.sql` completo, es
+   re-ejecutable) — quedó denegada por permisos, necesita aprobación del usuario. **Sin
+   esto el código nuevo no funciona** (llama a `precios_buscar_full`, que aún no existe).
+2. Después: probar con sesión real, commitear y desplegar.
+3. El PR #1 (documentación de empresa) sigue **sin fusionar** — el usuario esperaba verlo
+   en producción; fusionar requiere su aprobación (denegado por permisos en esta sesión).
+
+---
+
 ## 2026-07-13 — Documentación base de la empresa (con vencimientos)
 
 **Contexto:** primer corte del frente de licitaciones, deliberadamente chico. Los documentos
