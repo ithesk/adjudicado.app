@@ -8,6 +8,37 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-14 — Licitaciones Fase 2: persistencia con aislamiento probado
+
+**Contexto:** PR #5 (Fase 1) fusionado. Pablo confirmó el seed de capabilities.
+
+**Hecho:**
+
+- `supabase_licitaciones.sql` — 9 tablas: `empresa_perfil` (fuente del snapshot oferente +
+  defaults del cotizador), `lic_proceso` (10 estados, unique org+codigo), `lic_lote`,
+  `lic_item` (spec_cruda inmutable + cotizador congelado por línea), `lic_requisito`
+  (subsanable **default false**, índice parcial para el gate), `lic_paquete` (payload +
+  hash por versión), `lic_capability`, `lic_firmante` (rol → persona, con refs a
+  documento_empresa para firma/sello), `lic_entidad_patron`. FK `orden.proceso_id` lista
+  para la Fase 6. **Aplicada en producción** + seed de 11 vendors (sophos = blocker).
+- **Test de aislamiento real**: transacción con dos orgs y un usuario solo miembro de A,
+  simulando su JWT (`set local role authenticated` + `request.jwt.claims`) — A ve solo lo
+  suyo, no lee lo de B, y el INSERT en la org ajena lo bloquea la RLS. Rollback al final:
+  cero rastro (verificado).
+
+**Decisiones no obvias:**
+
+- `lic_entidad_patron` nace **org-scoped**; el patrón "global compartido entre tenants"
+  queda diferido (exigiría catálogo global de entidades; hoy `institucion` es por org).
+- Firmantes NO se sembraron: nombres/cédulas reales sin confirmar — se capturan por UI en
+  la Fase 3. Solo se sembraron las capabilities confirmadas.
+- `empresa_perfil` sin campos de representante: eso vive en `lic_firmante` por rol.
+
+**Sigue:** Fase 3 — captura manual + Bid Room + endpoint canónico + cotizador. Pendiente
+de Pablo: margen markup vs real (bloquea el default del cotizador en la Fase 3).
+
+---
+
 ## 2026-07-14 — Licitaciones Fase 1: el contrato de datos (y los primeros tests del repo)
 
 **Contexto:** PR #4 (plan + hallazgos) fusionado = Fase 0 aprobada. Pablo resolvió las dos
