@@ -9,6 +9,7 @@ interface ItemEntrada {
   nombre: string;
   tipo: TipoItem;
   cantidad: number;
+  monto?: number | null; // monto del ítem en la OC → item.precio
 }
 
 export type CrearState = { error?: string };
@@ -85,6 +86,7 @@ export async function crearOrden(
         ? it.tipo
         : "licencia",
       cantidad: Number(it.cantidad) || 1,
+      precio: Number(it.monto) > 0 ? Number(it.monto) : null,
       orden_indice: i,
     }));
     await supabase.from("item").insert(filas);

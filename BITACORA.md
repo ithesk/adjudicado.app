@@ -8,6 +8,29 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-14 — Los precios de los ítems de la OC se descartaban al crear la orden
+
+**Contexto:** "en la orden recibida no puedo ver los precios que llegaron en la orden". El
+OCR extraía bien el monto de cada ítem (quedaba en `orden.ocr_raw`), pero `crearOrden` solo
+insertaba nombre/tipo/cantidad — el monto se tiraba. Todos los ítems quedaban sin precio.
+
+**Arreglos:**
+
+- `NuevaOrdenForm`: el borrador de ítem lleva `monto` (el OCR lo puebla, editable en el
+  formulario de confirmación con su propia columna).
+- `crearOrden`: inserta `precio` desde el monto (null si no viene o no es > 0).
+- **Backfill en producción**: 38 ítems de 17 órdenes recuperaron su precio desde el JSON
+  del OCR ya guardado (match por `orden_id` + `nombre`, solo donde `precio is null`).
+  Auditados uno a uno contra el OCR de su propia orden: todos correctos. Los 2 precios
+  tecleados a mano que ya existían no se tocaron.
+
+**Lección técnica:** un `UPDATE ... FROM ... CROSS JOIN LATERAL` que referencia la tabla
+objetivo dentro del LATERAL no correlaciona como uno espera (actualizó 1 de 38 sin error).
+La forma segura: CTE con el SELECT ya probado + `UPDATE ... WHERE id = cte.id`. Siempre
+ensayar con SELECT y comparar el conteo del UPDATE contra el ensayo.
+
+---
+
 ## 2026-07-14 — Buscador de Precios: acentos rotos y 4 viajes por tecla
 
 **Contexto:** "funciona muy mal y es lento". Se diagnosticó el camino completo y se midió
