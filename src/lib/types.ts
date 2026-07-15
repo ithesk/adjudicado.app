@@ -108,7 +108,20 @@ export interface Institucion {
   id: string;
   nombre: string;
   siglas: string | null;
+  rnc?: string | null;
+  direccion?: string | null;
   contactos: Contacto[];
+}
+
+// Para emparejar nombres de entidades que llegan con acentos, mayúsculas o
+// espacios distintos ("LOTERIA NACIONAL" ≡ "Lotería Nacional").
+export function normalizarEntidad(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
 }
 
 // Nombre legible para mostrar. Si el "nombre" es en realidad un correo

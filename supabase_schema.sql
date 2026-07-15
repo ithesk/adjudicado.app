@@ -357,3 +357,39 @@ create extension if not exists unaccent with schema extensions;
 -- Tiempo real de la bitácora
 alter publication supabase_realtime add table bitacora;
 alter publication supabase_realtime add table bitacora_comentario;
+
+-- ============================================================
+--  MIGRACIÓN: entidades unificadas
+--  La entidad convocante es LA MISMA persona jurídica cuando se
+--  licita y cuando llega la orden de compra. El catálogo
+--  `institucion` es la fuente única: se siembra desde el texto
+--  que el OCR dejó en las órdenes y se enlazan las órdenes
+--  existentes por nombre normalizado (sin acentos ni espacios
+--  dobles). Re-ejecutable; no toca órdenes ya enlazadas.
+-- ============================================================
+alter table institucion add column if not exists rnc text;
+alter table institucion add column if not exists direccion text;
+
+-- 1) Sembrar el catálogo con las entidades que viven como texto en órdenes.
+insert into institucion (org_id, nombre)
+select distinct on (o.org_id,
+       lower(extensions.unaccent(regexp_replace(trim(o.institucion), '\s+', ' ', 'g'))))
+       o.org_id, regexp_replace(trim(o.institucion), '\s+', ' ', 'g')
+from orden o
+where o.institucion is not null and trim(o.institucion) <> ''
+  and not exists (
+    select 1 from institucion i
+    where i.org_id = o.org_id
+      and lower(extensions.unaccent(regexp_replace(trim(i.nombre), '\s+', ' ', 'g')))
+        = lower(extensions.unaccent(regexp_replace(trim(o.institucion), '\s+', ' ', 'g')))
+  );
+
+-- 2) Enlazar las órdenes sueltas a su entidad del catálogo.
+update orden o
+set institucion_id = i.id
+from institucion i
+where o.institucion_id is null
+  and o.institucion is not null
+  and i.org_id = o.org_id
+  and lower(extensions.unaccent(regexp_replace(trim(i.nombre), '\s+', ' ', 'g')))
+    = lower(extensions.unaccent(regexp_replace(trim(o.institucion), '\s+', ' ', 'g')));

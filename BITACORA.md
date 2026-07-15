@@ -8,6 +8,32 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-15 — Entidades unificadas: la misma entidad al licitar y al recibir la OC
+
+**Contexto:** Pablo explicó el dominio: la entidad convocante es LA MISMA persona jurídica
+cuando se licita y cuando llega la orden de compra. El sistema las trataba como mundos
+separados: licitaciones enlazaba al catálogo `institucion`, pero las órdenes guardaban el
+nombre como texto suelto del OCR (22 órdenes, 19 nombres distintos, 0 enlazadas — y el
+catálogo VACÍO).
+
+**Hecho:**
+
+- **Migración** (al final de `supabase_schema.sql`, aplicada en producción): `institucion`
+  gana `rnc` y `direccion` (los formularios oficiales los piden); el catálogo se SIEMBRA
+  desde el texto de las órdenes existentes (dedupe por nombre normalizado con unaccent) y
+  las órdenes se enlazan por nombre. Resultado verificado: 19 entidades, 22/22 órdenes
+  enlazadas.
+- **`crearOrden` enlaza al nacer**: el nombre que extrae el OCR se empareja contra el
+  catálogo (helper `normalizarEntidad` en types.ts — acentos/mayúsculas/espacios) y si no
+  existe, se crea. Una orden nueva ya no queda suelta.
+- **Configuración → Entidades**: CRUD nuevo con autosave (nombre, siglas, RNC, dirección),
+  alta rápida, y dedupe por nombre normalizado al crear.
+
+**Nota:** los contactos de institución que la orden muestra ahora encuentran su entidad de
+forma confiable (antes el match por string fallaba con cualquier acento).
+
+---
+
 ## 2026-07-15 — Fase 3, feedback de Pablo: bug de guardado, autosave y reubicación
 
 **Contexto:** Pablo probó la Fase 3 en local. Tres devoluciones: errores al guardar los

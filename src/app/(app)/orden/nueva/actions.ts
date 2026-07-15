@@ -3,7 +3,36 @@
 import { redirect } from "next/navigation";
 import { getMiembro, getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import type { TipoItem } from "@/lib/types";
+import { normalizarEntidad, type TipoItem } from "@/lib/types";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+// La entidad convocante es LA MISMA cuando se licita y cuando llega la OC:
+// el texto que extrae el OCR se empareja contra el catálogo `institucion`
+// (sin acentos/mayúsculas/espacios dobles) y, si no existe, se crea. Así la
+// orden queda enlazada al catálogo desde que nace.
+async function enlazarInstitucion(
+  supabase: SupabaseClient,
+  orgId: string,
+  nombre: string | null,
+): Promise<string | null> {
+  const limpio = nombre?.trim().replace(/\s+/g, " ");
+  if (!limpio) return null;
+
+  const { data: todas } = await supabase
+    .from("institucion")
+    .select("id, nombre")
+    .eq("org_id", orgId);
+  const norm = normalizarEntidad(limpio);
+  const match = todas?.find((i) => normalizarEntidad(i.nombre) === norm);
+  if (match) return match.id;
+
+  const { data: nueva } = await supabase
+    .from("institucion")
+    .insert({ org_id: orgId, nombre: limpio })
+    .select("id")
+    .single();
+  return nueva?.id ?? null;
+}
 
 interface ItemEntrada {
   nombre: string;
@@ -55,6 +84,11 @@ export async function crearOrden(
   }
 
   const supabase = await createClient();
+  const institucion_id = await enlazarInstitucion(
+    supabase,
+    miembro.org_id,
+    institucion,
+  );
 
   const { data: orden, error } = await supabase
     .from("orden")
@@ -62,6 +96,7 @@ export async function crearOrden(
       org_id: miembro.org_id,
       numero_oc,
       institucion,
+      institucion_id,
       codigo_expediente,
       fecha_oc,
       moneda,
