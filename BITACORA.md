@@ -8,6 +8,34 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-15 — Fase 3, feedback de Pablo: bug de guardado, autosave y reubicación
+
+**Contexto:** Pablo probó la Fase 3 en local. Tres devoluciones: errores al guardar los
+datos de empresa, la configuración de empresa debe vivir en Configuración (no como pestaña
+de Licitaciones), y debe guardar sola (autosave).
+
+**El bug de guardado:** `export type { LicItem, ... }` al final de
+`src/lib/actions/licitaciones.ts` — un archivo `"use server"`. El compilador de Next NO
+borra ese re-export en módulos de server actions y el runtime revienta con
+`ReferenceError: LicItem is not defined` al cargar el módulo → toda action de ese archivo
+fallaba. `tsc` no lo atrapa (es TypeScript válido). **Regla nueva: nunca `export type` en
+archivos "use server"; los tipos se importan de su módulo de origen.**
+
+**Cambios:**
+
+- Perfil fiscal + cotizador + firmantes movidos a **Configuración → Empresa**, junto a la
+  documentación con vencimientos (todo lo de la empresa en un solo lugar). La pestaña
+  Empresa de /licitaciones se eliminó (y sus enlaces apuntan al nuevo destino).
+- **Autosave**: cada campo se guarda al salir de él (onBlur), con indicador
+  Guardando…/Guardado. Elegir el modo de margen guarda al instante. `guardarPerfil` ahora
+  acepta parches parciales y **auto-crea el perfil** con la razón social pre-poblada desde
+  el nombre de la organización (no hay "formulario inicial" que llenar).
+- Gotcha de React documentado en el código: un componente definido DENTRO de otro se
+  remonta en cada render — con autosave + router.refresh() borraría texto a medio
+  escribir. `Campo` vive fuera del componente.
+
+---
+
 ## 2026-07-15 — Licitaciones Fase 3: captura manual, Bid Room y cotizador
 
 **Contexto:** PR #6 (Fase 2) fusionado. El margen quedó sin decidir → el cotizador nace con

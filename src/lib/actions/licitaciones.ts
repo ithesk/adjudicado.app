@@ -22,16 +22,11 @@ import {
   type NuevoProceso,
   type ResultadoCanonico,
 } from "@/lib/licitaciones/queries";
-import type {
-  EmpresaPerfil,
-  LicItem,
-  LicProceso,
-  LicRequisito,
-  RolFirmante,
-} from "@/lib/licitaciones/tipos";
+import type { EmpresaPerfil, RolFirmante } from "@/lib/licitaciones/tipos";
 
 function refrescar() {
   revalidatePath("/licitaciones", "layout");
+  revalidatePath("/configuracion/empresa");
 }
 
 export async function crearProcesoAction(datos: NuevoProceso) {
@@ -118,10 +113,11 @@ export async function subirArchivoRequisitoAction(
   return error;
 }
 
+// Autosave: recibe solo los campos que cambiaron.
 export async function guardarPerfilAction(
-  perfil: Omit<EmpresaPerfil, "org_id" | "updated_at">,
+  patch: Partial<Omit<EmpresaPerfil, "org_id" | "updated_at">>,
 ): Promise<string | null> {
-  const error = await guardarPerfil(perfil);
+  const error = await guardarPerfil(patch);
   if (!error) refrescar();
   return error;
 }
@@ -140,5 +136,3 @@ export async function validarCanonicoAction(
 ): Promise<ResultadoCanonico> {
   return construirCanonico(procesoId);
 }
-
-export type { LicItem, LicProceso, LicRequisito };

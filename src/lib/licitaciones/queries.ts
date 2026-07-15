@@ -46,16 +46,39 @@ export async function listarFirmantes(): Promise<LicFirmante[]> {
   return (data as LicFirmante[] | null) ?? [];
 }
 
+// Autosave: recibe SOLO los campos que cambiaron. Si el perfil no existe
+// todavía, lo crea con la razón social pre-poblada desde el nombre de la
+// organización (fricción cero: no hay "formulario inicial").
 export async function guardarPerfil(
-  perfil: Omit<EmpresaPerfil, "org_id" | "updated_at">,
+  patch: Partial<Omit<EmpresaPerfil, "org_id" | "updated_at">>,
 ): Promise<string | null> {
   if (isDemo()) return "En modo demo no se guardan cambios.";
   const miembro = await getMiembro();
   if (!miembro) return "No autorizado.";
   const supabase = await createClient();
-  const { error } = await supabase
+
+  // Actualizar la tasa deja constancia de cuándo (para avisar si envejece).
+  const conFecha =
+    "tasa_usd_dop" in patch && !("tasa_fecha" in patch)
+      ? { ...patch, tasa_fecha: new Date().toISOString().slice(0, 10) }
+      : patch;
+
+  const { data: existe } = await supabase
     .from("empresa_perfil")
-    .upsert({ ...perfil, org_id: miembro.org_id }, { onConflict: "org_id" });
+    .select("org_id")
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+
+  const { error } = existe
+    ? await supabase
+        .from("empresa_perfil")
+        .update(conFecha)
+        .eq("org_id", miembro.org_id)
+    : await supabase.from("empresa_perfil").insert({
+        nombre_legal: miembro.organizacion?.nombre ?? "Mi empresa",
+        ...conFecha,
+        org_id: miembro.org_id,
+      });
   // La RLS exige rol admin para escribir el perfil (datos fiscales).
   return error ? `No se pudo guardar (¿eres admin?): ${error.message}` : null;
 }
@@ -350,7 +373,7 @@ export async function cotizarItemCatalogo(
 
   const params = paramsCotizacion(proceso, perfil ?? null);
   if (params.tasa === null) {
-    return "Configura la tasa USD→DOP en Licitaciones → Empresa antes de cotizar.";
+    return "Configura la tasa USD→DOP en Configuración → Empresa antes de cotizar.";
   }
   const precio = precioVentaUnitario(origen.costo_usd, params);
   if (precio === null) return "No se pudo calcular el precio con esos parámetros.";
