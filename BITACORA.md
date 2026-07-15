@@ -8,6 +8,28 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-15 — Requisitos como checklist estándar SNCC (feedback + pliego real)
+
+**Contexto:** Pablo pasó un pliego real (SNCC.P.004, CNSS-CCC-CP-2026-0001) y pidió que los
+requisitos fueran un checklist en vez de teclearlos uno a uno. El pliego confirmó la
+estructura estándar: Sobre A (legal [subsanable] / financiera [subsanable] / técnica [NO
+subsanable]) y Sobre B (económica), y que DGII/TSS/RPE "no se depositan, se verifican en
+línea".
+
+**Hecho:**
+
+- `requisitos-estandar.ts`: catálogo de 23 requisitos calcado del pliego real, agrupados
+  por sobre, con su subsanable de fábrica, flag "en línea" y **enlace a documento_empresa**
+  (DGII→dgii, RPE→rpe, Registro Mercantil→mercantil, cédula, estados financieros…).
+- **Picker de checklist** en la Bid Room: los estándar agrupados, pre-marcados salvo los
+  "si aplica"; un clic agrega todos. Lo que la empresa ya tiene VIGENTE en Configuración →
+  Empresa **nace enlazado y listo** (vencido o faltante → pendiente). Firmante por defecto
+  según criticidad (no subsanable → GG).
+- Las filas del panel se agrupan por sobre; el alta manual queda para requisitos propios
+  del pliego.
+
+---
+
 ## 2026-07-15 — Entidades unificadas: la misma entidad al licitar y al recibir la OC
 
 **Contexto:** Pablo explicó el dominio: la entidad convocante es LA MISMA persona jurídica
