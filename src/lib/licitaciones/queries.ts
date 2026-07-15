@@ -8,6 +8,11 @@ import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { ProcesoCanonico } from "./contrato";
 import { paramsCotizacion, precioVentaUnitario } from "./cotizador";
+import { requisitoEstandar } from "./requisitos-estandar";
+import {
+  estadoDocumentacion,
+  type DocumentoEmpresa,
+} from "@/lib/empresa/documentos";
 import type {
   EmpresaPerfil,
   LicFirmante,
@@ -455,6 +460,60 @@ export async function eliminarRequisito(id: string): Promise<string | null> {
     .eq("id", id)
     .eq("org_id", miembro.org_id);
   return error ? `No se pudo eliminar: ${error.message}` : null;
+}
+
+// Agrega de un golpe los requisitos marcados del checklist estándar.
+// Si un requisito lo satisface un documento de la empresa VIGENTE
+// (Configuración → Empresa), nace enlazado y listo; si el documento está
+// vencido o falta, nace pendiente (y la insignia de Empresa ya lo grita).
+export async function crearRequisitosLote(
+  procesoId: string,
+  codigos: string[],
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  if (codigos.length === 0) return "Marca al menos un requisito.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+
+  const [{ data: existentes }, { data: docs }] = await Promise.all([
+    supabase.from("lic_requisito").select("codigo").eq("proceso_id", procesoId),
+    supabase
+      .from("documento_empresa")
+      .select("*")
+      .eq("org_id", miembro.org_id),
+  ]);
+  const yaEstan = new Set((existentes ?? []).map((r) => r.codigo));
+
+  // El documento vigente de cada tipo (mismo criterio que la pantalla Empresa).
+  const vigentes = new Map(
+    estadoDocumentacion((docs ?? []) as DocumentoEmpresa[])
+      .filter((f) => f.vigente && f.nivel !== "vencido")
+      .map((f) => [f.tipo.codigo, f.vigente!]),
+  );
+
+  const filas = codigos
+    .map((c) => requisitoEstandar(c))
+    .filter((r): r is NonNullable<typeof r> => !!r && !yaEstan.has(r.codigo))
+    .map((r, i) => {
+      const doc = r.docEmpresa ? vigentes.get(r.docEmpresa) : undefined;
+      return {
+        org_id: miembro.org_id,
+        proceso_id: procesoId,
+        codigo: r.codigo,
+        nombre: r.nombre,
+        subsanable: r.subsanable,
+        firmante_rol: r.subsanable ? "gerente_ventas" : "gerente_general",
+        origen: doc ? "documento_empresa" : r.sinArchivo ? "externo" : "plantilla_oficial",
+        estado: doc ? "listo" : "pendiente",
+        documento_empresa_id: doc?.id ?? null,
+        orden_indice: i,
+      };
+    });
+  if (filas.length === 0) return null; // todo ya estaba
+
+  const { error } = await supabase.from("lic_requisito").insert(filas);
+  return error ? `No se pudieron agregar: ${error.message}` : null;
 }
 
 const MAX_MB = 15;

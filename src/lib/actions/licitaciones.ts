@@ -13,6 +13,7 @@ import {
   crearItem,
   crearProceso,
   crearRequisito,
+  crearRequisitosLote,
   eliminarItem,
   eliminarProceso,
   eliminarRequisito,
@@ -85,6 +86,15 @@ export async function crearRequisitoAction(
   datos: Parameters<typeof crearRequisito>[1],
 ): Promise<string | null> {
   const error = await crearRequisito(procesoId, datos);
+  if (!error) refrescar();
+  return error;
+}
+
+export async function crearRequisitosLoteAction(
+  procesoId: string,
+  codigos: string[],
+): Promise<string | null> {
+  const error = await crearRequisitosLote(procesoId, codigos);
   if (!error) refrescar();
   return error;
 }

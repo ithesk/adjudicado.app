@@ -29,7 +29,8 @@ import {
   actualizarProcesoAction,
   validarCanonicoAction,
 } from "@/lib/actions/licitaciones";
-import ItemsPanel from "./_components/ItemsPanel";
+import ItemsPliego from "./_components/ItemsPliego";
+import CotizacionPanel from "./_components/CotizacionPanel";
 import RequisitosPanel from "./_components/RequisitosPanel";
 
 export default function BidRoom({
@@ -47,6 +48,11 @@ export default function BidRoom({
   const { proceso, items, requisitos, institucion } = detalle;
   const [validacion, setValidacion] = useState<string[] | "ok" | null>(null);
   const [validando, startValidacion] = useTransition();
+  // Dos pasos: primero el panorama (qué piden), después la economía. El paso
+  // inicial sale del estado del proceso.
+  const [paso, setPaso] = useState<"pliego" | "cotizacion">(
+    ["captura", "calificacion"].includes(proceso.estado) ? "pliego" : "cotizacion",
+  );
 
   const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
   const nivel = nivelUrgencia(dias);
@@ -181,11 +187,43 @@ export default function BidRoom({
         )}
       </Panel>
 
-      {/* Ítems + Requisitos */}
-      <div className="grid gap-4 xl:grid-cols-2">
-        <ItemsPanel proceso={proceso} items={items} params={params} />
-        <RequisitosPanel procesoId={proceso.id} requisitos={requisitos} />
+      {/* Los dos pasos: primero el panorama, después la plata. */}
+      <div className="flex gap-1 border-b border-line">
+        {(
+          [
+            ["pliego", "1 · Pliego — qué piden", `${items.length} ítems · ${requisitos.length} requisitos`],
+            ["cotizacion", "2 · Cotización — nuestra oferta", (() => {
+              const sinPrecio = items.filter((i) => i.ofertamos && i.precio_unitario === null).length;
+              return sinPrecio > 0 ? `${sinPrecio} sin cotizar` : "";
+            })()],
+          ] as const
+        ).map(([key, label, hint]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setPaso(key)}
+            className={`-mb-px border-b-2 px-3 py-2 text-left text-[13px] font-medium transition-colors ${
+              paso === key
+                ? "border-primary text-ink"
+                : "border-transparent text-muted hover:text-ink"
+            }`}
+          >
+            {label}
+            {hint && (
+              <span className="ml-2 font-mono text-[11px] font-normal text-muted">{hint}</span>
+            )}
+          </button>
+        ))}
       </div>
+
+      {paso === "pliego" ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <ItemsPliego proceso={proceso} items={items} />
+          <RequisitosPanel procesoId={proceso.id} requisitos={requisitos} />
+        </div>
+      ) : (
+        <CotizacionPanel items={items} params={params} />
+      )}
     </div>
   );
 }
