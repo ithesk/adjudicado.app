@@ -8,6 +8,22 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-15 — La Bid Room en dos pasos: primero el panorama, después la plata
+
+**Contexto:** feedback de dominio de Pablo: "están mezclando ítems, cotización, catálogo y
+prerequisitos — primero elegimos o sabemos qué piden, y con ese panorama hacemos la parte
+económica". La máquina de estados ya lo sabía (captura → calificación → costeo) pero la
+pantalla lo mezclaba todo en una tarjeta.
+
+**Hecho:** la Bid Room ahora tiene dos pasos con pestañas: **1 · Pliego — qué piden**
+(ítems con su spec tal cual + el checklist de requisitos; ni un precio a la vista) y
+**2 · Cotización — nuestra oferta** (solo los ítems marcados "ofertamos": producto
+ofrecido + precio del catálogo o manual + totales). El paso inicial sale del estado del
+proceso (captura/calificación → Pliego; costeo en adelante → Cotización). El ItemsPanel
+viejo que mezclaba todo se eliminó; la pestaña de cotización muestra "N sin cotizar".
+
+---
+
 ## 2026-07-15 — Requisitos como checklist estándar SNCC (feedback + pliego real)
 
 **Contexto:** Pablo pasó un pliego real (SNCC.P.004, CNSS-CCC-CP-2026-0001) y pidió que los
