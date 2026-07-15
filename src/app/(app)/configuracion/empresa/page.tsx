@@ -1,23 +1,36 @@
 import { listarDocsEmpresa } from "@/lib/empresa/queries";
+import { listarFirmantes, perfilEmpresa } from "@/lib/licitaciones/queries";
+import PerfilEmpresa from "./PerfilEmpresa";
 import DocsEmpresa from "./DocsEmpresa";
 
 export const dynamic = "force-dynamic";
 
 export default async function EmpresaPage() {
-  const docs = await listarDocsEmpresa();
+  const [docs, perfil, firmantes] = await Promise.all([
+    listarDocsEmpresa(),
+    perfilEmpresa(),
+    listarFirmantes(),
+  ]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-ink">
-          Documentación de la empresa
-        </h2>
+        <h2 className="text-base font-semibold text-ink">Empresa</h2>
         <p className="text-[13px] text-muted">
-          Lo que hay que presentar en cada licitación. Cárgalo una vez con su
-          fecha de vencimiento y el sistema avisa antes de que caduque.
+          Todo lo que se repite en cada licitación: datos fiscales, firmantes,
+          parámetros del cotizador y la documentación legal con sus
+          vencimientos. Los cambios se guardan solos.
         </p>
       </div>
-      <DocsEmpresa docs={docs} />
+
+      <PerfilEmpresa perfil={perfil} firmantes={firmantes} />
+
+      <div>
+        <h3 className="mb-2 text-[13px] font-semibold text-ink">
+          Documentación de la empresa
+        </h3>
+        <DocsEmpresa docs={docs} />
+      </div>
     </div>
   );
 }

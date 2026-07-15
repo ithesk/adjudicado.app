@@ -1,5 +1,3 @@
-import LicitacionesTabs from "./_tabs";
-
 export default function LicitacionesLayout({
   children,
 }: {
@@ -14,7 +12,6 @@ export default function LicitacionesLayout({
           convocatoria al paquete listo para someter.
         </p>
       </div>
-      <LicitacionesTabs />
       {children}
     </div>
   );

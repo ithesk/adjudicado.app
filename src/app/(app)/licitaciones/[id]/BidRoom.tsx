@@ -155,7 +155,7 @@ export default function BidRoom({
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
             {!tienePerfil ? "Faltan los datos de la empresa" : "Faltan los firmantes"} —
             complétalos en{" "}
-            <Link href="/licitaciones/empresa" className="font-medium underline">
+            <Link href="/configuracion/empresa" className="font-medium underline">
               Empresa
             </Link>
             .

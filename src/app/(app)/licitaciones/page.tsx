@@ -14,7 +14,7 @@ export default async function LicitacionesPage() {
       {!perfil && (
         <p className="rounded-md bg-warn-soft px-3 py-2 text-[13px] text-warn">
           Configura primero los datos de la empresa (RNC, RPE, tasa y margen) en
-          la pestaña <Link href="/licitaciones/empresa" className="font-medium underline">Empresa</Link> —
+          la pestaña <Link href="/configuracion/empresa" className="font-medium underline">Empresa</Link> —
           el expediente los necesita para generar los documentos.
         </p>
       )}
