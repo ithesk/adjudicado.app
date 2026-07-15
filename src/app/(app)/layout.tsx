@@ -12,6 +12,7 @@ import {
   Activity,
   Check,
   BadgeCheck,
+  Gavel,
 } from "lucide-react";
 import { requireMiembro, getMembresias } from "@/lib/auth";
 import { listarOrdenes } from "@/lib/queries";
@@ -151,6 +152,12 @@ export default async function AppLayout({
             icon={<Tags className="h-[15px] w-[15px]" strokeWidth={2} />}
           >
             Precios
+          </NavLink>
+          <NavLink
+            href="/licitaciones"
+            icon={<Gavel className="h-[15px] w-[15px]" strokeWidth={2} />}
+          >
+            Licitaciones
           </NavLink>
           <NavLink
             href="/configuracion/empresa"
