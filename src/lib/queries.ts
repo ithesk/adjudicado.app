@@ -185,7 +185,9 @@ export async function listarInstituciones(): Promise<Institucion[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("institucion")
-    .select("id, nombre, siglas, contacto(id, nombre, rol, email, telefono)")
+    .select(
+      "id, nombre, siglas, rnc, direccion, contacto(id, nombre, rol, email, telefono)",
+    )
     .eq("org_id", miembro.org_id)
     .order("nombre");
   return ((data as unknown as Institucion[] | null) ?? []).map((i) => ({
