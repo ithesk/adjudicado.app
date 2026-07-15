@@ -1,0 +1,634 @@
+// Capa de datos del módulo de Licitaciones. Lecturas con orgActivaLigera()
+// (el guard real es la RLS es_miembro); mutaciones con getMiembro() y el
+// .eq("org_id") defensivo. Las mutaciones devuelven string | null (error).
+
+import { randomUUID } from "node:crypto";
+import { createClient } from "@/lib/supabase/server";
+import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
+import { isDemo } from "@/lib/demo";
+import { ProcesoCanonico } from "./contrato";
+import { paramsCotizacion, precioVentaUnitario } from "./cotizador";
+import type {
+  EmpresaPerfil,
+  LicFirmante,
+  LicItem,
+  LicProceso,
+  LicRequisito,
+  ProcesoDetalle,
+  RolFirmante,
+} from "./tipos";
+
+// ===== Empresa (perfil + firmantes) =====
+
+export async function perfilEmpresa(): Promise<EmpresaPerfil | null> {
+  if (isDemo()) return null;
+  const orgId = await orgActivaLigera();
+  if (!orgId) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("empresa_perfil")
+    .select("*")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  return (data as EmpresaPerfil | null) ?? null;
+}
+
+export async function listarFirmantes(): Promise<LicFirmante[]> {
+  if (isDemo()) return [];
+  const orgId = await orgActivaLigera();
+  if (!orgId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lic_firmante")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("rol");
+  return (data as LicFirmante[] | null) ?? [];
+}
+
+export async function guardarPerfil(
+  perfil: Omit<EmpresaPerfil, "org_id" | "updated_at">,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("empresa_perfil")
+    .upsert({ ...perfil, org_id: miembro.org_id }, { onConflict: "org_id" });
+  // La RLS exige rol admin para escribir el perfil (datos fiscales).
+  return error ? `No se pudo guardar (¿eres admin?): ${error.message}` : null;
+}
+
+export async function guardarFirmante(
+  rol: RolFirmante,
+  datos: { nombre: string; cedula: string | null; cargo: string | null },
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const nombre = datos.nombre.trim();
+  if (!nombre) return "El nombre es obligatorio.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_firmante")
+    .upsert(
+      { org_id: miembro.org_id, rol, nombre, cedula: datos.cedula, cargo: datos.cargo },
+      { onConflict: "org_id,rol" },
+    );
+  return error ? `No se pudo guardar (¿eres admin?): ${error.message}` : null;
+}
+
+// ===== Procesos =====
+
+export async function listarProcesos(): Promise<LicProceso[]> {
+  if (isDemo()) return [];
+  const orgId = await orgActivaLigera();
+  if (!orgId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lic_proceso")
+    .select("*")
+    .eq("org_id", orgId)
+    .order("cierre", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  return (data as LicProceso[] | null) ?? [];
+}
+
+export async function obtenerProceso(id: string): Promise<ProcesoDetalle | null> {
+  if (isDemo()) return null;
+  const orgId = await orgActivaLigera();
+  if (!orgId) return null;
+  const supabase = await createClient();
+
+  const { data: proceso } = await supabase
+    .from("lic_proceso")
+    .select("*")
+    .eq("id", id)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!proceso) return null;
+
+  const [lotes, items, requisitos, institucion] = await Promise.all([
+    supabase.from("lic_lote").select("*").eq("proceso_id", id).order("numero"),
+    supabase
+      .from("lic_item")
+      .select("*")
+      .eq("proceso_id", id)
+      .order("orden_indice")
+      .order("numero"),
+    supabase
+      .from("lic_requisito")
+      .select("*")
+      .eq("proceso_id", id)
+      .order("orden_indice")
+      .order("codigo"),
+    proceso.institucion_id
+      ? supabase
+          .from("institucion")
+          .select("id, nombre, siglas")
+          .eq("id", proceso.institucion_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  return {
+    proceso: proceso as LicProceso,
+    lotes: (lotes.data ?? []) as ProcesoDetalle["lotes"],
+    items: (items.data ?? []) as LicItem[],
+    requisitos: (requisitos.data ?? []) as LicRequisito[],
+    institucion: (institucion.data ?? null) as ProcesoDetalle["institucion"],
+  };
+}
+
+export interface NuevoProceso {
+  codigo: string;
+  objeto: string;
+  modalidad: string;
+  cierre: string | null; // datetime-local
+  institucion_id: string | null;
+  institucion_nueva: string | null; // crea la institución si no existe
+  adjudicacion: "item" | "lote" | "total";
+  criterio: "menor_precio" | "calidad_precio" | "calidad";
+}
+
+export async function crearProceso(
+  datos: NuevoProceso,
+): Promise<{ id?: string; error?: string }> {
+  if (isDemo()) return { error: "En modo demo no se crean procesos." };
+  const codigo = datos.codigo.trim();
+  if (!codigo) return { error: "El código del proceso es obligatorio." };
+  const miembro = await getMiembro();
+  if (!miembro) return { error: "No autorizado." };
+  const user = await getUser();
+  const supabase = await createClient();
+
+  let institucionId = datos.institucion_id;
+  const nombreNueva = datos.institucion_nueva?.trim();
+  if (!institucionId && nombreNueva) {
+    const { data: inst } = await supabase
+      .from("institucion")
+      .insert({ org_id: miembro.org_id, nombre: nombreNueva })
+      .select("id")
+      .single();
+    institucionId = inst?.id ?? null;
+  }
+
+  const { data, error } = await supabase
+    .from("lic_proceso")
+    .insert({
+      org_id: miembro.org_id,
+      codigo,
+      objeto: datos.objeto.trim() || null,
+      modalidad: datos.modalidad,
+      cierre: datos.cierre || null,
+      institucion_id: institucionId,
+      adjudicacion: datos.adjudicacion,
+      criterio: datos.criterio,
+      creado_por: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    if (error.code === "23505") return { error: `Ya existe un proceso con el código ${codigo}.` };
+    return { error: `No se pudo crear: ${error.message}` };
+  }
+  return { id: data.id };
+}
+
+export async function actualizarProceso(
+  id: string,
+  patch: Partial<
+    Pick<
+      LicProceso,
+      | "objeto"
+      | "modalidad"
+      | "cierre"
+      | "estado"
+      | "moneda"
+      | "adjudicacion"
+      | "criterio"
+      | "plazo_pago_dias"
+      | "tasa_usd_dop"
+      | "margen_pct"
+      | "itbis_pct"
+      | "notas"
+    >
+  >,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_proceso")
+    .update(patch)
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo guardar: ${error.message}` : null;
+}
+
+export async function eliminarProceso(id: string): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se borra.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_proceso")
+    .delete()
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo eliminar: ${error.message}` : null;
+}
+
+// ===== Ítems =====
+
+export async function crearItem(procesoId: string): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { data: max } = await supabase
+    .from("lic_item")
+    .select("numero")
+    .eq("proceso_id", procesoId)
+    .order("numero", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase.from("lic_item").insert({
+    org_id: miembro.org_id,
+    proceso_id: procesoId,
+    numero: (max?.numero ?? 0) + 1,
+    spec_cruda: "",
+    orden_indice: max?.numero ?? 0,
+  });
+  return error ? `No se pudo agregar el ítem: ${error.message}` : null;
+}
+
+export async function actualizarItem(
+  id: string,
+  patch: Partial<
+    Pick<
+      LicItem,
+      | "spec_cruda"
+      | "cantidad"
+      | "unidad"
+      | "marca"
+      | "modelo"
+      | "parte"
+      | "descripcion"
+      | "ofertamos"
+      | "motivo_descarte"
+      | "precio_unitario"
+      | "itbis_aplica"
+    >
+  >,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  // Un precio tecleado a mano invalida el snapshot del catálogo.
+  const conLimpieza =
+    "precio_unitario" in patch
+      ? { ...patch, suplidor_id: null, sku: null, costo_usd: null, tasa: null, margen_pct: null, margen_modo: null }
+      : patch;
+  const { error } = await supabase
+    .from("lic_item")
+    .update(conLimpieza)
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo guardar: ${error.message}` : null;
+}
+
+export async function eliminarItem(id: string): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se borra.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_item")
+    .delete()
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo eliminar: ${error.message}` : null;
+}
+
+// Cotiza un ítem desde el catálogo de Precios: congela el snapshot completo
+// (costo, tasa, margen y el precio resultante). El cálculo vive en el módulo
+// puro `cotizador` — el mismo que usa la vista previa del cliente.
+export async function cotizarItemCatalogo(
+  itemId: string,
+  origen: { suplidor_id: string; sku: string; costo_usd: number },
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+
+  const { data: item } = await supabase
+    .from("lic_item")
+    .select("id, proceso_id")
+    .eq("id", itemId)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  if (!item) return "Ítem no encontrado.";
+
+  const [{ data: proceso }, { data: perfil }] = await Promise.all([
+    supabase
+      .from("lic_proceso")
+      .select("tasa_usd_dop, margen_pct, itbis_pct")
+      .eq("id", item.proceso_id)
+      .maybeSingle(),
+    supabase
+      .from("empresa_perfil")
+      .select("tasa_usd_dop, margen_pct, margen_modo, itbis_pct")
+      .eq("org_id", miembro.org_id)
+      .maybeSingle(),
+  ]);
+  if (!proceso) return "Proceso no encontrado.";
+
+  const params = paramsCotizacion(proceso, perfil ?? null);
+  if (params.tasa === null) {
+    return "Configura la tasa USD→DOP en Licitaciones → Empresa antes de cotizar.";
+  }
+  const precio = precioVentaUnitario(origen.costo_usd, params);
+  if (precio === null) return "No se pudo calcular el precio con esos parámetros.";
+
+  const { error } = await supabase
+    .from("lic_item")
+    .update({
+      suplidor_id: origen.suplidor_id,
+      sku: origen.sku,
+      costo_usd: origen.costo_usd,
+      tasa: params.tasa,
+      margen_pct: params.margenPct,
+      margen_modo: params.margenModo,
+      precio_unitario: precio,
+    })
+    .eq("id", itemId)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo cotizar: ${error.message}` : null;
+}
+
+// ===== Requisitos =====
+
+export async function crearRequisito(
+  procesoId: string,
+  datos: {
+    codigo: string;
+    nombre: string;
+    subsanable: boolean;
+    firmante_rol: LicRequisito["firmante_rol"];
+    fuente: string | null;
+  },
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const codigo = datos.codigo.trim();
+  const nombre = datos.nombre.trim();
+  if (!codigo || !nombre) return "Código y nombre son obligatorios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase.from("lic_requisito").insert({
+    org_id: miembro.org_id,
+    proceso_id: procesoId,
+    codigo,
+    nombre,
+    subsanable: datos.subsanable,
+    firmante_rol: datos.firmante_rol,
+    fuente: datos.fuente,
+  });
+  if (error?.code === "23505") return `Ya existe el requisito ${codigo} en este proceso.`;
+  return error ? `No se pudo agregar: ${error.message}` : null;
+}
+
+export async function actualizarRequisito(
+  id: string,
+  patch: Partial<
+    Pick<LicRequisito, "nombre" | "subsanable" | "fuente" | "firmante_rol" | "estado">
+  >,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_requisito")
+    .update(patch)
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo guardar: ${error.message}` : null;
+}
+
+export async function eliminarRequisito(id: string): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se borra.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_requisito")
+    .delete()
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo eliminar: ${error.message}` : null;
+}
+
+const MAX_MB = 15;
+
+// Sube el archivo de un requisito y lo marca listo.
+export async function subirArchivoRequisito(
+  requisitoId: string,
+  formData: FormData,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se suben archivos.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+
+  const archivo = formData.get("archivo");
+  if (!(archivo instanceof File) || archivo.size === 0) return "Elige un archivo.";
+  if (archivo.size > MAX_MB * 1024 * 1024) return `El archivo pesa más de ${MAX_MB} MB.`;
+
+  const supabase = await createClient();
+  const { data: req } = await supabase
+    .from("lic_requisito")
+    .select("id, proceso_id")
+    .eq("id", requisitoId)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  if (!req) return "Requisito no encontrado.";
+
+  const ext = (archivo.name.split(".").pop() || "bin").toLowerCase();
+  const path = `${miembro.org_id}/licitaciones/${req.proceso_id}/${randomUUID()}.${ext}`;
+  const bytes = new Uint8Array(await archivo.arrayBuffer());
+  const { error: errSubida } = await supabase.storage
+    .from("documentos")
+    .upload(path, bytes, {
+      contentType: archivo.type || "application/octet-stream",
+    });
+  if (errSubida) return `No se pudo subir: ${errSubida.message}`;
+
+  const { error } = await supabase
+    .from("lic_requisito")
+    .update({ storage_path: path, estado: "listo" })
+    .eq("id", requisitoId)
+    .eq("org_id", miembro.org_id);
+  if (error) {
+    await supabase.storage.from("documentos").remove([path]);
+    return `No se pudo guardar: ${error.message}`;
+  }
+  return null;
+}
+
+// ===== El JSON canónico =====
+
+export interface ResultadoCanonico {
+  canonico?: unknown;
+  errores?: string[];
+}
+
+// Arma el JSON canónico del proceso desde la base y lo valida contra el
+// contrato (Fase 1). Los errores salen legibles: son la lista de "qué falta"
+// para que el expediente esté completo.
+export async function construirCanonico(procesoId: string): Promise<ResultadoCanonico> {
+  const detalle = await obtenerProceso(procesoId);
+  if (!detalle) return { errores: ["Proceso no encontrado."] };
+  const [perfil, firmantes] = await Promise.all([perfilEmpresa(), listarFirmantes()]);
+
+  const { proceso, lotes, items, requisitos, institucion } = detalle;
+  const params = paramsCotizacion(proceso, perfil);
+
+  // Lotes: los definidos + uno sintético para los ítems sin lote.
+  const porLote = new Map<string | null, LicItem[]>();
+  for (const it of items) {
+    const k = it.lote_id ?? null;
+    porLote.set(k, [...(porLote.get(k) ?? []), it]);
+  }
+  const lotesCanon = lotes
+    .filter((l) => (porLote.get(l.id) ?? []).length > 0)
+    .map((l) => ({
+      numero: l.numero,
+      nombre: l.nombre ?? undefined,
+      items: (porLote.get(l.id) ?? []).map(itemCanon),
+    }));
+  const sueltos = porLote.get(null) ?? [];
+  if (sueltos.length > 0) {
+    lotesCanon.push({
+      numero: (lotes.at(-1)?.numero ?? 0) + 1,
+      nombre: lotes.length > 0 ? "Ítems sin lote" : undefined,
+      items: sueltos.map(itemCanon),
+    });
+  }
+
+  const loteDeItem = new Map<number, number>();
+  for (const lc of lotesCanon) for (const it of lc.items) loteDeItem.set(it.numero, lc.numero);
+
+  const lineas = items
+    .filter((i) => i.ofertamos && i.precio_unitario !== null)
+    .map((i) => ({
+      item: i.numero,
+      lote: loteDeItem.get(i.numero),
+      suplidor_id: i.suplidor_id ?? undefined,
+      sku: i.sku ?? undefined,
+      costo_usd: i.costo_usd ?? undefined,
+      tasa: i.tasa ?? undefined,
+      margen_pct: i.margen_pct ?? undefined,
+      margen_modo: i.margen_modo ?? undefined,
+      precio_unitario: i.precio_unitario as number,
+      itbis_aplica: i.itbis_aplica,
+    }));
+
+  const supabase = await createClient();
+  const { data: ultimo } = await supabase
+    .from("lic_paquete")
+    .select("version")
+    .eq("proceso_id", procesoId)
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const candidato = {
+    meta: {
+      id: proceso.id,
+      org_id: proceso.org_id,
+      version: (ultimo?.version ?? 0) + 1,
+      generado_en: new Date().toISOString(),
+    },
+    proceso: {
+      codigo: proceso.codigo,
+      modalidad: proceso.modalidad,
+      objeto: proceso.objeto ?? "",
+      entidad: {
+        nombre: institucion?.nombre ?? "",
+        siglas: institucion?.siglas ?? institucion?.nombre ?? "",
+      },
+      cronograma: { cierre: proceso.cierre ?? "" },
+      moneda: proceso.moneda,
+      plazo_pago_dias: proceso.plazo_pago_dias ?? undefined,
+      adjudicacion: proceso.adjudicacion,
+      criterio: proceso.criterio,
+    },
+    oferente: {
+      razon_social: perfil?.nombre_legal ?? "",
+      rnc: perfil?.rnc ?? "",
+      rpe: perfil?.rpe ?? "",
+      direccion: perfil?.direccion ?? "",
+      telefono: perfil?.telefono ?? "",
+      email: perfil?.email ?? "",
+    },
+    firmantes: firmantes.map((f) => ({
+      rol: f.rol,
+      nombre: f.nombre,
+      cedula: f.cedula ?? undefined,
+      cargo: f.cargo ?? ROL_CARGO[f.rol],
+    })),
+    lotes: lotesCanon,
+    requisitos: requisitos.map((r) => ({
+      codigo: r.codigo,
+      nombre: r.nombre,
+      subsanable: r.subsanable,
+      fuente: r.fuente ?? undefined,
+      firmante_rol: r.firmante_rol,
+      origen: r.origen,
+      estado: r.estado,
+      documento_empresa_id: r.documento_empresa_id ?? undefined,
+      storage_path: r.storage_path ?? undefined,
+    })),
+    economico:
+      lineas.length > 0 ? { itbis_pct: params.itbisPct, lineas } : undefined,
+  };
+
+  const r = ProcesoCanonico.safeParse(candidato);
+  if (r.success) return { canonico: r.data };
+  return {
+    errores: r.error.issues.map(
+      (i) => `${i.path.join(".") || "(raíz)"}: ${i.message}`,
+    ),
+  };
+}
+
+const ROL_CARGO: Record<string, string> = {
+  gerente_general: "Gerente General",
+  gerente_ventas: "Gerente de Ventas",
+};
+
+function itemCanon(i: LicItem) {
+  const producto =
+    i.marca && i.modelo && i.descripcion
+      ? {
+          marca: i.marca,
+          modelo: i.modelo,
+          parte: i.parte ?? undefined,
+          descripcion: i.descripcion,
+        }
+      : undefined;
+  return {
+    numero: i.numero,
+    spec_cruda: i.spec_cruda,
+    cantidad: Number(i.cantidad),
+    unidad: i.unidad,
+    producto,
+    ofertamos: i.ofertamos,
+    motivo_descarte: i.motivo_descarte ?? undefined,
+  };
+}

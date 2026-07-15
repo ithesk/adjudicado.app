@@ -8,6 +8,41 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-15 — Licitaciones Fase 3: captura manual, Bid Room y cotizador
+
+**Contexto:** PR #6 (Fase 2) fusionado. El margen quedó sin decidir → el cotizador nace con
+markup como default y la pestaña Empresa muestra LOS DOS cálculos en vivo (US$1,000 →
+RD$X vs RD$Y) para elegir viéndolo; cambia con un clic y queda guardado por organización.
+
+**Hecho:**
+
+- **Herramienta completa `/licitaciones`** (entrada nueva en el menú): lista de procesos
+  con cuenta regresiva al cierre (reusa los helpers de urgencia del tablero), formulario de
+  proceso nuevo (crea la institución al vuelo si no existe), y la **Bid Room**: cabecera
+  con contador del gate (rojo si hay no-subsanables pendientes), totales de la oferta en
+  vivo, panel de ítems y checklist de requisitos.
+- **Ítems**: spec del pliego tal cual (textarea sin adornos), lo ofertado aparte
+  (marca/modelo/descripción afirmativa), y cotización de dos vías: **del catálogo de
+  Precios** (buscador embebido sobre `buscarPreciosAction`; elegir congela costo→tasa→
+  margen→precio en el ítem) o **manual** (teclear el precio limpia el snapshot del
+  catálogo — un precio manual no finge venir de una lista).
+- **Requisitos**: el flag subsanable/NO subsanable es el protagonista (toggle visible,
+  default crítico), archivo por requisito a `{org}/licitaciones/{proceso}/…` (subir marca
+  listo), firmante por rol.
+- **Empresa**: perfil fiscal (fuente del snapshot `oferente`), tasa/margen/ITBIS, selector
+  de modo de margen con ejemplo vivo, y firmantes (GG y GV) con nombre/cédula/cargo.
+- **Endpoint canónico**: `GET /api/licitaciones/{id}/canonico` arma el JSON desde la base,
+  lo valida contra el contrato de la Fase 1 y devuelve 422 con la lista legible de qué
+  falta. El botón "Validar expediente" de la Bid Room usa lo mismo.
+- 8 tests nuevos del cotizador (markup vs margen, redondeo del unitario, exentos, cascada
+  de herencia). Total: 17 en verde.
+
+**Pendiente:** el criterio de aceptación de la fase — cargar un expediente REAL completo en
+~20 min con la sesión de Pablo y obtener el JSON canónico válido — necesita su prueba.
+Luego: Fase 4 (motor documental: docxtemplater → Gotenberg → pdf-lib).
+
+---
+
 ## 2026-07-14 — Licitaciones Fase 2: persistencia con aislamiento probado
 
 **Contexto:** PR #5 (Fase 1) fusionado. Pablo confirmó el seed de capabilities.
