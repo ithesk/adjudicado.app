@@ -30,6 +30,11 @@ archivos "use server"; los tipos se importan de su módulo de origen.**
   Guardando…/Guardado. Elegir el modo de margen guarda al instante. `guardarPerfil` ahora
   acepta parches parciales y **auto-crea el perfil** con la razón social pre-poblada desde
   el nombre de la organización (no hay "formulario inicial" que llenar).
+- **Subida de documentos rediseñada** (2º feedback): «Subir» en una fila abría un
+  formulario aparte abajo de la página (fuera de vista) que re-preguntaba el tipo ya
+  elegido. Ahora «Subir»/«Renovar» abre el selector de archivo DIRECTO (el tipo es la
+  fila) y las fechas se piden ahí mismo, en la fila. El alta de documentos fuera del
+  catálogo tiene su propia fila fija al final.
 - Gotcha de React documentado en el código: un componente definido DENTRO de otro se
   remonta en cada render — con autosave + router.refresh() borraría texto a medio
   escribir. `Campo` vive fuera del componente.
