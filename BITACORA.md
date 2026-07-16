@@ -8,6 +8,26 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — La Bid Room como línea de tiempo (feedback de Pablo)
+
+**Contexto:** "la primera pantalla debe pedir datos del proceso, todo tiene que ser una
+línea de tiempo de licitaciones."
+
+**Hecho:**
+
+- **`LineaTiempo`**: el recorrido del proceso arriba de la Bid Room — captura →
+  calificación → costeo → armado → listo → sometido, con subsanación como desvío y los
+  terminales (adjudicado/perdido/descartado) como remate. Cada punto es clicable, "Avanzar
+  a X" es la acción principal, y tras someter aparecen los botones de resultado.
+- **Cuatro estaciones**: 1 · Proceso (datos completos con autosave — objeto, entidad,
+  cierre, modalidad, adjudicación, criterio, plazo de pago, overrides de tasa/margen,
+  notas), 2 · Pliego, 3 · Cotización, 4 · Paquete (el gate + validar expediente + botón
+  "Generar paquete" deshabilitado como adelanto de la Fase 4/5).
+- Al cambiar el estado en la línea, la pantalla te lleva a la estación que corresponde
+  (captura → Proceso, calificación → Pliego, costeo → Cotización, armado+ → Paquete).
+
+---
+
 ## 2026-07-15 — La Bid Room en dos pasos: primero el panorama, después la plata
 
 **Contexto:** feedback de dominio de Pablo: "están mezclando ítems, cotización, catálogo y

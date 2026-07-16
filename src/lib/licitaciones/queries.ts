@@ -237,6 +237,7 @@ export async function actualizarProceso(
       | "adjudicacion"
       | "criterio"
       | "plazo_pago_dias"
+      | "institucion_id"
       | "tasa_usd_dop"
       | "margen_pct"
       | "itbis_pct"
