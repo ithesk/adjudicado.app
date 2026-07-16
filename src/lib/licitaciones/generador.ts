@@ -8,24 +8,48 @@ import fs from "node:fs";
 import path from "node:path";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
-import { montoALetras } from "./letras";
+import { enteroALetras, montoALetras } from "./letras";
 import type { ProcesoCanonico } from "./contrato";
 
-const DIR_PLANTILLAS = path.join(process.cwd(), "plantillas", "dgcp");
+const DIR_PLANTILLAS = path.join(process.cwd(), "plantillas");
 
-// Qué requisito del checklist se genera con qué plantilla.
-export const GENERABLES: Record<string, { plantilla: string; nombre: string }> = {
+// Qué requisito del checklist se genera con qué plantilla. "dgcp" = formato
+// oficial intocable; "cartas" = cartas propias de la empresa.
+export const GENERABLES: Record<string, { plantilla: string; carpeta: string; nombre: string }> = {
   "SNCC.F.034": {
     plantilla: "SNCC_F034_Presentacion_de_Oferta-tpl.docx",
+    carpeta: "dgcp",
     nombre: "Presentación de Oferta",
   },
   "SNCC.F.042": {
     plantilla: "SNCC_F042_Informacion_Oferente-tpl.docx",
+    carpeta: "dgcp",
     nombre: "Información sobre el Oferente",
   },
   "SNCC.F.033": {
     plantilla: "SNCC_F033_Of_Economica-tpl.docx",
+    carpeta: "dgcp",
     nombre: "Oferta Económica",
+  },
+  "COMP-ETICO": {
+    plantilla: "Compromiso_Etico_Proveedores-tpl.docx",
+    carpeta: "dgcp",
+    nombre: "Compromiso Ético de Proveedores",
+  },
+  "DJ-ART38": {
+    plantilla: "DJ-ART38-tpl.docx",
+    carpeta: "cartas",
+    nombre: "Declaración jurada art. 38",
+  },
+  "CARTA-COND": {
+    plantilla: "CARTA-COND-tpl.docx",
+    carpeta: "cartas",
+    nombre: "Aceptación de condiciones",
+  },
+  "DJ-COLUSION": {
+    plantilla: "DJ-COLUSION-tpl.docx",
+    carpeta: "cartas",
+    nombre: "Declaración de no colusión",
   },
 };
 
@@ -87,7 +111,19 @@ export function construirDatos(canonico: ProcesoCanonico): Record<string, unknow
     // Firmante (el GG firma la presentación y la económica)
     rep_nombre: gg?.nombre ?? "",
     rep_cargo: gg?.cargo ?? "",
+    rep_cedula: gg?.cedula ?? "",
     rep_direccion: canonico.oferente.direccion,
+    // Compromiso Ético (los que no capturamos quedan en blanco, se llenan a mano)
+    rep_nacionalidad: "dominicana",
+    rep_estado_civil: "",
+    ciudad: "Santo Domingo",
+    provincia: "Distrito Nacional",
+    objeto: canonico.proceso.objeto,
+    dia_numero: String(new Date().getDate()),
+    dia_letras: enteroALetras(new Date().getDate()).toLowerCase(),
+    mes_letras: MESES[new Date().getMonth()],
+    ano_letras: enteroALetras(new Date().getFullYear()).toLowerCase(),
+    ano_numero: String(new Date().getFullYear()),
     // Cuerpo del F.034
     consorcio: "No aplica",
     enmiendas: "No aplica",
@@ -114,7 +150,7 @@ export function generarDocumento(
 ): DocGenerado {
   const def = GENERABLES[codigo];
   if (!def) throw new Error(`No hay plantilla para ${codigo}`);
-  const zip = new PizZip(fs.readFileSync(path.join(DIR_PLANTILLAS, def.plantilla)));
+  const zip = new PizZip(fs.readFileSync(path.join(DIR_PLANTILLAS, def.carpeta, def.plantilla)));
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,

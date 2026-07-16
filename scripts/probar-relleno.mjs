@@ -21,6 +21,10 @@ const datos = {
     { numero: 1, descripcion: "Licencia Adobe Acrobat Pro", unidad: "UD", cantidad: "15", precio_unitario: "16,200.00", itbis_monto: "0.00", total: "243,000.00" },
     { numero: 2, descripcion: "Licencia Claude Team (Anthropic)", unidad: "UD", cantidad: "5", precio_unitario: "14,640.00", itbis_monto: "0.00", total: "73,200.00" },
   ],
+  rep_cedula: "001-1234567-8", rep_nacionalidad: "dominicana", rep_estado_civil: "casado",
+  ciudad: "Santo Domingo", provincia: "Distrito Nacional",
+  objeto: "Adquisición de licencias informáticas",
+  dia_numero: "16", ano_numero: "2026",
   fabricante_nombre_domicilio: "Adobe Inc., San José, California",
   fabricante_nombre: "Adobe Inc.", fabricante_bienes: "licencias de software",
   fabricante_bienes_detalle: "Adobe Acrobat Pro (plan equipos)",
@@ -29,9 +33,19 @@ const datos = {
 };
 
 let fallos = 0;
-for (const f of ["SNCC_F034_Presentacion_de_Oferta", "SNCC_F042_Informacion_Oferente", "SNCC_F033_Of_Economica", "SNCC_F047_Autorizacion_Fabricante"]) {
+const PLANTILLAS = [
+  ["dgcp", "SNCC_F034_Presentacion_de_Oferta"],
+  ["dgcp", "SNCC_F042_Informacion_Oferente"],
+  ["dgcp", "SNCC_F033_Of_Economica"],
+  ["dgcp", "SNCC_F047_Autorizacion_Fabricante"],
+  ["dgcp", "Compromiso_Etico_Proveedores"],
+  ["cartas", "DJ-ART38"],
+  ["cartas", "CARTA-COND"],
+  ["cartas", "DJ-COLUSION"],
+];
+for (const [carpeta, f] of PLANTILLAS) {
   try {
-    const zip = new PizZip(fs.readFileSync(`plantillas/dgcp/${f}-tpl.docx`));
+    const zip = new PizZip(fs.readFileSync(`plantillas/${carpeta}/${f}-tpl.docx`));
     const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => "" });
     doc.render(datos);
     const out = doc.toBuffer();

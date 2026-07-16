@@ -235,7 +235,22 @@ def limpiar_formato_de_tags(root):
                 rpr.remove(el)
 
 
+def taggear_compromiso(root):
+    """El Compromiso Ético oficial trae los espacios en orden fijo: se
+    reemplazan secuencialmente. El último subrayado (la firma) se queda."""
+    tags = [
+        "{rep_nombre}", "{rep_nacionalidad}", "{rep_estado_civil}",
+        "{rep_cedula}", "{empresa_nombre}", "{rnc}", "{rpe}", "{expediente}",
+        "{objeto}", "{entidad_nombre}", "{ciudad}", "{provincia}",
+        "{dia_letras}", "{dia_numero}", "{mes_letras}", "{ano_letras}",
+        "{ano_numero}",
+    ]
+    for tag in tags:
+        reemplazar(root, r"_{4,}", tag, es_regex=True)
+
+
 PLANTILLAS = {
+    "Compromiso_Etico_Proveedores": taggear_compromiso,
     "SNCC_F034_Presentacion_de_Oferta": taggear_f034,
     "SNCC_F042_Informacion_Oferente": taggear_f042,
     "SNCC_F033_Of_Economica": taggear_f033,

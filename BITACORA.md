@@ -8,6 +8,33 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Fase 4c: los 7 documentos "se genera aquí", generándose
+
+**Contexto:** Pablo probó "Generar paquete" (funcionó — 3 Word) y pidió el resto de los
+requisitos marcados como generables, más el plan de firma y sello.
+
+**Hecho:**
+
+- **Compromiso Ético oficial** descargado de la DGCP y taggeado (17 espacios en orden fijo
+  → reemplazo secuencial; el subrayado de la firma se queda).
+- **Cartas propias construidas desde cero** (`scripts/generar-cartas-base.py` →
+  `plantillas/cartas/`): Declaración jurada art. 38 Ley 47-25, Aceptación de condiciones,
+  Declaración de no colusión. Son documentos nuestros: sin regla de fidelidad, formato de
+  carta formal.
+- Generador ampliado a 7 GENERABLES (con carpeta dgcp/cartas), datos nuevos (cédula del
+  firmante, día/mes/año en letras, ciudad/provincia), gate y tracing de Vercel al día.
+- Smoke: las 8 plantillas rellenan y pasan textutil. 45 tests.
+
+**Plan de firma y sello (siguiente corte):** (1) subir imagen de firma y sello en
+Configuración → Empresa (tipos nuevos en documento_empresa; lic_firmante ya tiene las FKs);
+(2) incrustar las imágenes EN EL DOCX al generar (módulo libre de imágenes de
+docxtemplater, JS puro, corre en Vercel) sobre tags {%firma}/{%sello} en los bloques de
+firma — la posición la resuelve Word, no coordenadas de PDF; (3) PDF vía Gotenberg
+(contenedor, ~US$5/mes); interim: exportar a PDF desde Word. La "firma en todas las
+páginas + foliado" que piden algunos pliegos = post-proceso del PDF con pdf-lib.
+
+---
+
 ## 2026-07-16 — Fase 4b: "Generar paquete" vivo — del expediente al ZIP
 
 **Hecho:** el ciclo completo. `src/lib/licitaciones/letras.ts` (monto en letras es-DO,

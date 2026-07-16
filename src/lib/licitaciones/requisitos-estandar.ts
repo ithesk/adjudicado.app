@@ -84,4 +84,12 @@ export function grupoDeRequisito(codigo: string): GrupoRequisito | "otros" {
 // Requisitos que el motor documental genera (tienen plantilla oficial
 // taggeada). El gate del paquete NO bloquea por estos: son justo lo que la
 // generación produce.
-export const CODIGOS_GENERABLES = ["SNCC.F.033", "SNCC.F.034", "SNCC.F.042"];
+export const CODIGOS_GENERABLES = [
+  "SNCC.F.033",
+  "SNCC.F.034",
+  "SNCC.F.042",
+  "COMP-ETICO",
+  "DJ-ART38",
+  "CARTA-COND",
+  "DJ-COLUSION",
+];
