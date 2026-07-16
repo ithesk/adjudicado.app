@@ -31,17 +31,17 @@ import {
 } from "@/lib/actions/licitaciones";
 import LineaTiempo from "./_components/LineaTiempo";
 import DatosProceso from "./_components/DatosProceso";
-import ItemsPliego from "./_components/ItemsPliego";
-import CotizacionPanel from "./_components/CotizacionPanel";
+import CotizadorItems from "./_components/CotizadorItems";
 import RequisitosPanel from "./_components/RequisitosPanel";
 
-type Estacion = "proceso" | "pliego" | "cotizacion" | "paquete";
+type Estacion = "proceso" | "requisitos" | "items" | "paquete";
 
-// En qué estación te deja cada estado de la línea de tiempo.
+// En qué estación te deja cada estado de la línea de tiempo: primero los
+// datos, después QUÉ PIDEN (requisitos), después el cotizador de ítems.
 function estacionInicial(estado: EstadoLicitacion): Estacion {
   if (estado === "captura") return "proceso";
-  if (estado === "calificacion") return "pliego";
-  if (estado === "costeo") return "cotizacion";
+  if (estado === "calificacion") return "requisitos";
+  if (estado === "costeo") return "items";
   return "paquete";
 }
 
@@ -91,9 +91,9 @@ export default function BidRoom({
 
   const ESTACIONES: { key: Estacion; label: string; hint: string }[] = [
     { key: "proceso", label: "1 · Proceso", hint: institucion?.nombre ?? "sin entidad" },
-    { key: "pliego", label: "2 · Pliego", hint: `${items.length} ítems · ${requisitos.length} req.` },
-    { key: "cotizacion", label: "3 · Cotización", hint: sinCotizar > 0 ? `${sinCotizar} sin cotizar` : totales.total > 0 ? formatRD(totales.total) : "" },
-    { key: "paquete", label: "4 · Paquete", hint: criticosPendientes > 0 ? `${criticosPendientes} críticos` : "" },
+    { key: "requisitos", label: "2 · Requisitos", hint: criticosPendientes > 0 ? `${criticosPendientes} críticos pendientes` : `${requisitos.length}` },
+    { key: "items", label: "3 · Ítems", hint: sinCotizar > 0 ? `${sinCotizar} sin cotizar` : totales.total > 0 ? formatRD(totales.total) : `${items.length}` },
+    { key: "paquete", label: "4 · Paquete", hint: criticosPendientes > 0 ? "bloqueado" : "" },
   ];
 
   return (
@@ -173,14 +173,13 @@ export default function BidRoom({
         <DatosProceso proceso={proceso} instituciones={instituciones} />
       )}
 
-      {estacion === "pliego" && (
-        <div className="grid gap-4 xl:grid-cols-2">
-          <ItemsPliego proceso={proceso} items={items} />
-          <RequisitosPanel procesoId={proceso.id} requisitos={requisitos} />
-        </div>
+      {estacion === "requisitos" && (
+        <RequisitosPanel procesoId={proceso.id} requisitos={requisitos} />
       )}
 
-      {estacion === "cotizacion" && <CotizacionPanel items={items} params={params} />}
+      {estacion === "items" && (
+        <CotizadorItems proceso={proceso} items={items} params={params} />
+      )}
 
       {estacion === "paquete" && (
         <Panel className="space-y-3 p-4">
