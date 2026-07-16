@@ -82,10 +82,12 @@ export default function BidRoom({
     (i) => i.ofertamos && i.precio_unitario === null,
   ).length;
 
-  function generarPaquete() {
+  function generarPaquete(formato: "docx" | "pdf" = "docx") {
     setValidacion(null);
     startTransition(async () => {
-      const res = await fetch(`/api/licitaciones/${proceso.id}/generar`);
+      const res = await fetch(
+        `/api/licitaciones/${proceso.id}/generar?formato=${formato}`,
+      );
       if (!res.ok) {
         const j = await res.json().catch(() => null);
         setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
@@ -247,7 +249,7 @@ export default function BidRoom({
             </button>
             <button
               type="button"
-              onClick={generarPaquete}
+              onClick={() => generarPaquete("docx")}
               disabled={pendiente || criticosBloqueantes > 0}
               title={
                 criticosBloqueantes > 0
@@ -257,7 +259,17 @@ export default function BidRoom({
               className={btnPrimary(criticosBloqueantes > 0 ? "opacity-50" : "")}
             >
               <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-              {pendiente ? "Generando…" : "Generar paquete"}
+              {pendiente ? "Generando…" : "Generar paquete (Word)"}
+            </button>
+            <button
+              type="button"
+              onClick={() => generarPaquete("pdf")}
+              disabled={pendiente || criticosBloqueantes > 0}
+              title="Los mismos documentos, convertidos a PDF en el servidor de la empresa"
+              className={btnGhost(criticosBloqueantes > 0 ? "opacity-50" : "")}
+            >
+              <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
+              PDF
             </button>
           </div>
 

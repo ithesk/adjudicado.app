@@ -16,15 +16,24 @@ import { isDemo } from "@/lib/demo";
 import { createClient } from "@/lib/supabase/server";
 import { construirCanonico } from "@/lib/licitaciones/queries";
 import { GENERABLES, generarPaquete } from "@/lib/licitaciones/generador";
+import { docxAPdf, pdfDisponible } from "@/lib/licitaciones/pdf";
+import PizZip from "pizzip";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const formato = new URL(req.url).searchParams.get("formato") ?? "docx";
+  if (formato === "pdf" && !pdfDisponible()) {
+    return NextResponse.json(
+      { error: "El convertidor PDF no está configurado todavía (ver infra/gotenberg)." },
+      { status: 501 },
+    );
+  }
   if (isDemo()) {
     return NextResponse.json({ error: "No disponible en modo demo." }, { status: 403 });
   }
@@ -75,8 +84,29 @@ export async function GET(
     );
   }
 
-  // 4) Generar y registrar.
+  // 4) Generar (y convertir a PDF si se pidió) y registrar.
   const paquete = generarPaquete(codigos, canonico);
+  let archivos = paquete.documentos.map((d) => ({
+    ...d,
+    contentType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  }));
+  let zipFinal = paquete.zip;
+  let zipNombre = paquete.zipNombre;
+  if (formato === "pdf") {
+    archivos = await Promise.all(
+      archivos.map(async (d) => ({
+        ...d,
+        archivo: d.archivo.replace(/\.docx$/, ".pdf"),
+        buffer: await docxAPdf(d.archivo, d.buffer),
+        contentType: "application/pdf",
+      })),
+    );
+    const zipPdf = new PizZip();
+    for (const d of archivos) zipPdf.file(d.archivo, d.buffer);
+    zipFinal = zipPdf.generate({ type: "nodebuffer", compression: "DEFLATE" });
+    zipNombre = paquete.zipNombre.replace(/\.zip$/, "_pdf.zip");
+  }
   const user = await getUser();
   const payloadHash = createHash("sha256")
     .update(JSON.stringify(canonico))
@@ -85,18 +115,17 @@ export async function GET(
   const base = `${miembro.org_id}/licitaciones/${id}/v${canonico.meta.version}`;
   await supabase.storage
     .from("documentos")
-    .upload(`${base}/${paquete.zipNombre}`, paquete.zip, {
+    .upload(`${base}/${zipNombre}`, zipFinal, {
       contentType: "application/zip",
       upsert: true,
     });
 
-  for (const doc of paquete.documentos) {
+  for (const doc of archivos) {
     const rutaDoc = `${base}/${doc.archivo}`;
     const { error: errSubida } = await supabase.storage
       .from("documentos")
       .upload(rutaDoc, doc.buffer, {
-        contentType:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentType: doc.contentType,
         upsert: true,
       });
     if (!errSubida) {
@@ -116,15 +145,15 @@ export async function GET(
     version: canonico.meta.version,
     payload: canonico,
     payload_hash: payloadHash,
-    storage_path: `${base}/${paquete.zipNombre}`,
+    storage_path: `${base}/${zipNombre}`,
     generado_por: user?.id ?? null,
   });
 
   // 5) El ZIP baja directo al navegador.
-  return new NextResponse(new Uint8Array(paquete.zip), {
+  return new NextResponse(new Uint8Array(zipFinal), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${paquete.zipNombre}"`,
+      "Content-Disposition": `attachment; filename="${zipNombre}"`,
     },
   });
 }
