@@ -1,24 +1,33 @@
-# Convertidor Word→PDF (Gotenberg en el VPS)
+# Convertidor Word→PDF (Gotenberg en el VPS 147.93.183.165)
 
-Pasos en el VPS (una sola vez):
+## Lo desplegado (2026-07-16)
 
-```bash
-ssh root@147.93.183.165
-curl -fsSL https://get.docker.com | sh        # si Docker no está instalado
-mkdir -p /opt/gotenberg && cd /opt/gotenberg
-# copiar aquí docker-compose.yml y Caddyfile (de esta carpeta del repo)
-echo 'GOTENBERG_TOKEN=<LA_LLAVE>' > .env   # la llave la genera/da Claude
-docker compose up -d
-```
-
-Verificar desde cualquier máquina:
+El VPS ya tiene nginx-proxy-manager ocupando 80/443, así que NO se usa el
+docker-compose con Caddy de esta carpeta (queda como alternativa para un VPS
+limpio). Lo que corre:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://147-93-183-165.sslip.io/health
-# 401 = vivo y protegido (falta la llave). Con la llave:
-curl -s -H "X-Api-Key: <LLAVE>" https://147-93-183-165.sslip.io/health
-# → {"status":"up"}
+docker run -d --name gotenberg --restart unless-stopped \
+  --network proxy_reverse_default \
+  gotenberg/gotenberg:8 gotenberg --api-timeout=60s
 ```
 
-La llave vive en `GOTENBERG_TOKEN` (env de la app; nunca en el repo).
-La app usa `GOTENBERG_URL=https://147-93-183-165.sslip.io`.
+Sin puertos públicos: solo el proxy lo alcanza como `gotenberg:3000`.
+Verificado end-to-end: F.033 relleno real → PDF en ~2.7 s.
+
+## Exposición (proxy host en nginx-proxy-manager)
+
+- Domain: `gotenberg.147-93-183-165.sslip.io` (sslip.io resuelve al VPS)
+- Forward: `gotenberg` puerto `3000` (http)
+- SSL: Let's Encrypt + Force SSL
+- Advanced (la llave de API + tamaño de los docx):
+
+```nginx
+if ($http_x_api_key != "<GOTENBERG_TOKEN>") { return 401; }
+client_max_body_size 25m;
+```
+
+## La app
+
+- `GOTENBERG_URL=https://gotenberg.147-93-183-165.sslip.io`
+- `GOTENBERG_TOKEN=<la llave>` (en .env.local y en Vercel; nunca en el repo)
