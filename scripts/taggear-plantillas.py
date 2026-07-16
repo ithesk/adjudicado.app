@@ -102,6 +102,27 @@ def registrar_prefijos(xml):
         ET.register_namespace(pref, uri)
 
 
+def restaurar_xmlns(original, serializado):
+    """ElementTree solo declara los namespaces USADOS, pero mc:Ignorable
+    referencia prefijos por nombre (w14, wp14…): si su declaración falta,
+    Word marca el documento como ilegible. Se fusionan en la raíz las
+    declaraciones del original que el serializador haya descartado."""
+    m_orig = re.search(r"<w:(document|hdr)([^>]*)>", original)
+    m_ser = re.search(r"<w:(document|hdr)([^>]*)>", serializado)
+    if not m_orig or not m_ser:
+        return serializado
+    declarados = dict(re.findall(r'(xmlns:[\w-]+)="([^"]*)"', m_ser.group(2)))
+    faltantes = [
+        f'{k}="{v}"'
+        for k, v in re.findall(r'(xmlns:[\w-]+)="([^"]*)"', m_orig.group(2))
+        if k not in declarados
+    ]
+    if not faltantes:
+        return serializado
+    nuevo = f"<w:{m_ser.group(1)}{m_ser.group(2)} " + " ".join(faltantes) + ">"
+    return serializado.replace(m_ser.group(0), nuevo, 1)
+
+
 # ---------- especificación por plantilla ----------
 
 def taggear_f034(root):
@@ -214,7 +235,8 @@ def procesar(nombre, fn):
         root = ET.fromstring(xml)
         if parte == "word/document.xml":
             fn(root)
-        partes[parte] = ET.tostring(root, encoding="unicode").encode("utf8")
+        serializado = ET.tostring(root, encoding="unicode")
+        partes[parte] = restaurar_xmlns(xml, serializado).encode("utf8")
 
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
         for n, data in partes.items():
