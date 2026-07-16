@@ -114,14 +114,12 @@ export default function BidRoom({
               {textoDias(dias)}
             </span>
             {proceso.cierre && (
+              // Formato manual desde el texto guardado: sin new Date() no hay
+              // desajuste de hidratación ni corrimiento de zona horaria — la
+              // hora del pliego es la hora que se ve.
               <p className="mt-1 text-[11px] text-muted">
-                Cierre:{" "}
-                {new Date(proceso.cierre).toLocaleString("es-DO", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                Cierre: {proceso.cierre.slice(8, 10)}/{proceso.cierre.slice(5, 7)}{" "}
+                {proceso.cierre.slice(11, 16)}
               </p>
             )}
           </div>
