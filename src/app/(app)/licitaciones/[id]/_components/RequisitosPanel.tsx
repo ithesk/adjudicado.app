@@ -56,9 +56,11 @@ const ORDEN_GRUPOS: (GrupoRequisito | "otros")[] = [
 export default function RequisitosPanel({
   procesoId,
   requisitos,
+  plantillasOrg = [],
 }: {
   procesoId: string;
   requisitos: LicRequisito[];
+  plantillasOrg?: { codigo: string; nombre: string }[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +127,7 @@ export default function RequisitosPanel({
       {modo === "checklist" && (
         <ChecklistPicker
           yaEstan={new Set(requisitos.map((r) => r.codigo))}
+          plantillasOrg={plantillasOrg}
           pendiente={pendiente}
           onAgregar={(codigos) => {
             correr(() => crearRequisitosLoteAction(procesoId, codigos));
@@ -190,10 +193,12 @@ export default function RequisitosPanel({
 // los "si aplica". Un clic y entran todos.
 function ChecklistPicker({
   yaEstan,
+  plantillasOrg,
   pendiente,
   onAgregar,
 }: {
   yaEstan: Set<string>;
+  plantillasOrg: { codigo: string; nombre: string }[];
   pendiente: boolean;
   onAgregar: (codigos: string[]) => void;
 }) {
@@ -270,7 +275,37 @@ function ChecklistPicker({
           </div>
         );
       })}
-      {disponibles.length === 0 ? (
+      {plantillasOrg.filter((p) => !yaEstan.has(p.codigo)).length > 0 && (
+        <div className="mb-2">
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+            Tus plantillas (Configuración → Plantillas)
+          </p>
+          <div className="grid gap-0.5 sm:grid-cols-2">
+            {plantillasOrg
+              .filter((p) => !yaEstan.has(p.codigo))
+              .map((p) => (
+                <label
+                  key={p.codigo}
+                  className="flex cursor-pointer items-start gap-2 rounded px-1.5 py-1 text-[12.5px] text-ink transition-colors hover:bg-surface-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={marcados.has(p.codigo)}
+                    onChange={() => toggle(p.codigo)}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0">
+                    {p.nombre}
+                    <span className="ml-1 rounded bg-primary/10 px-1 align-middle text-[9.5px] font-semibold uppercase text-primary">
+                      Se genera
+                    </span>
+                  </span>
+                </label>
+              ))}
+          </div>
+        </div>
+      )}
+      {disponibles.length === 0 && plantillasOrg.filter((p) => !yaEstan.has(p.codigo)).length === 0 ? (
         <p className="text-[12.5px] text-muted">
           Todo el checklist estándar ya está en este proceso.
         </p>
@@ -352,8 +387,9 @@ function FilaRequisito({
   const critico = !r.subsanable;
   const pendienteEstado = r.estado === "pendiente";
   const estandar = requisitoEstandar(r.codigo);
-  // Por dónde llega este documento (los personalizados se suben).
-  const via = estandar?.via ?? "sube";
+  // Por dónde llega: estándar → su vía; origen "generado" (plantilla de la
+  // org creada en el constructor) → se genera aquí; el resto se sube.
+  const via = estandar?.via ?? (r.origen === "generado" ? "genera" : "sube");
   const cubiertoPorEmpresa = r.origen === "documento_empresa" && !!r.documento_empresa_id;
 
   return (

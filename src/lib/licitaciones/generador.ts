@@ -187,6 +187,22 @@ export function rellenarPlantilla(
   return doc.toBuffer();
 }
 
+// Una plantilla del CONSTRUCTOR (la subió la organización, vive en storage).
+export function generarDesdeBuffer(
+  codigo: string,
+  nombre: string,
+  plantilla: Buffer,
+  canonico: ProcesoCanonico,
+  imagenes: ImagenesFirma = {},
+): DocGenerado {
+  return {
+    codigo,
+    nombre,
+    archivo: `${codigo.replace(/[^\w-]+/g, "_")}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}.docx`,
+    buffer: rellenarPlantilla(plantilla, construirDatos(canonico), imagenes),
+  };
+}
+
 export function generarDocumento(
   codigo: string,
   canonico: ProcesoCanonico,

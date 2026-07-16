@@ -49,12 +49,14 @@ function estacionInicial(estado: EstadoLicitacion): Estacion {
 export default function BidRoom({
   detalle,
   instituciones,
+  plantillasOrg,
   params,
   tieneFirmantes,
   tienePerfil,
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
+  plantillasOrg: { codigo: string; nombre: string }[];
   params: ParamsCotizacion;
   tieneFirmantes: boolean;
   tienePerfil: boolean;
@@ -70,12 +72,15 @@ export default function BidRoom({
   const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
   const nivel = nivelUrgencia(dias);
   const criticosPendientes = noSubsanablesPendientes(requisitos);
-  // El gate del paquete no cuenta los que la propia generación produce.
+  // El gate del paquete no cuenta los que la propia generación produce —
+  // incluidas las plantillas construidas por la organización.
+  const codigosPlantillas = plantillasOrg.map((p) => p.codigo);
   const criticosBloqueantes = requisitos.filter(
     (q) =>
       !q.subsanable &&
       q.estado === "pendiente" &&
-      !CODIGOS_GENERABLES.includes(q.codigo),
+      !CODIGOS_GENERABLES.includes(q.codigo) &&
+      !codigosPlantillas.includes(q.codigo),
   ).length;
   const totales = totalesProceso(items, params.itbisPct);
   const sinCotizar = items.filter(
@@ -205,7 +210,11 @@ export default function BidRoom({
       )}
 
       {estacion === "requisitos" && (
-        <RequisitosPanel procesoId={proceso.id} requisitos={requisitos} />
+        <RequisitosPanel
+          procesoId={proceso.id}
+          requisitos={requisitos}
+          plantillasOrg={plantillasOrg}
+        />
       )}
 
       {estacion === "items" && (

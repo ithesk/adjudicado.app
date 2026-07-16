@@ -17,11 +17,14 @@ import { createClient } from "@/lib/supabase/server";
 import { construirCanonico } from "@/lib/licitaciones/queries";
 import {
   GENERABLES,
-  generarPaquete,
+  generarDesdeBuffer,
+  generarDocumento,
+  type DocGenerado,
   type ImagenesFirma,
 } from "@/lib/licitaciones/generador";
+import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
+import PizZipLib from "pizzip";
 import { docxAPdf, pdfDisponible } from "@/lib/licitaciones/pdf";
-import PizZip from "pizzip";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
 
 export const runtime = "nodejs";
@@ -58,14 +61,28 @@ export async function GET(
   }
   const canonico = r.canonico as ProcesoCanonico;
 
-  // 2) EL GATE: ningún NO subsanable pendiente. Bloqueo duro.
-  const { data: requisitos } = await supabase
-    .from("lic_requisito")
-    .select("id, codigo, subsanable, estado, nombre")
-    .eq("proceso_id", id)
-    .eq("org_id", miembro.org_id);
+  // 2) EL GATE: ningún NO subsanable pendiente. Bloqueo duro. Lo que la
+  //    propia generación produce no bloquea — incluidas las plantillas que
+  //    la organización construyó (lic_plantilla en estado "lista").
+  const [{ data: requisitos }, { data: plantillasOrg }] = await Promise.all([
+    supabase
+      .from("lic_requisito")
+      .select("id, codigo, subsanable, estado, nombre")
+      .eq("proceso_id", id)
+      .eq("org_id", miembro.org_id),
+    supabase
+      .from("lic_plantilla")
+      .select("*")
+      .eq("org_id", miembro.org_id)
+      .eq("estado", "lista"),
+  ]);
+  const plantillaPorCodigo = new Map(
+    ((plantillasOrg ?? []) as LicPlantilla[]).map((p) => [p.codigo, p]),
+  );
+  const esGenerable = (codigo: string) =>
+    Boolean(GENERABLES[codigo] || plantillaPorCodigo.has(codigo));
   const criticos = (requisitos ?? []).filter(
-    (q) => !q.subsanable && q.estado === "pendiente" && !GENERABLES[q.codigo],
+    (q) => !q.subsanable && q.estado === "pendiente" && !esGenerable(q.codigo),
   );
   if (criticos.length > 0) {
     return NextResponse.json(
@@ -77,13 +94,13 @@ export async function GET(
     );
   }
 
-  // 3) Qué se genera: los requisitos del proceso que tienen plantilla.
+  // 3) Qué se genera: los requisitos con plantilla — del sistema o de la org.
   const codigos = (requisitos ?? [])
-    .filter((q) => GENERABLES[q.codigo])
+    .filter((q) => esGenerable(q.codigo))
     .map((q) => q.codigo);
   if (codigos.length === 0) {
     return NextResponse.json(
-      { error: "Este proceso no tiene requisitos generables (F.033/034/042). Agrégalos con el checklist." },
+      { error: "Este proceso no tiene requisitos generables (F.033/034/042 o plantillas propias). Agrégalos con el checklist." },
       { status: 422 },
     );
   }
@@ -105,15 +122,42 @@ export async function GET(
     if (archivo) imagenes[tipo] = Buffer.from(await archivo.arrayBuffer());
   }
 
-  // 5) Generar (y convertir a PDF si se pidió) y registrar.
-  const paquete = generarPaquete(codigos, canonico, imagenes);
-  let archivos = paquete.documentos.map((d) => ({
+  // 5) Generar (sistema + plantillas de la org), convertir si se pidió, registrar.
+  const documentos: DocGenerado[] = [];
+  for (const codigo of codigos) {
+    if (GENERABLES[codigo]) {
+      documentos.push(generarDocumento(codigo, canonico, imagenes));
+      continue;
+    }
+    const plantilla = plantillaPorCodigo.get(codigo)!;
+    const { data: tpl } = await supabase.storage
+      .from("documentos")
+      .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
+    if (!tpl) {
+      return NextResponse.json(
+        { error: `No se pudo leer la plantilla ${plantilla.nombre} (${codigo}).` },
+        { status: 500 },
+      );
+    }
+    documentos.push(
+      generarDesdeBuffer(
+        codigo,
+        plantilla.nombre,
+        Buffer.from(await tpl.arrayBuffer()),
+        canonico,
+        imagenes,
+      ),
+    );
+  }
+  const zipDocx = new PizZipLib();
+  for (const d of documentos) zipDocx.file(d.archivo, d.buffer);
+  let archivos = documentos.map((d) => ({
     ...d,
     contentType:
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   }));
-  let zipFinal = paquete.zip;
-  let zipNombre = paquete.zipNombre;
+  let zipFinal: Buffer = zipDocx.generate({ type: "nodebuffer", compression: "DEFLATE" });
+  let zipNombre = `paquete_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;
   if (formato === "pdf") {
     archivos = await Promise.all(
       archivos.map(async (d) => ({
@@ -123,10 +167,10 @@ export async function GET(
         contentType: "application/pdf",
       })),
     );
-    const zipPdf = new PizZip();
+    const zipPdf = new PizZipLib();
     for (const d of archivos) zipPdf.file(d.archivo, d.buffer);
     zipFinal = zipPdf.generate({ type: "nodebuffer", compression: "DEFLATE" });
-    zipNombre = paquete.zipNombre.replace(/\.zip$/, "_pdf.zip");
+    zipNombre = zipNombre.replace(/\.zip$/, "_pdf.zip");
   }
   const user = await getUser();
   const payloadHash = createHash("sha256")

@@ -8,6 +8,26 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Constructor Fase 2: las plantillas propias entran al paquete
+
+**Hecho:** el círculo cerrado. Los requisitos cuyo código coincide con una plantilla
+"lista" del constructor se generan en el paquete junto a los 7 del sistema:
+
+- La ruta `/generar` resuelve cada requisito contra GENERABLES ∪ `lic_plantilla` (lista):
+  las del sistema salen del repo, las de la org se descargan de storage y se rellenan con
+  el mismo `construirDatos` + firma/sello.
+- El **gate** reconoce las plantillas propias: un requisito crítico cuyo documento genera
+  el propio botón no bloquea.
+- El **picker del checklist** gana el grupo "Tus plantillas" (con chip "Se genera"), y
+  `crearRequisitosLote` crea el requisito desde la plantilla (subsanable por defecto,
+  firma GG, origen generado). Las filas muestran la vía "Se genera aquí".
+
+**Pendiente de verificación de Pablo:** subir una plantilla real en el constructor,
+taggearla, publicarla, agregarla a un proceso por el checklist y generar el paquete — su
+documento debe salir en el ZIP con los datos del expediente.
+
+---
+
 ## 2026-07-16 — Constructor de plantillas, Fase 1: taggear sin código
 
 **Contexto:** Pablo pidió que el usuario suba un Word, arrastre variables y la plantilla
