@@ -214,6 +214,24 @@ def taggear_f033(root):
             tbl.remove(tr)
 
 
+def limpiar_formato_de_tags(root):
+    """Las instrucciones originales venían en ROJO (y a veces cursiva) para
+    señalar dónde va el dato. El dato rellenado NO debe heredar eso: todo run
+    que contenga un marcador {…} pierde color y cursiva (queda el negro y la
+    fuente del formulario)."""
+    for r in root.iter(f"{{{W}}}r"):
+        texto = "".join(t.text or "" for t in r.iter(f"{{{W}}}t"))
+        if "{" not in texto:
+            continue
+        rpr = r.find(f"{{{W}}}rPr")
+        if rpr is None:
+            continue
+        for tag in ("color", "i", "iCs", "highlight"):
+            el = rpr.find(f"{{{W}}}{tag}")
+            if el is not None:
+                rpr.remove(el)
+
+
 PLANTILLAS = {
     "SNCC_F034_Presentacion_de_Oferta": taggear_f034,
     "SNCC_F042_Informacion_Oferente": taggear_f042,
@@ -225,6 +243,13 @@ PLANTILLAS = {
 SDT_GLOBAL = [
     ("Click here to enter text.", "{expediente}"),
     ("Seleccione la fecha", "{fecha}"),
+]
+
+# Textos guía del membrete: aparecen en encabezados Y en las cajas de texto
+# duplicadas dentro del documento. Ahí va la entidad convocante.
+TEXTO_GLOBAL = [
+    ("Nombre del Capitulo y/o dependencia gubernamental", "{entidad_nombre}"),
+    ("Nombre del Departamento ó Unidad Funcional que genera el formulario", "{unidad_funcional}"),
 ]
 
 
@@ -248,6 +273,9 @@ def procesar(nombre, fn):
         root = ET.fromstring(xml)
         if parte == "word/document.xml":
             fn(root)
+        for objetivo, tag in TEXTO_GLOBAL:
+            reemplazar(root, objetivo, tag, todas=True)
+        limpiar_formato_de_tags(root)
         serializado = ET.tostring(root, encoding="unicode")
         partes[parte] = restaurar_xmlns(xml, serializado).encode("utf8")
 

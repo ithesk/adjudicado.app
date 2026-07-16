@@ -8,6 +8,38 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Fase 4a: las plantillas DGCP rellenan de verdad (3 bugs de Word cazados)
+
+**Hecho:** plantillas oficiales F.033/034/042/047 descargadas del portal DGCP, taggeadas
+con `scripts/taggear-plantillas.py` (reproducible) y verificadas rellenando con
+docxtemplater (`scripts/probar-relleno.mjs`). Previews con datos de ejemplo en
+~/Downloads/adjudicado-formularios-preview para el ojo de Pablo.
+
+**Tres bugs de "Word no lo abre" — las lecciones importan más que los parches:**
+
+1. **xmlns descartados:** ElementTree solo declara los namespaces USADOS, pero
+   `mc:Ignorable` referencia prefijos por nombre (w14, wp14…) → si su declaración
+   desaparece, Word marca contenido ilegible. Fix: `restaurar_xmlns()` fusiona en la raíz
+   lo que falte.
+2. **sdt de bloque → run:** el control "No. EXPEDIENTE" de los encabezados contiene
+   párrafos; sustituirlo por un run pelado deja XML bien formado que Word NO abre (error
+   duro, en las 4). Fix: detectar el nivel y emitir párrafo con su pPr.
+3. **El dato heredaba el ROJO** de las instrucciones originales (y en los membretes
+   quedaban los textos guía "Nombre del Capítulo…"). Fix: pasada `limpiar_formato_de_tags`
+   (color/cursiva fuera de los runs con marcador) + `TEXTO_GLOBAL` aplicado a headers.
+
+**Lección de proceso:** "XML bien formado" ≠ "Word lo abre". El chequeo estructural
+(runs en nivel de bloque, Ignorable ⊆ declarados, placeholders residuales) quedó en el
+script, y la validación con un lector independiente (textutil) antes de pedirle a Pablo
+que pruebe.
+
+**Sigue (Fase 4b):** cablear "Generar paquete" (expediente → mapper → docx rellenos → ZIP).
+Pendiente señalado por Pablo: plantillas para Compromiso Ético (anexo del pliego), DJ
+art. 38 y carta de aceptación (cartas propias, se generan desde cero); la Debida
+Diligencia es formulario propio de cada entidad (vía "sube").
+
+---
+
 ## 2026-07-16 — La Bid Room como línea de tiempo (feedback de Pablo)
 
 **Contexto:** "la primera pantalla debe pedir datos del proceso, todo tiene que ser una

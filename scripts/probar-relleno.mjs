@@ -6,6 +6,7 @@ const datos = {
   expediente: "OGTIC-CCC-CP-2026-0011",
   fecha: "16 de julio de 2026",
   entidad_nombre: "Oficina Gubernamental de Tecnologías de la Información",
+  unidad_funcional: "",
   empresa_nombre: "Innovación Tecnológica SK, SRL",
   rnc: "1-31-12345-6", rpe: "12345",
   empresa_direccion: "Av. Winston Churchill, Santo Domingo",
