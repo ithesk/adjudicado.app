@@ -84,13 +84,26 @@ def reemplazar(root, objetivo, reemplazo, es_regex=False, todas=False):
 # ---------- controles de contenido (sdt) → texto plano con tag ----------
 
 def sustituir_sdt(xml, marcador_texto, tag):
-    """Reemplaza cada bloque <w:sdt>…marcador…</w:sdt> por un run plano."""
+    """Reemplaza cada control <w:sdt>…marcador…</w:sdt> por texto plano.
+
+    OJO con el nivel: un sdt puede ser INLINE (vive dentro de un párrafo,
+    se sustituye por un run) o de BLOQUE (contiene párrafos; sustituirlo por
+    un run pelado produce un documento que Word no puede abrir). En el caso
+    bloque se emite un párrafo, conservando el pPr original (alineación)."""
     patron = re.compile(
         r"<w:sdt>(?:(?!</?w:sdt>).)*?" + re.escape(marcador_texto) + r"(?:(?!</?w:sdt>).)*?</w:sdt>",
         re.S,
     )
     run = f'<w:r><w:t xml:space="preserve">{tag}</w:t></w:r>'
-    return patron.subn(run, xml)
+
+    def reemplazo(m):
+        bloque = m.group(0)
+        if "<w:p " in bloque or "<w:p>" in bloque:
+            ppr = re.search(r"<w:pPr>(?:(?!</w:pPr>).)*?</w:pPr>", bloque, re.S)
+            return f"<w:p>{ppr.group(0) if ppr else ''}{run}</w:p>"
+        return run
+
+    return patron.subn(reemplazo, xml)
 
 
 # ---------- namespaces: conservar los prefijos originales ----------
