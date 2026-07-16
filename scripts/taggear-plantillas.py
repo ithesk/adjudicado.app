@@ -148,6 +148,9 @@ def taggear_f034(root):
 
 
 def taggear_f042(root):
+    # La instrucción de cabecera es para el oferente, no parte del documento
+    # a entregar: se elimina del formulario rellenado.
+    reemplazar(root, r"\[El Oferente deberá completar[^\]]*\]", "", es_regex=True)
     reemplazar(root, r"Fecha: _+", "Fecha: {fecha}", es_regex=True)
     reemplazar(root, "[indicar el nombre jurídico del Oferente]", "{empresa_nombre}")
     reemplazar(root, "[indicar el nombre jurídico de cada miembro del Consorcio]", "{consorcio}")
