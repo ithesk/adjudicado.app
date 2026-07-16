@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
-import { ProcesoCanonico } from "./contrato";
+import { ProcesoCanonico, traducirIssue } from "./contrato";
 import { paramsCotizacion, precioVentaUnitario } from "./cotizador";
 import { requisitoEstandar } from "./requisitos-estandar";
 import {
@@ -683,11 +683,8 @@ export async function construirCanonico(procesoId: string): Promise<ResultadoCan
 
   const r = ProcesoCanonico.safeParse(candidato);
   if (r.success) return { canonico: r.data };
-  return {
-    errores: r.error.issues.map(
-      (i) => `${i.path.join(".") || "(raíz)"}: ${i.message}`,
-    ),
-  };
+  // Sin duplicados: varios issues de Zod pueden traducir al mismo consejo.
+  return { errores: [...new Set(r.error.issues.map((i) => traducirIssue(i.path, i.message)))] };
 }
 
 const ROL_CARGO: Record<string, string> = {

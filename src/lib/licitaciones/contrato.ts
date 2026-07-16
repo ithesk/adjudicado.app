@@ -196,6 +196,65 @@ export const ProcesoCanonico = z
   });
 
 export type ProcesoCanonico = z.infer<typeof ProcesoCanonico>;
+
+// ---------- errores en cristiano ----------
+// La validación le habla al usuario, no al programador: qué falta y DÓNDE se
+// arregla ("oferente.rpe: Too small…" no le dice nada a nadie).
+
+const CAMPO_EMPRESA: Record<string, string> = {
+  razon_social: "la razón social",
+  rnc: "el RNC",
+  rpe: "el RPE (Registro de Proveedores del Estado)",
+  direccion: "la dirección",
+  telefono: "el teléfono",
+  email: "el email",
+};
+
+const CAMPO_PROCESO: Record<string, string> = {
+  codigo: "el código del proceso",
+  objeto: "el objeto de la contratación",
+  modalidad: "la modalidad",
+};
+
+export function traducirIssue(
+  path: (string | number | symbol)[],
+  mensaje: string,
+): string {
+  const [raiz, ...resto] = path.map(String);
+
+  if (raiz === "oferente") {
+    return `Falta ${CAMPO_EMPRESA[resto[0]] ?? `el dato "${resto[0]}"`} de la empresa — complétalo en Configuración → Empresa`;
+  }
+  if (raiz === "firmantes") {
+    return resto.length === 0
+      ? "Faltan los firmantes (Gerente General y de Ventas) — complétalos en Configuración → Empresa"
+      : "Hay un firmante incompleto (nombre y cargo) — Configuración → Empresa";
+  }
+  if (raiz === "proceso") {
+    if (resto.join(".").startsWith("cronograma.cierre"))
+      return "Falta la fecha y HORA de cierre — estación 1 · Proceso";
+    if (resto[0] === "entidad")
+      return "Falta la entidad convocante — elígela o créala en 1 · Proceso";
+    if (CAMPO_PROCESO[resto[0]])
+      return `Falta ${CAMPO_PROCESO[resto[0]]} — estación 1 · Proceso`;
+    return `Dato del proceso incompleto (${resto.join(".")}) — estación 1 · Proceso`;
+  }
+  if (raiz === "lotes") {
+    if (resto.length === 0)
+      return "No hay ítems en el expediente — cárgalos en 3 · Ítems";
+    const campo = resto.at(-1);
+    if (campo === "motivo_descarte")
+      return "Hay un ítem descartado sin su motivo — complétalo en 3 · Ítems";
+    if (campo === "spec_cruda")
+      return "Hay un ítem sin la descripción del pliego — complétala en 3 · Ítems";
+    return `Hay un ítem incompleto (${campo}) — revísalo en 3 · Ítems`;
+  }
+  if (raiz === "economico") {
+    if (mensaje.includes("no existe o no se oferta")) return mensaje;
+    return "Hay una línea económica incompleta o con precio inválido — revísala en 3 · Ítems";
+  }
+  return `${path.join(".") || "expediente"}: ${mensaje}`;
+}
 export type ItemCanonico = z.infer<typeof Item>;
 export type RequisitoCanonico = z.infer<typeof Requisito>;
 export type LineaEconomicaCanonica = z.infer<typeof LineaEconomica>;
