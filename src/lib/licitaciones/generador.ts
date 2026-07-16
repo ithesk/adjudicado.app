@@ -1,0 +1,145 @@
+// El motor documental (Fase 4): del expediente canónico validado a los
+// formularios oficiales rellenados. SOLO SERVIDOR (lee plantillas del disco).
+//
+// Regla de fidelidad: se rellenan las plantillas -tpl (los .docx oficiales de
+// la DGCP con marcadores), nunca se regenera un formato propio.
+
+import fs from "node:fs";
+import path from "node:path";
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
+import { montoALetras } from "./letras";
+import type { ProcesoCanonico } from "./contrato";
+
+const DIR_PLANTILLAS = path.join(process.cwd(), "plantillas", "dgcp");
+
+// Qué requisito del checklist se genera con qué plantilla.
+export const GENERABLES: Record<string, { plantilla: string; nombre: string }> = {
+  "SNCC.F.034": {
+    plantilla: "SNCC_F034_Presentacion_de_Oferta-tpl.docx",
+    nombre: "Presentación de Oferta",
+  },
+  "SNCC.F.042": {
+    plantilla: "SNCC_F042_Informacion_Oferente-tpl.docx",
+    nombre: "Información sobre el Oferente",
+  },
+  "SNCC.F.033": {
+    plantilla: "SNCC_F033_Of_Economica-tpl.docx",
+    nombre: "Oferta Económica",
+  },
+};
+
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+  "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+function fechaLarga(d = new Date()): string {
+  return `${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+// Formato es-DO (1,234.56) determinista, sin depender del ICU del entorno.
+function num(n: number): string {
+  const [ent, dec] = n.toFixed(2).split(".");
+  return `${ent.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${dec}`;
+}
+
+// Construye el objeto de datos que docxtemplater inyecta. Regla dura: el
+// MAPPER formatea (números como texto es-DO), la plantilla no calcula nada.
+export function construirDatos(canonico: ProcesoCanonico): Record<string, unknown> {
+  const gg =
+    canonico.firmantes.find((f) => f.rol === "gerente_general") ??
+    canonico.firmantes[0];
+
+  const items = canonico.lotes.flatMap((l) => l.items);
+  let totalOferta = 0;
+  const lineas = (canonico.economico?.lineas ?? []).map((linea) => {
+    const item = items.find((i) => i.numero === linea.item);
+    const subtotal = Math.round(linea.precio_unitario * (item?.cantidad ?? 1) * 100) / 100;
+    const itbis = linea.itbis_aplica
+      ? Math.round(((subtotal * (canonico.economico?.itbis_pct ?? 18)) / 100) * 100) / 100
+      : 0;
+    totalOferta = Math.round((totalOferta + subtotal + itbis) * 100) / 100;
+    return {
+      numero: linea.item,
+      descripcion: item?.producto?.descripcion ?? item?.spec_cruda ?? "",
+      unidad: item?.unidad ?? "UD",
+      cantidad: num(item?.cantidad ?? 1).replace(/\.00$/, ""),
+      precio_unitario: num(linea.precio_unitario),
+      itbis_monto: num(itbis),
+      total: num(subtotal + itbis),
+    };
+  });
+
+  return {
+    // Identidad del proceso
+    expediente: canonico.proceso.codigo,
+    fecha: fechaLarga(),
+    entidad_nombre: canonico.proceso.entidad.nombre,
+    unidad_funcional: "",
+    // La empresa (snapshot del canónico)
+    empresa_nombre: canonico.oferente.razon_social,
+    rnc: canonico.oferente.rnc,
+    rpe: canonico.oferente.rpe,
+    empresa_direccion: canonico.oferente.direccion,
+    empresa_telefono: canonico.oferente.telefono,
+    empresa_email: canonico.oferente.email,
+    // Firmante (el GG firma la presentación y la económica)
+    rep_nombre: gg?.nombre ?? "",
+    rep_cargo: gg?.cargo ?? "",
+    rep_direccion: canonico.oferente.direccion,
+    // Cuerpo del F.034
+    consorcio: "No aplica",
+    enmiendas: "No aplica",
+    bienes_descripcion:
+      canonico.proceso.objeto ||
+      items.filter((i) => i.ofertamos).map((i) => i.spec_cruda).join("; "),
+    // La económica
+    lineas,
+    total_oferta: num(totalOferta),
+    total_letras: montoALetras(totalOferta),
+  };
+}
+
+export interface DocGenerado {
+  codigo: string;
+  nombre: string;
+  archivo: string; // nombre de archivo propuesto
+  buffer: Buffer;
+}
+
+export function generarDocumento(
+  codigo: string,
+  canonico: ProcesoCanonico,
+): DocGenerado {
+  const def = GENERABLES[codigo];
+  if (!def) throw new Error(`No hay plantilla para ${codigo}`);
+  const zip = new PizZip(fs.readFileSync(path.join(DIR_PLANTILLAS, def.plantilla)));
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+    nullGetter: () => "",
+  });
+  doc.render(construirDatos(canonico));
+  return {
+    codigo,
+    nombre: def.nombre,
+    archivo: `${codigo.replace(/\./g, "_")}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}.docx`,
+    buffer: doc.toBuffer(),
+  };
+}
+
+// El paquete: cada formulario generado + un ZIP con todos.
+export function generarPaquete(
+  codigos: string[],
+  canonico: ProcesoCanonico,
+): { documentos: DocGenerado[]; zip: Buffer; zipNombre: string } {
+  const documentos = codigos.map((c) => generarDocumento(c, canonico));
+  const zip = new PizZip();
+  for (const d of documentos) zip.file(d.archivo, d.buffer);
+  return {
+    documentos,
+    zip: zip.generate({ type: "nodebuffer", compression: "DEFLATE" }),
+    zipNombre: `paquete_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`,
+  };
+}

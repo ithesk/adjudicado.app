@@ -8,6 +8,26 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Fase 4b: "Generar paquete" vivo — del expediente al ZIP
+
+**Hecho:** el ciclo completo. `src/lib/licitaciones/letras.ts` (monto en letras es-DO,
+implementación propia — ruta crítica legal, con 22 tests incluyendo apócopes VEINTIÚN/UN y
+el redondeo del monto completo) · `generador.ts` (canónico → datos → docxtemplater →
+.docx; el mapper formatea, la plantilla no calcula) · `GET /api/licitaciones/{id}/generar`:
+valida el expediente (422 con faltantes), aplica **EL GATE como bloqueo duro** (409 si hay
+NO subsanables pendientes — sin contar F.033/034/042, que son lo que la generación
+produce), rellena, sube cada .docx y el ZIP a storage, marca los requisitos generados como
+listos con su archivo, registra `lic_paquete` (payload + hash: idempotencia) y baja el ZIP.
+Botón "Generar paquete" vivo en la Bid Room (deshabilitado si el gate bloquea; errores
+legibles en pantalla). `outputFileTracingIncludes` para que Vercel empaquete las plantillas
+(el ENOENT clásico no aparece en dev).
+
+**Pendiente:** prueba end-to-end de Pablo con su expediente real (clic en Generar → abrir
+el ZIP). PDF + firma estampada = siguiente corte (Gotenberg + pdf-lib). Cartas propias
+(DJ art. 38, aceptación de condiciones) y Compromiso Ético: próxima tanda de plantillas.
+
+---
+
 ## 2026-07-16 — Fase 4a: las plantillas DGCP rellenan de verdad (3 bugs de Word cazados)
 
 **Hecho:** plantillas oficiales F.033/034/042/047 descargadas del portal DGCP, taggeadas

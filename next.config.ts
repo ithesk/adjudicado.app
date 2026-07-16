@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // El generador lee las plantillas del disco con rutas dinámicas: sin esto,
+  // funciona en dev y explota en Vercel con ENOENT (el tracer no las ve).
+  outputFileTracingIncludes: {
+    "/api/licitaciones/[id]/generar": ["./plantillas/dgcp/*-tpl.docx"],
+  },
   experimental: {
     serverActions: {
       // Las server actions reciben archivos (documentos de empresa, archivos

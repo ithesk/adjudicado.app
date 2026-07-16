@@ -24,6 +24,7 @@ import {
   type EstadoLicitacion,
   type ProcesoDetalle,
 } from "@/lib/licitaciones/tipos";
+import { CODIGOS_GENERABLES } from "@/lib/licitaciones/requisitos-estandar";
 import { totalesProceso, type ParamsCotizacion } from "@/lib/licitaciones/cotizador";
 import {
   actualizarProcesoAction,
@@ -69,10 +70,40 @@ export default function BidRoom({
   const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
   const nivel = nivelUrgencia(dias);
   const criticosPendientes = noSubsanablesPendientes(requisitos);
+  // El gate del paquete no cuenta los que la propia generación produce.
+  const criticosBloqueantes = requisitos.filter(
+    (q) =>
+      !q.subsanable &&
+      q.estado === "pendiente" &&
+      !CODIGOS_GENERABLES.includes(q.codigo),
+  ).length;
   const totales = totalesProceso(items, params.itbisPct);
   const sinCotizar = items.filter(
     (i) => i.ofertamos && i.precio_unitario === null,
   ).length;
+
+  function generarPaquete() {
+    setValidacion(null);
+    startTransition(async () => {
+      const res = await fetch(`/api/licitaciones/${proceso.id}/generar`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
+        return;
+      }
+      const blob = await res.blob();
+      const nombre =
+        res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ??
+        "paquete.zip";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombre;
+      a.click();
+      URL.revokeObjectURL(url);
+      router.refresh(); // los requisitos generados quedaron listos
+    });
+  }
 
   function cambiarEstado(estado: EstadoLicitacion) {
     startTransition(async () => {
@@ -216,12 +247,17 @@ export default function BidRoom({
             </button>
             <button
               type="button"
-              disabled
-              title="Fase 4: rellenar los formularios oficiales, convertir a PDF, firmar y empaquetar"
-              className={btnPrimary("opacity-50")}
+              onClick={generarPaquete}
+              disabled={pendiente || criticosBloqueantes > 0}
+              title={
+                criticosBloqueantes > 0
+                  ? "Bloqueado: hay requisitos NO subsanables pendientes (los formularios que este botón genera no cuentan)"
+                  : "Rellena los formularios oficiales (F.033/034/042) con el expediente y descarga el ZIP"
+              }
+              className={btnPrimary(criticosBloqueantes > 0 ? "opacity-50" : "")}
             >
               <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-              Generar paquete (próximamente)
+              {pendiente ? "Generando…" : "Generar paquete"}
             </button>
           </div>
 

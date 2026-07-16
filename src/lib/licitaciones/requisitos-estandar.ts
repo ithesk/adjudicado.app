@@ -80,3 +80,8 @@ export function requisitoEstandar(codigo: string): RequisitoEstandar | undefined
 export function grupoDeRequisito(codigo: string): GrupoRequisito | "otros" {
   return requisitoEstandar(codigo)?.grupo ?? "otros";
 }
+
+// Requisitos que el motor documental genera (tienen plantilla oficial
+// taggeada). El gate del paquete NO bloquea por estos: son justo lo que la
+// generación produce.
+export const CODIGOS_GENERABLES = ["SNCC.F.033", "SNCC.F.034", "SNCC.F.042"];
