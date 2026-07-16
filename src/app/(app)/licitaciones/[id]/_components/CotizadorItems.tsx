@@ -99,17 +99,30 @@ export default function CotizadorItems({
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+        {/* table-fixed + colgroup: la descripción se queda con TODO el espacio
+            sobrante (sin esto, las filas combinadas de abajo inflan las
+            columnas chicas y la unidad termina más ancha que la descripción). */}
+        <table className="w-full min-w-[760px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-8" />
+            <col />
+            <col className="w-16" />
+            <col className="w-14" />
+            <col className="w-28" />
+            <col className="w-11" />
+            <col className="w-28" />
+            <col className="w-9" />
+          </colgroup>
           <thead>
             <tr className="border-b border-line bg-surface-2 text-left font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
-              <th className="w-8 px-2 py-1.5 font-medium">#</th>
+              <th className="px-2 py-1.5 font-medium">#</th>
               <th className="px-2 py-1.5 font-medium">Descripción del pliego</th>
-              <th className="w-16 px-2 py-1.5 text-right font-medium">Cant</th>
-              <th className="w-14 px-2 py-1.5 font-medium">UD</th>
-              <th className="w-28 px-2 py-1.5 text-right font-medium">Precio unit.</th>
-              <th className="w-12 px-2 py-1.5 text-center font-medium">ITBIS</th>
-              <th className="w-28 px-2 py-1.5 text-right font-medium">Subtotal</th>
-              <th className="w-8 px-2 py-1.5" />
+              <th className="px-2 py-1.5 text-right font-medium">Cant</th>
+              <th className="px-2 py-1.5 font-medium">UD</th>
+              <th className="px-2 py-1.5 text-right font-medium">Precio unit.</th>
+              <th className="px-2 py-1.5 text-center font-medium">ITBIS</th>
+              <th className="px-2 py-1.5 text-right font-medium">Subtotal</th>
+              <th className="px-2 py-1.5" />
             </tr>
           </thead>
           <tbody>
@@ -198,15 +211,27 @@ function Linea({
           {item.numero}
         </td>
         <td className="px-1 py-1 align-top">
+          {/* Crece sola con el contenido (auto-resize al montar y al teclear). */}
           <textarea
             defaultValue={item.spec_cruda}
             placeholder="Descripción tal cual el pliego…"
-            rows={Math.min(3, Math.max(1, Math.ceil(item.spec_cruda.length / 80)))}
+            rows={1}
+            ref={(el) => {
+              if (el) {
+                el.style.height = "auto";
+                el.style.height = `${el.scrollHeight}px`;
+              }
+            }}
+            onInput={(e) => {
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = `${el.scrollHeight}px`;
+            }}
             onBlur={(e) => {
               if (e.target.value !== item.spec_cruda)
                 onPatch({ spec_cruda: e.target.value });
             }}
-            className={`${celda} resize-y leading-snug`}
+            className={`${celda} resize-none overflow-hidden leading-snug`}
           />
         </td>
         <td className="px-1 py-1 text-right align-top">
