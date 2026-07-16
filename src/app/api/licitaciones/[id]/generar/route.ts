@@ -15,7 +15,11 @@ import { getMiembro, getUser } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { createClient } from "@/lib/supabase/server";
 import { construirCanonico } from "@/lib/licitaciones/queries";
-import { GENERABLES, generarPaquete } from "@/lib/licitaciones/generador";
+import {
+  GENERABLES,
+  generarPaquete,
+  type ImagenesFirma,
+} from "@/lib/licitaciones/generador";
 import { docxAPdf, pdfDisponible } from "@/lib/licitaciones/pdf";
 import PizZip from "pizzip";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
@@ -84,8 +88,25 @@ export async function GET(
     );
   }
 
-  // 4) Generar (y convertir a PDF si se pidió) y registrar.
-  const paquete = generarPaquete(codigos, canonico);
+  // 4) La firma y el sello (imágenes de Configuración → Empresa, si existen).
+  const imagenes: ImagenesFirma = {};
+  const { data: docsImagen } = await supabase
+    .from("documento_empresa")
+    .select("tipo, archivo_url, created_at")
+    .eq("org_id", miembro.org_id)
+    .in("tipo", ["firma", "sello"])
+    .order("created_at", { ascending: false });
+  for (const tipo of ["firma", "sello"] as const) {
+    const doc = (docsImagen ?? []).find((d) => d.tipo === tipo);
+    if (!doc) continue;
+    const { data: archivo } = await supabase.storage
+      .from("documentos")
+      .download(doc.archivo_url);
+    if (archivo) imagenes[tipo] = Buffer.from(await archivo.arrayBuffer());
+  }
+
+  // 5) Generar (y convertir a PDF si se pidió) y registrar.
+  const paquete = generarPaquete(codigos, canonico, imagenes);
   let archivos = paquete.documentos.map((d) => ({
     ...d,
     contentType:

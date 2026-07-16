@@ -27,6 +27,12 @@ RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>"""
 
+# El módulo de imágenes registra la firma/sello aquí: sin este archivo de
+# relaciones (aunque nazca vacío), la incrustación revienta.
+DOC_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+</Relationships>"""
+
 
 def parrafo(texto, negrita=False, centrado=False, derecha=False, espacio_despues=200):
     jc = ""
@@ -61,12 +67,14 @@ def carta(nombre, parrafos):
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)
         z.writestr("_rels/.rels", RELS)
+        z.writestr("word/_rels/document.xml.rels", DOC_RELS)
         z.writestr("word/document.xml", doc)
     print(f"✓ {destino.name}")
 
 
 FIRMA = [
-    parrafo("", espacio_despues=400),
+    parrafo("", espacio_despues=200),
+    parrafo("{%firma}  {%sello}", espacio_despues=0),
     parrafo("_________________________________"),
     parrafo("{rep_nombre}\n{rep_cargo}\n{empresa_nombre}"),
 ]

@@ -20,6 +20,9 @@ importers:
       docxtemplater:
         specifier: ^3.69.0
         version: 3.69.0
+      docxtemplater-image-module-free:
+        specifier: ^1.1.1
+        version: 1.1.1
       lucide-react:
         specifier: ^1.21.0
         version: 1.21.0(react@19.2.4)
@@ -1199,6 +1202,9 @@ packages:
   doctrine@2.1.0:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
     engines: {node: '>=0.10.0'}
+
+  docxtemplater-image-module-free@1.1.1:
+    resolution: {integrity: sha512-aWOzVQN7ggDYjfoy3pTTNrcrZ7/CJrQcI9cT+hmyHE6nRLR67nt5yPFPe9hm9VWbfYIED2fi+3itOnF0TE/RWQ==}
 
   docxtemplater@3.69.0:
     resolution: {integrity: sha512-l1zDGXj4CHdBCkGPvmVOsEzc4DDpMxLXgnNd1zllEck9gxCGkkV5vv1tOD5JhudaM73nTIgymy4wil2u9O/uhQ==}
@@ -2435,6 +2441,11 @@ packages:
     engines: {node: '>=0.8'}
     hasBin: true
 
+  xmldom@0.1.31:
+    resolution: {integrity: sha512-yS2uJflVQs6n+CyjHoaBmVSqIDevTAWrzMmjG1Gc7h1qQ7uVozNhEPJAwZXWyGQ/Gafo3fCwrcaokezLPupVyQ==}
+    engines: {node: '>=0.1'}
+    deprecated: Deprecated due to CVE-2021-21366 resolved in 0.5.0
+
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
@@ -3477,6 +3488,10 @@ snapshots:
   doctrine@2.1.0:
     dependencies:
       esutils: 2.0.3
+
+  docxtemplater-image-module-free@1.1.1:
+    dependencies:
+      xmldom: 0.1.31
 
   docxtemplater@3.69.0:
     dependencies:
@@ -4937,6 +4952,8 @@ snapshots:
       ssf: 0.11.2
       wmf: 1.0.2
       word: 0.3.0
+
+  xmldom@0.1.31: {}
 
   yallist@3.1.1: {}
 

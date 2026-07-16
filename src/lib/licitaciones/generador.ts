@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
+import ImageModule from "docxtemplater-image-module-free";
 import { enteroALetras, montoALetras } from "./letras";
 import type { ProcesoCanonico } from "./contrato";
 
@@ -52,6 +53,26 @@ export const GENERABLES: Record<string, { plantilla: string; carpeta: string; no
     nombre: "Declaración de no colusión",
   },
 };
+
+// Imagen de firma y sello de la empresa. Si no están cargadas, el tag no
+// pinta nada: el documento sale igual, firmable a mano.
+//
+// OJO con el contrato del módulo: el VALOR del tag debe ser un string clave
+// (no el Buffer — un objeto lo confunde con su modo asíncrono y revienta);
+// getImage traduce la clave al buffer, y un valor vacío no renderiza nada.
+export interface ImagenesFirma {
+  firma?: Buffer | null;
+  sello?: Buffer | null;
+}
+
+function moduloImagenes(imagenes: ImagenesFirma) {
+  return new ImageModule({
+    centered: false,
+    getImage: (clave) =>
+      (clave === "sello" ? imagenes.sello : imagenes.firma) as Buffer,
+    getSize: (_img, clave) => (clave === "sello" ? [110, 110] : [170, 60]),
+  });
+}
 
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
@@ -147,6 +168,7 @@ export interface DocGenerado {
 export function generarDocumento(
   codigo: string,
   canonico: ProcesoCanonico,
+  imagenes: ImagenesFirma = {},
 ): DocGenerado {
   const def = GENERABLES[codigo];
   if (!def) throw new Error(`No hay plantilla para ${codigo}`);
@@ -155,8 +177,13 @@ export function generarDocumento(
     paragraphLoop: true,
     linebreaks: true,
     nullGetter: () => "",
+    modules: [moduloImagenes(imagenes)],
   });
-  doc.render(construirDatos(canonico));
+  doc.render({
+    ...construirDatos(canonico),
+    firma: imagenes.firma ? "firma" : "",
+    sello: imagenes.sello ? "sello" : "",
+  });
   return {
     codigo,
     nombre: def.nombre,
@@ -169,8 +196,9 @@ export function generarDocumento(
 export function generarPaquete(
   codigos: string[],
   canonico: ProcesoCanonico,
+  imagenes: ImagenesFirma = {},
 ): { documentos: DocGenerado[]; zip: Buffer; zipNombre: string } {
-  const documentos = codigos.map((c) => generarDocumento(c, canonico));
+  const documentos = codigos.map((c) => generarDocumento(c, canonico, imagenes));
   const zip = new PizZip();
   for (const d of documentos) zip.file(d.archivo, d.buffer);
   return {

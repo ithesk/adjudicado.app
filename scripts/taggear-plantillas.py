@@ -138,6 +138,14 @@ def restaurar_xmlns(original, serializado):
 
 # ---------- especificación por plantilla ----------
 
+def taggear_firma_sello(root):
+    """Los tags de imagen {%firma}/{%sello} van junto al bloque de firma.
+    Si no hay imágenes cargadas, se rellenan con un PNG transparente de 1px
+    (invisible): el documento sigue siendo firmable a mano."""
+    reemplazar(root, r"^Firma ?_+", "{%firma} Firma _______________________", es_regex=True)
+    reemplazar(root, r"^Sello\s*$", "{%sello} Sello", es_regex=True)
+
+
 def taggear_f034(root):
     reemplazar(root, "Indicar Nombre de la Entidad Contratante", "{entidad_nombre}", todas=True)
     reemplazar(root, r"_{30,}\s*_{0,}", "{enmiendas}", es_regex=True)          # 1er bloque
@@ -145,6 +153,7 @@ def taggear_f034(root):
     reemplazar(root, r"\(Nombre y apellido\) _+", "(Nombre y apellido) {rep_nombre} ", es_regex=True)
     reemplazar(root, r"en calidad de _+", "en calidad de {rep_cargo} ", es_regex=True)
     reemplazar(root, "(poner aquí nombre del Oferente)", "{empresa_nombre}")
+    taggear_firma_sello(root)
 
 
 def taggear_f042(root):
@@ -189,6 +198,8 @@ def taggear_f033(root):
     reemplazar(root, r"en calidad de …+\.*,", "en calidad de {rep_cargo},", es_regex=True)
     reemplazar(root, "(poner aquí nombre del Oferente y sello de la compañía, si procede)", "{empresa_nombre}")
     reemplazar(root, r"……../……../……….…\s*fecha|…+/…+/…+\s*fecha", "{fecha}", es_regex=True)
+
+    taggear_firma_sello(root)
 
     # La tabla: loop de docxtemplater en la primera fila vacía; las demás
     # filas vacías se eliminan (la fila del loop se repite por línea).
@@ -247,6 +258,8 @@ def taggear_compromiso(root):
     ]
     for tag in tags:
         reemplazar(root, r"_{4,}", tag, es_regex=True)
+    # La línea de firma que queda (sobre "Declarante") recibe la imagen.
+    reemplazar(root, r"^_{10,}$", "{%firma} {%sello} _________________________________", es_regex=True)
 
 
 PLANTILLAS = {

@@ -1,6 +1,13 @@
 import fs from "node:fs";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
+import ImageModule from "docxtemplater-image-module-free";
+
+// Un PNG rojo de 40x20 para verificar que la incrustación de firma funciona.
+const PNG_PRUEBA = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAYAAAD/Rn+7AAAAG0lEQVR42mP8z8Dwn4EIwDiqcFThqMJRhcQAAK2eNSHUS13tAAAAAElFTkSuQmCC",
+  "base64",
+);
 
 const datos = {
   expediente: "OGTIC-CCC-CP-2026-0011",
@@ -46,8 +53,18 @@ const PLANTILLAS = [
 for (const [carpeta, f] of PLANTILLAS) {
   try {
     const zip = new PizZip(fs.readFileSync(`plantillas/${carpeta}/${f}-tpl.docx`));
-    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => "" });
-    doc.render(datos);
+    const im = new ImageModule({
+      centered: false,
+      getImage: () => PNG_PRUEBA,
+      getSize: () => [40, 20],
+    });
+    const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, nullGetter: () => "", modules: [im] });
+    doc.render({ ...datos, firma: "firma", sello: "sello" });
+    // ¿la imagen quedó embebida de verdad?
+    const medios = Object.keys(doc.getZip().files).filter((k) => k.startsWith("word/media/"));
+    if (["SNCC_F034_Presentacion_de_Oferta", "CARTA-COND", "Compromiso_Etico_Proveedores"].includes(f) && medios.length === 0) {
+      throw new Error("la plantilla tiene tags de firma pero no se embebió ninguna imagen");
+    }
     const out = doc.toBuffer();
     fs.writeFileSync(`${process.env.TMPDIR ?? "/tmp"}/${f}-RELLENO.docx`, out);
     console.log(`✓ ${f}: rellenado (${Math.round(out.length/1024)} KB)`);
