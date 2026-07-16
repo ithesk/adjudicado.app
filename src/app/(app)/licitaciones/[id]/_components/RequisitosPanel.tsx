@@ -247,9 +247,19 @@ function ChecklistPicker({
                           No subsanable
                         </span>
                       )}
-                      {r.sinArchivo && (
+                      {r.via === "linea" && (
                         <span className="rounded bg-surface-2 px-1 text-[9.5px] uppercase text-muted">
                           En línea
+                        </span>
+                      )}
+                      {r.via === "genera" && (
+                        <span className="rounded bg-primary/10 px-1 text-[9.5px] font-semibold uppercase text-primary">
+                          Se genera
+                        </span>
+                      )}
+                      {r.via === "empresa" && (
+                        <span className="rounded bg-ok-soft px-1 text-[9.5px] uppercase text-ok">
+                          De Empresa
                         </span>
                       )}
                     </span>
@@ -342,6 +352,9 @@ function FilaRequisito({
   const critico = !r.subsanable;
   const pendienteEstado = r.estado === "pendiente";
   const estandar = requisitoEstandar(r.codigo);
+  // Por dónde llega este documento (los personalizados se suben).
+  const via = estandar?.via ?? "sube";
+  const cubiertoPorEmpresa = r.origen === "documento_empresa" && !!r.documento_empresa_id;
 
   return (
     <li className="px-4 py-2">
@@ -373,12 +386,45 @@ function FilaRequisito({
           <p className="text-[11.5px] text-muted">
             <span className="font-mono">{r.codigo}</span>
             {r.fuente ? ` · ${r.fuente}` : ""}
-            {r.origen === "documento_empresa" && " · cubierto por Empresa"}
-            {estandar?.sinArchivo && " · la entidad lo verifica en línea"}
             {" · firma: "}
             {r.firmante_rol === "ninguno" ? "nadie" : ROL_FIRMANTE_LABEL[r.firmante_rol]}
           </p>
         </div>
+
+        {/* La VÍA del documento: no todo se sube. */}
+        {via === "genera" && (
+          <span
+            className="whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-primary"
+            title="Este formulario lo generará el sistema (motor documental). Mientras tanto puedes subirlo hecho."
+          >
+            Se genera aquí
+          </span>
+        )}
+        {via === "linea" && (
+          <span
+            className="whitespace-nowrap rounded bg-surface-2 px-1.5 py-0.5 text-[10.5px] font-medium text-muted"
+            title="No se deposita archivo: la entidad lo verifica en línea"
+          >
+            Verificado en línea
+          </span>
+        )}
+        {via === "empresa" &&
+          (cubiertoPorEmpresa ? (
+            <span
+              className="whitespace-nowrap rounded bg-ok-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-ok"
+              title="El paquete lo toma de la documentación de la empresa"
+            >
+              De Empresa ✓
+            </span>
+          ) : (
+            <a
+              href="/configuracion/empresa"
+              className="whitespace-nowrap rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-warn hover:underline"
+              title="Falta o está vencido en Configuración → Empresa — cárgalo allá una sola vez"
+            >
+              Falta en Empresa
+            </a>
+          ))}
 
         {r.storage_path && (
           <VisorDocumento
@@ -389,29 +435,39 @@ function FilaRequisito({
           />
         )}
 
-        <input
-          ref={fileRef}
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            const fd = new FormData();
-            fd.set("archivo", f);
-            onSubir(fd);
-            e.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={pendiente}
-          className="flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-ink"
-          title="Subir el archivo de este requisito (lo marca listo)"
-        >
-          <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-          {r.storage_path ? "Reemplazar" : "Subir"}
-        </button>
+        {/* Subir aplica a lo externo; en lo generado es el plan B mientras
+            llega el motor documental. Lo "en línea" y lo de Empresa no suben. */}
+        {via !== "linea" && !cubiertoPorEmpresa && (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const fd = new FormData();
+                fd.set("archivo", f);
+                onSubir(fd);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={pendiente}
+              className="flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-ink"
+              title={
+                via === "genera"
+                  ? "Mientras el motor documental no existe, súbelo hecho a mano"
+                  : "Subir el archivo de este requisito (lo marca listo)"
+              }
+            >
+              <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              {r.storage_path ? "Reemplazar" : via === "genera" ? "Subir hecho" : "Subir"}
+            </button>
+          </>
+        )}
 
         <label className="flex items-center gap-1 text-[12px] text-ink-soft" title="Listo / pendiente">
           <input
