@@ -330,3 +330,33 @@ cross join (values
 ) as v(vendor, estado, nota)
 where o.id = '1ae66d63-f4e6-4463-8e6d-dc4035a8b554'
 on conflict (org_id, vendor) do nothing;
+
+-- ============================================================
+--  MIGRACIÓN: constructor de plantillas (sin código)
+--  El usuario sube un Word, arrastra variables sobre los huecos
+--  detectados, y la plantilla queda reutilizable en la generación.
+-- ============================================================
+create table if not exists lic_plantilla (
+  id               uuid primary key default gen_random_uuid(),
+  org_id           uuid not null references organizacion(id) on delete cascade,
+  codigo           text not null,           -- enlaza con el requisito ("MI-CARTA-X")
+  nombre           text not null,
+  descripcion      text,
+  archivo_original text not null,           -- storage: el .docx tal cual subió
+  archivo_tpl      text,                    -- storage: el taggeado (al guardar)
+  asignaciones     jsonb not null default '[]'::jsonb,
+  estado           text not null default 'borrador',
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now(),
+  unique (org_id, codigo),
+  constraint lic_plantilla_estado_valido check (estado in ('borrador','lista'))
+);
+create index if not exists idx_lic_plantilla_org on lic_plantilla(org_id);
+drop trigger if exists trg_lic_plantilla_touch on lic_plantilla;
+create trigger trg_lic_plantilla_touch before update on lic_plantilla
+  for each row execute function touch_updated_at();
+
+alter table lic_plantilla enable row level security;
+drop policy if exists lic_plantilla_all on lic_plantilla;
+create policy lic_plantilla_all on lic_plantilla for all
+  using (es_miembro(org_id)) with check (es_miembro(org_id));

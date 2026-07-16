@@ -8,6 +8,36 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Constructor de plantillas, Fase 1: taggear sin código
+
+**Contexto:** Pablo pidió que el usuario suba un Word, arrastre variables y la plantilla
+quede reutilizable — sin código. Es la interfaz de lo que hice a mano con las plantillas
+DGCP.
+
+**Hecho:**
+
+- Tabla `lic_plantilla` (org, código→requisito, original + tpl en storage, asignaciones
+  jsonb, borrador/lista) — migración aplicada en producción.
+- `variables.ts`: el catálogo de 24 variables (proceso/empresa/firmante/económico/
+  imágenes) — fuente única para fichas, ejemplos y validación.
+- `plantillas.ts`: **el motor** — `analizarDocx` (párrafos con conteo de profundidad —
+  los cuadros de texto anidan w:p — y detección de huecos: subrayados, [instrucciones],
+  líneas de puntos, controles, tags ya escritos) y `aplicarAsignaciones` (el port a TS del
+  reemplazo quirúrgico sobre runs de taggear-plantillas.py, por posición exacta, con
+  limpieza de formato y los seguros de LibreOffice: xmlns de dibujo, content-types,
+  rels). **8 tests dedicados**, incluyendo tramos que cruzan runs y la ida-y-vuelta con
+  docxtemplater.
+- UI en Configuración → Plantillas: lista + editor de dos paneles — documento con huecos
+  resaltados como zonas de soltar (drag & drop nativo, o clic-hueco + clic-ficha),
+  fichas por grupo con ejemplo, autosave, vista previa en PDF real (Gotenberg) con datos
+  de ejemplo y firma/sello de muestra, y "Guardar y publicar" (aplica, sube el tpl,
+  estado lista).
+
+**Pendiente (Fase 2):** enchufar a la generación — que los requisitos cuyo código coincida
+con una plantilla "lista" de la org se generen en el paquete junto a los 7 del sistema.
+
+---
+
 ## 2026-07-16 — Fase 4c: los 7 documentos "se genera aquí", generándose
 
 **Contexto:** Pablo probó "Generar paquete" (funcionó — 3 Word) y pidió el resto de los

@@ -165,14 +165,14 @@ export interface DocGenerado {
   buffer: Buffer;
 }
 
-export function generarDocumento(
-  codigo: string,
-  canonico: ProcesoCanonico,
+// Rellena CUALQUIER plantilla taggeada (del repo o del constructor de la
+// organización) con un objeto de datos.
+export function rellenarPlantilla(
+  plantilla: Buffer,
+  datos: Record<string, unknown>,
   imagenes: ImagenesFirma = {},
-): DocGenerado {
-  const def = GENERABLES[codigo];
-  if (!def) throw new Error(`No hay plantilla para ${codigo}`);
-  const zip = new PizZip(fs.readFileSync(path.join(DIR_PLANTILLAS, def.carpeta, def.plantilla)));
+): Buffer {
+  const zip = new PizZip(plantilla);
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
@@ -180,15 +180,26 @@ export function generarDocumento(
     modules: [moduloImagenes(imagenes)],
   });
   doc.render({
-    ...construirDatos(canonico),
+    ...datos,
     firma: imagenes.firma ? "firma" : "",
     sello: imagenes.sello ? "sello" : "",
   });
+  return doc.toBuffer();
+}
+
+export function generarDocumento(
+  codigo: string,
+  canonico: ProcesoCanonico,
+  imagenes: ImagenesFirma = {},
+): DocGenerado {
+  const def = GENERABLES[codigo];
+  if (!def) throw new Error(`No hay plantilla para ${codigo}`);
+  const plantilla = fs.readFileSync(path.join(DIR_PLANTILLAS, def.carpeta, def.plantilla));
   return {
     codigo,
     nombre: def.nombre,
     archivo: `${codigo.replace(/\./g, "_")}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}.docx`,
-    buffer: doc.toBuffer(),
+    buffer: rellenarPlantilla(plantilla, construirDatos(canonico), imagenes),
   };
 }
 
