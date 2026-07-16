@@ -138,12 +138,15 @@ def restaurar_xmlns(original, serializado):
 
 # ---------- especificación por plantilla ----------
 
-def taggear_firma_sello(root):
+def taggear_firma_sello(root, sello_junto=False):
     """Los tags de imagen {%firma}/{%sello} van junto al bloque de firma.
-    Si no hay imágenes cargadas, se rellenan con un PNG transparente de 1px
-    (invisible): el documento sigue siendo firmable a mano."""
-    reemplazar(root, r"^Firma ?_+", "{%firma} Firma _______________________", es_regex=True)
-    reemplazar(root, r"^Sello\s*$", "{%sello} Sello", es_regex=True)
+    `sello_junto`: los formularios sin línea propia de "Sello" (como el
+    F.033) reciben el sello en la misma línea de la firma."""
+    if sello_junto:
+        reemplazar(root, r"^Firma ?_+", "{%firma} {%sello} Firma _______________________", es_regex=True)
+    else:
+        reemplazar(root, r"^Firma ?_+", "{%firma} Firma _______________________", es_regex=True)
+        reemplazar(root, r"^Sello\s*$", "{%sello} Sello", es_regex=True)
 
 
 def taggear_f034(root):
@@ -199,7 +202,7 @@ def taggear_f033(root):
     reemplazar(root, "(poner aquí nombre del Oferente y sello de la compañía, si procede)", "{empresa_nombre}")
     reemplazar(root, r"……../……../……….…\s*fecha|…+/…+/…+\s*fecha", "{fecha}", es_regex=True)
 
-    taggear_firma_sello(root)
+    taggear_firma_sello(root, sello_junto=True)  # el F.033 no trae línea "Sello"
 
     # La tabla: loop de docxtemplater en la primera fila vacía; las demás
     # filas vacías se eliminan (la fila del loop se repite por línea).
