@@ -282,7 +282,7 @@ function Linea({
         <td className="px-1 py-1 text-center align-top">
           <input
             type="checkbox"
-            checked={item.itbis_aplica}
+            defaultChecked={item.itbis_aplica}
             disabled={descartado}
             onChange={(e) => onPatch({ itbis_aplica: e.target.checked })}
             title="Marcado: la línea suma 18% de ITBIS al total. Desmarcado: exenta (licencias de software y derechos intangibles suelen estarlo — Decreto 293-11)."
@@ -313,7 +313,7 @@ function Linea({
             <label className="flex items-center gap-1 text-[11.5px] text-ink-soft">
               <input
                 type="checkbox"
-                checked={item.ofertamos}
+                defaultChecked={item.ofertamos}
                 onChange={(e) => onPatch({ ofertamos: e.target.checked })}
               />
               Ofertamos

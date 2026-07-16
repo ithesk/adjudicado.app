@@ -472,7 +472,7 @@ function FilaRequisito({
         <label className="flex items-center gap-1 text-[12px] text-ink-soft" title="Listo / pendiente">
           <input
             type="checkbox"
-            checked={r.estado === "listo"}
+            defaultChecked={r.estado === "listo"}
             onChange={(e) => onPatch({ estado: e.target.checked ? "listo" : "pendiente" })}
           />
           Listo
