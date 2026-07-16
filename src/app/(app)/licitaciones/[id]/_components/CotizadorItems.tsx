@@ -120,7 +120,12 @@ export default function CotizadorItems({
               <th className="px-2 py-1.5 text-right font-medium">Cant</th>
               <th className="px-2 py-1.5 font-medium">UD</th>
               <th className="px-2 py-1.5 text-right font-medium">Precio unit.</th>
-              <th className="px-2 py-1.5 text-center font-medium">ITBIS</th>
+              <th
+                className="px-2 py-1.5 text-center font-medium"
+                title="¿Esta línea lleva el 18% de ITBIS? Ojo: las licencias de software y derechos intangibles están EXENTOS (Decreto 293-11, art. 4) — desmárcalo en esas líneas."
+              >
+                ITBIS
+              </th>
               <th className="px-2 py-1.5 text-right font-medium">Subtotal</th>
               <th className="px-2 py-1.5" />
             </tr>
@@ -280,7 +285,7 @@ function Linea({
             checked={item.itbis_aplica}
             disabled={descartado}
             onChange={(e) => onPatch({ itbis_aplica: e.target.checked })}
-            title="ITBIS aplica"
+            title="Marcado: la línea suma 18% de ITBIS al total. Desmarcado: exenta (licencias de software y derechos intangibles suelen estarlo — Decreto 293-11)."
           />
         </td>
         <td className="px-2 py-1.5 text-right align-top font-mono text-[12.5px] text-ink">

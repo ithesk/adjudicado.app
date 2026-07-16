@@ -8,6 +8,7 @@
 import { ArrowRight, Check } from "lucide-react";
 import { btnPrimary } from "@/components/ui";
 import {
+  ESTADO_LIC_DESCRIPCION,
   ESTADO_LIC_LABEL,
   type EstadoLicitacion,
 } from "@/lib/licitaciones/tipos";
@@ -61,7 +62,7 @@ export default function LineaTiempo({
               type="button"
               disabled={pendiente || actual}
               onClick={() => onCambiar(e)}
-              title={actual ? "Estado actual" : `Mover a ${ESTADO_LIC_LABEL[e]}`}
+              title={ESTADO_LIC_DESCRIPCION[e]}
               className={`flex items-center gap-1.5 rounded-full px-2 py-1 text-[11.5px] font-medium transition-colors ${
                 actual
                   ? "bg-primary text-primary-ink"
