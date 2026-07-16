@@ -58,6 +58,44 @@ describe("analizarDocx", () => {
   });
 });
 
+describe("analizarDocx con XML hostil (formularios reales)", () => {
+  it("no confunde <w:tab>, <w:tc> ni <w:tbl> con texto", () => {
+    // Un párrafo con tabs y una tabla al lado — el bug real del MICM.
+    const zip = new PizZip();
+    zip.file("[Content_Types].xml", "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>");
+    zip.file(
+      "word/document.xml",
+      `<w:document xmlns:w="x"><w:body>` +
+        `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="6267"/></w:tabs></w:pPr>` +
+        `<w:r><w:t>Nombre: ______</w:t></w:r></w:p>` +
+        `<w:tbl><w:tr><w:tc><w:p><w:r><w:t>celda</w:t></w:r></w:p></w:tc></w:tr></w:tbl>` +
+        `</w:body></w:document>`,
+    );
+    const { parrafos } = analizarDocx(zip.generate({ type: "nodebuffer" }));
+    expect(parrafos.map((p) => p.texto)).toEqual(["Nombre: ______", "celda"]);
+    // ni rastro de XML en el texto
+    expect(parrafos.every((p) => !p.texto.includes("<"))).toBe(true);
+  });
+
+  it("oculta las copias de compatibilidad (mc:Fallback)", () => {
+    const zip = new PizZip();
+    zip.file("[Content_Types].xml", "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>");
+    zip.file(
+      "word/document.xml",
+      `<w:document xmlns:w="x" xmlns:mc="y"><w:body>` +
+        `<w:p><w:r><w:t>visible ____</w:t></w:r></w:p>` +
+        `<mc:Fallback><w:p><w:r><w:t>duplicado ____</w:t></w:r></w:p></mc:Fallback>` +
+        `</w:body></w:document>`,
+    );
+    const { parrafos, huecos } = analizarDocx(zip.generate({ type: "nodebuffer" }));
+    expect(parrafos[0].oculto).toBeUndefined();
+    expect(parrafos[1].oculto).toBe(true);
+    // los huecos solo salen del contenido visible
+    expect(huecos).toHaveLength(1);
+    expect(huecos[0].parrafo).toBe(0);
+  });
+});
+
 describe("aplicarAsignaciones", () => {
   it("reemplaza un tramo que cruza varios runs", () => {
     const buf = docx([["Nombre: __", "____", "__ final"]]);

@@ -166,7 +166,7 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
             </p>
           )}
           {analisis?.parrafos
-            .filter((p) => p.texto.trim())
+            .filter((p) => p.texto.trim() && !p.oculto)
             .map((p) => (
               <Parrafo
                 key={p.indice}

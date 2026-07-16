@@ -70,7 +70,9 @@ interface TramoTexto {
 
 function tramosDeTexto(parrafoXml: string): TramoTexto[] {
   const tramos: TramoTexto[] = [];
-  const re = /<w:t([^>]*?)(\/)?>(?:([\s\S]*?)<\/w:t>)?/g;
+  // (?=[\s/>]) — el nombre del tag TERMINA ahí: sin esto, <w:tab>, <w:tc> y
+  // <w:tbl> se tragan XML entero como si fuera texto del documento.
+  const re = /<w:t(?=[\s/>])([^>]*?)(\/)?>(?:([\s\S]*?)<\/w:t>)?/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(parrafoXml))) {
     if (m[2] === "/") {
@@ -104,6 +106,16 @@ function textoDeParrafo(parrafoXml: string): string {
 export interface ParrafoAnalizado {
   indice: number;
   texto: string;
+  /** Copia de compatibilidad (mc:Fallback): existe pero el editor la oculta. */
+  oculto?: boolean;
+}
+
+function rangosFallback(xml: string): [number, number][] {
+  const rangos: [number, number][] = [];
+  const re = /<mc:Fallback>[\s\S]*?<\/mc:Fallback>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml))) rangos.push([m.index, m.index + m[0].length]);
+  return rangos;
 }
 
 export interface Hueco {
@@ -133,9 +145,12 @@ export function analizarDocx(buffer: Buffer): {
 
   const parrafos: ParrafoAnalizado[] = [];
   const huecos: Hueco[] = [];
+  const fallback = rangosFallback(xml);
   spansDeParrafos(xml).forEach((span, indice) => {
     const texto = textoDeParrafo(xml.slice(span.inicio, span.fin));
-    parrafos.push({ indice, texto });
+    const oculto = fallback.some(([i, f]) => span.inicio >= i && span.fin <= f);
+    parrafos.push(oculto ? { indice, texto, oculto } : { indice, texto });
+    if (oculto) return; // sin huecos en las copias: no se asigna sobre ellas
     for (const [patron, tipo] of PATRONES_HUECO) {
       patron.lastIndex = 0;
       let m: RegExpExecArray | null;
