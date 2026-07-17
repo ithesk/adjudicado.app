@@ -9,7 +9,6 @@ import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Check,
   ImagePlus,
   Landmark,
@@ -20,7 +19,14 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
-import { Panel, SectionTitle, btnPrimary } from "@/components/ui";
+import {
+  CabeceraPagina,
+  DisposicionFicha,
+  Hoja,
+  Panel,
+  SectionTitle,
+  btnPrimary,
+} from "@/components/ui";
 import { formatRD } from "@/lib/types";
 import type { EntidadDetalle } from "@/lib/entidades/queries";
 import {
@@ -35,6 +41,12 @@ import {
 
 const inputSm =
   "rounded-md border border-line bg-surface px-2 py-1 text-[12.5px] text-ink outline-none focus:border-primary";
+
+// Los campos de contacto con ancho SEGÚN CONTENIDO (un teléfono no necesita
+// 500px): nombre/cargo flexibles, email/tel/ext fijos. Una sola fuente para
+// las filas y el form de alta.
+const gridContacto =
+  "grid gap-1.5 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_11rem_7rem_3.5rem_auto]";
 
 // dd/mm/aaaa hh:mm desde el ISO guardado, sin new Date (hidratación segura).
 function fechaCorta(iso: string): string {
@@ -111,36 +123,32 @@ export default function FichaEntidad({
   const asignadosGrupos = new Set(e.asignaciones.filter((a) => a.grupo_id).map((a) => a.grupo_id));
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Link href="/entidades" className="text-muted transition-colors hover:text-ink">
-          <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden />
-        </Link>
-        <h1 className="min-w-0 truncate text-lg font-semibold text-ink">
-          {e.siglas ? `${e.siglas} — ` : ""}
-          {e.nombre}
-        </h1>
-        {estado === "guardando" && (
-          <span className="flex items-center gap-1 text-[11.5px] text-muted">
-            <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
-            Guardando…
-          </span>
-        )}
-        {estado === "ok" && (
-          <span className="flex items-center gap-1 text-[11.5px] text-ok">
-            <Check className="h-3 w-3" strokeWidth={2.4} aria-hidden />
-            Guardado
-          </span>
-        )}
-      </div>
+    <Hoja ancho="ficha" className="space-y-4">
+      <CabeceraPagina
+        volver="/entidades"
+        titulo={`${e.siglas ? `${e.siglas} — ` : ""}${e.nombre}`}
+        acciones={
+          estado === "guardando" ? (
+            <span className="flex items-center gap-1 text-[11.5px] text-muted">
+              <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
+              Guardando…
+            </span>
+          ) : estado === "ok" ? (
+            <span className="flex items-center gap-1 text-[11.5px] text-ok">
+              <Check className="h-3 w-3" strokeWidth={2.4} aria-hidden />
+              Guardado
+            </span>
+          ) : undefined
+        }
+      />
 
       {error && (
         <p className="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">{error}</p>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-        {/* Columna principal */}
-        <div className="space-y-4">
+      <DisposicionFicha
+        principal={
+          <>
           {/* Perfil */}
           <Panel className="p-4">
             <div className="flex flex-wrap items-start gap-4">
@@ -201,7 +209,7 @@ export default function FichaEntidad({
             <SectionTitle icon={Phone}>Contactos ({e.contactos.length})</SectionTitle>
             <ul className="divide-y divide-line">
               {e.contactos.map((c) => (
-                <li key={c.id} className="grid gap-1.5 px-4 py-2 sm:grid-cols-[1.2fr_1fr_1.2fr_0.9fr_0.5fr_auto]">
+                <li key={c.id} className={`${gridContacto} px-4 py-2`}>
                   <Campo valor={c.nombre} placeholder="Nombre" onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { nombre: v }))} />
                   <Campo valor={c.rol ?? ""} placeholder="Cargo" onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { rol: v || null }))} />
                   <Campo valor={c.email ?? ""} placeholder="Email" mono onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { email: v || null }))} />
@@ -240,7 +248,7 @@ export default function FichaEntidad({
                   }),
                 );
               }}
-              className="grid gap-1.5 border-t border-line bg-surface-2/50 px-4 py-2.5 sm:grid-cols-[1.2fr_1fr_1.2fr_0.9fr_0.5fr_auto]"
+              className={`${gridContacto} border-t border-line bg-surface-2/50 px-4 py-2.5`}
             >
               <input name="nombre" required placeholder="Nuevo contacto" className={inputSm} />
               <input name="rol" placeholder="Cargo" className={inputSm} />
@@ -253,63 +261,10 @@ export default function FichaEntidad({
             </form>
           </Panel>
 
-          {/* Bitácora de la entidad */}
-          <Panel>
-            <SectionTitle icon={Landmark}>Bitácora de la entidad</SectionTitle>
-            <form
-              action={(fd) => {
-                const texto = String(fd.get("texto") || "");
-                correr(() => agregarNotaEntidadAction(e.id, texto));
-              }}
-              className="flex gap-1.5 border-b border-line px-4 py-2.5"
-            >
-              <input
-                name="texto"
-                required
-                placeholder="Escribir una nota en la bitácora…"
-                className={`${inputSm} flex-1`}
-              />
-              <button type="submit" disabled={pendiente} className={btnPrimary("!px-3 !py-1 !text-[12px]")}>
-                Anotar
-              </button>
-            </form>
-            <ul className="divide-y divide-line">
-              {e.eventos.length === 0 && (
-                <li className="px-4 py-6 text-center text-[13px] text-muted">
-                  Sin movimientos todavía — todo lo que pase con esta entidad
-                  quedará escrito aquí.
-                </li>
-              )}
-              {e.eventos.map((ev) => {
-                const t = TIPO_EVENTO[ev.tipo] ?? TIPO_EVENTO.nota;
-                return (
-                  <li key={`${ev.tipo}-${ev.id}`} className="flex items-start gap-2.5 px-4 py-2">
-                    <span className={`mt-0.5 flex-none rounded px-1.5 py-0.5 font-mono text-[10px] uppercase ${t.clase}`}>
-                      {t.label}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] text-ink">
-                        {ev.texto}
-                        {ev.orden_id && (
-                          <Link href={`/orden/${ev.orden_id}`} className="ml-1.5 font-mono text-[11.5px] text-primary hover:underline">
-                            {ev.numero_oc ?? "ver orden"}
-                          </Link>
-                        )}
-                      </p>
-                      <p className="font-mono text-[10.5px] text-muted">
-                        {fechaCorta(ev.created_at)}
-                        {ev.autor ? ` · ${ev.autor}` : ""}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </Panel>
-        </div>
-
-        {/* Columna lateral */}
-        <div className="space-y-4">
+</>
+        }
+        riel={
+          <>
           {/* Asignación */}
           <Panel className="p-4">
             <p className="mb-2 flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
@@ -410,8 +365,63 @@ export default function FichaEntidad({
               ))}
             </ul>
           </Panel>
-        </div>
-      </div>
-    </div>
+
+          {/* Bitácora de la entidad */}
+          <Panel>
+            <SectionTitle icon={Landmark}>Bitácora de la entidad</SectionTitle>
+            <form
+              action={(fd) => {
+                const texto = String(fd.get("texto") || "");
+                correr(() => agregarNotaEntidadAction(e.id, texto));
+              }}
+              className="flex gap-1.5 border-b border-line px-4 py-2.5"
+            >
+              <input
+                name="texto"
+                required
+                placeholder="Escribir una nota en la bitácora…"
+                className={`${inputSm} flex-1`}
+              />
+              <button type="submit" disabled={pendiente} className={btnPrimary("!px-3 !py-1 !text-[12px]")}>
+                Anotar
+              </button>
+            </form>
+            <ul className="max-h-[55vh] divide-y divide-line overflow-y-auto">
+              {e.eventos.length === 0 && (
+                <li className="px-4 py-6 text-center text-[13px] text-muted">
+                  Sin movimientos todavía — todo lo que pase con esta entidad
+                  quedará escrito aquí.
+                </li>
+              )}
+              {e.eventos.map((ev) => {
+                const t = TIPO_EVENTO[ev.tipo] ?? TIPO_EVENTO.nota;
+                return (
+                  <li key={`${ev.tipo}-${ev.id}`} className="flex items-start gap-2.5 px-4 py-2">
+                    <span className={`mt-0.5 flex-none rounded px-1.5 py-0.5 font-mono text-[10px] uppercase ${t.clase}`}>
+                      {t.label}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] text-ink">
+                        {ev.texto}
+                        {ev.orden_id && (
+                          <Link href={`/orden/${ev.orden_id}`} className="ml-1.5 font-mono text-[11.5px] text-primary hover:underline">
+                            {ev.numero_oc ?? "ver orden"}
+                          </Link>
+                        )}
+                      </p>
+                      <p className="font-mono text-[10.5px] text-muted">
+                        {fechaCorta(ev.created_at)}
+                        {ev.autor ? ` · ${ev.autor}` : ""}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+          </>
+        }
+      />
+    </Hoja>
   );
 }

@@ -244,6 +244,7 @@ export default function BidRoom({
         if (!res.ok) {
           const j = await res.json().catch(() => null);
           setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
+          irA("paquete"); // el detalle del error vive en la sección Paquete
           return;
         }
         if (res.headers.get("X-Paquete-Reusado") === "1") setReusado(formato);
@@ -356,8 +357,9 @@ export default function BidRoom({
         )}
       </Panel>
 
-      {/* La barra que acompaña: salta a cada sección y muestra su estado
-          vivo. Sticky — en móvil debajo del header de la app. */}
+      {/* La barra que acompaña: anclas a la izquierda y LA ACCIÓN EVIDENTE a
+          la derecha — generar el paquete nunca queda al fondo del scroll.
+          Sticky — en móvil debajo del header de la app. */}
       <nav className="sticky top-12 z-20 -mx-1 flex flex-wrap items-center gap-1 rounded-lg border border-line bg-canvas/95 px-1 py-1 backdrop-blur md:top-2">
         {ESTACIONES.map((e) => (
           <button
@@ -382,6 +384,68 @@ export default function BidRoom({
             )}
           </button>
         ))}
+
+        <span className="ml-auto flex flex-wrap items-center gap-1.5 pl-1">
+          {pasoTexto ? (
+            <span className="flex items-center gap-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-soft">
+              <Loader2 className="h-3.5 w-3.5 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
+              <span className="max-w-56 truncate">{pasoTexto}</span>
+            </span>
+          ) : (
+            <>
+              {reusado && (
+                <button
+                  type="button"
+                  onClick={() => irA("paquete")}
+                  className="flex items-center gap-1 rounded bg-ok-soft px-2 py-1 text-[11.5px] font-medium text-ok"
+                  title="Nada cambió: se descargó el paquete ya generado. Detalle en la sección Paquete."
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  sin cambios
+                </button>
+              )}
+              {criticosBloqueantes > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => irA("requisitos")}
+                  className="flex items-center gap-1 rounded bg-danger-soft px-2 py-1 text-[11.5px] font-medium text-danger"
+                  title="Requisitos NO subsanables pendientes — resuélvelos para poder generar"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  {criticosBloqueantes} crítico{criticosBloqueantes === 1 ? "" : "s"}
+                </button>
+              ) : (
+                <span className="hidden items-center gap-1 rounded bg-ok-soft px-2 py-1 text-[11.5px] font-medium text-ok sm:flex">
+                  <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  listo
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => generarPaquete("docx")}
+                disabled={pendiente || criticosBloqueantes > 0}
+                title={
+                  criticosBloqueantes > 0
+                    ? "Bloqueado: hay requisitos NO subsanables pendientes"
+                    : "Arma el expediente completo por sobres y descarga el ZIP"
+                }
+                className={btnPrimary("!px-3 !py-1.5 !text-[12.5px]")}
+              >
+                <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                Generar paquete
+              </button>
+              <button
+                type="button"
+                onClick={() => generarPaquete("pdf")}
+                disabled={pendiente || criticosBloqueantes > 0}
+                title="Los mismos documentos, convertidos a PDF"
+                className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
+              >
+                PDF
+              </button>
+            </>
+          )}
+        </span>
       </nav>
 
       <Seccion
@@ -453,6 +517,8 @@ export default function BidRoom({
             )}
           </div>
 
+          {/* La generación vive en la barra sticky de arriba (la acción
+              evidente nunca al fondo); aquí queda el detalle. */}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -462,30 +528,6 @@ export default function BidRoom({
             >
               <ClipboardCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
               {pendiente ? "Validando…" : "Validar expediente"}
-            </button>
-            <button
-              type="button"
-              onClick={() => generarPaquete("docx")}
-              disabled={pendiente || criticosBloqueantes > 0}
-              title={
-                criticosBloqueantes > 0
-                  ? "Bloqueado: hay requisitos NO subsanables pendientes (los formularios que este botón genera no cuentan)"
-                  : "Arma el expediente completo: genera los formularios, anexa lo subido y lo de Empresa, y lo ordena por sobre con su índice"
-              }
-              className={btnPrimary(criticosBloqueantes > 0 ? "opacity-50" : "")}
-            >
-              <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-              {pendiente ? "Generando…" : "Generar paquete (Word)"}
-            </button>
-            <button
-              type="button"
-              onClick={() => generarPaquete("pdf")}
-              disabled={pendiente || criticosBloqueantes > 0}
-              title="Los mismos documentos, convertidos a PDF en el servidor de la empresa"
-              className={btnGhost(criticosBloqueantes > 0 ? "opacity-50" : "")}
-            >
-              <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-              PDF
             </button>
           </div>
 
