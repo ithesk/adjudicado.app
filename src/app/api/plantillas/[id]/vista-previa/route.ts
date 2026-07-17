@@ -55,6 +55,7 @@ export async function POST(
     const relleno = rellenarPlantilla(taggeado, { ...datosEjemplo(), ...datosPersonalizados }, {
       firma: PNG_MUESTRA,
       sello: PNG_MUESTRA,
+      logo: PNG_MUESTRA,
     });
 
     if (pdfDisponible()) {

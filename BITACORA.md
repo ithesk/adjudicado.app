@@ -8,6 +8,29 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — Cartas timbradas: el logo de la empresa encabeza las cartas
+
+**Hecho:** Pablo pidió que la empresa suba su logo para cartas timbradas. Piezas:
+
+- Tipo **"logo"** en Configuración → Empresa (catálogo TIPOS_DOC_EMPRESA; PNG/JPG, no
+  vence) — se sube igual que firma y sello.
+- **Membrete** en las 3 cartas propias (CARTA-COND, DJ-ART38, DJ-COLUSION), regeneradas
+  con `scripts/generar-cartas-base.py`: logo centrado + «{empresa} · RNC …» + línea de
+  contacto en gris pequeño + filete. Sin logo cargado, la carta sale igual (el tag no
+  pinta nada) y el timbrado textual queda.
+- Motor: `ImagenesFirma.logo`; el logo se escala **proporcional a su tamaño real**
+  (parser de dimensiones PNG/JPEG propio — la caja fija deformaba) con tope 190×60 px.
+- `/generar` carga firma+sello+logo; la huella de idempotencia ya lo cubre (cambiar el
+  logo regenera). Vista previa del constructor lo simula, y **el constructor gana la
+  variable "Logo de la empresa"** arrastrable a cualquier plantilla propia.
+- Tests: 63 en verde (membrete proporcional 300×120→150×60, carta sin logo intacta) +
+  validación externa con textutil.
+
+**Pendiente de verificación de Pablo:** subir el logo real en Configuración → Empresa →
+regenerar el paquete → las cartas salen timbradas.
+
+---
+
 ## 2026-07-17 — Sistema de página desktop-first (estilo ERP/Odoo)
 
 **Hecho:** Pablo: «parece una app móvil alargada viéndose en desktop» — la acción

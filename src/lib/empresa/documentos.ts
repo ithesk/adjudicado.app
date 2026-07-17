@@ -72,6 +72,12 @@ export const TIPOS_DOC_EMPRESA: TipoDocEmpresa[] = [
     vence: false,
   },
   {
+    codigo: "logo",
+    label: "Logo de la empresa (imagen)",
+    descripcion: "PNG o JPG. Encabeza las cartas timbradas que genera el sistema.",
+    vence: false,
+  },
+  {
     codigo: "firma",
     label: "Firma del representante (imagen)",
     descripcion: "PNG con fondo transparente. Se estampa en los documentos generados.",

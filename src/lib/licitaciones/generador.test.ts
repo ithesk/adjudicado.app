@@ -1,8 +1,35 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import PizZip from "pizzip";
 import { rellenarPlantilla, separarTagsDeImagen } from "./generador";
+
+// PNG real de w×h (gris): para probar que el logo escala PROPORCIONAL.
+function pngDe(w: number, h: number): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  const chunk = (tipo: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length, 0);
+    const cuerpo = Buffer.concat([Buffer.from(tipo), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(cuerpo), 0);
+    return Buffer.concat([len, cuerpo, crc]);
+  };
+  const fila = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, 0x88)]);
+  const idat = zlib.deflateSync(Buffer.concat(Array.from({ length: h }, () => fila)));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", idat),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
 
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAACgAAAAUCAYAAAD/Rn+7AAAAG0lEQVR42mP8z8Dwn4EIwDiqcFThqMJRhcQAAK2eNSHUS13tAAAAAElFTkSuQmCC",
@@ -80,5 +107,37 @@ describe("rellenarPlantilla con firma y sello en el mismo run", () => {
       const out = rellenarPlantilla(tpl, {}, { firma: PNG, sello: PNG });
       expect(dibujos(out), carta).toBe(2);
     }
+  });
+
+  it("el membrete lleva el logo escalado a su proporción real", () => {
+    const tpl = fs.readFileSync(
+      path.join(process.cwd(), "plantillas/cartas/CARTA-COND-tpl.docx"),
+    );
+    const out = rellenarPlantilla(
+      tpl,
+      {
+        empresa_nombre: "ITHESK SRL",
+        rnc: "1-31-00000-1",
+        empresa_direccion: "Av. X #1",
+        empresa_telefono: "809-000-0000",
+        empresa_email: "info@ithesk.com",
+      },
+      { firma: pngDe(40, 20), sello: pngDe(40, 40), logo: pngDe(300, 120) },
+    );
+    expect(dibujos(out)).toBe(3); // logo + firma + sello
+    // 300×120 con tope de alto 60px → 150×60; el módulo emite EMU (px·9525).
+    const xml = new PizZip(out).file("word/document.xml")!.asText();
+    expect(xml).toContain(String(150 * 9525));
+    // Copia para la validación externa con textutil (¿Word la abre?).
+    fs.writeFileSync(path.join(os.tmpdir(), "carta-timbrada-prueba.docx"), out);
+  });
+
+  it("sin logo cargado la carta sale igual (el tag no pinta nada)", () => {
+    const tpl = fs.readFileSync(
+      path.join(process.cwd(), "plantillas/cartas/DJ-ART38-tpl.docx"),
+    );
+    const out = rellenarPlantilla(tpl, {}, { firma: PNG, sello: PNG });
+    expect(dibujos(out)).toBe(2);
+    expect(new PizZip(out).file("word/document.xml")!.asText()).not.toContain("{%logo}");
   });
 });

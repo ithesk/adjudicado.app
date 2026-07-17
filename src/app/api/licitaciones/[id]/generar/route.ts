@@ -146,15 +146,15 @@ export async function GET(
     );
   }
 
-  // 4) La firma y el sello (imágenes de Configuración → Empresa, si existen).
+  // 4) Firma, sello y logo (imágenes de Configuración → Empresa, si existen).
   const imagenes: ImagenesFirma = {};
   const { data: docsImagen } = await supabase
     .from("documento_empresa")
     .select("tipo, archivo_url, created_at")
     .eq("org_id", miembro.org_id)
-    .in("tipo", ["firma", "sello"])
+    .in("tipo", ["firma", "sello", "logo"])
     .order("created_at", { ascending: false });
-  for (const tipo of ["firma", "sello"] as const) {
+  for (const tipo of ["firma", "sello", "logo"] as const) {
     const doc = (docsImagen ?? []).find((d) => d.tipo === tipo);
     if (!doc) continue;
     const { data: archivo } = await supabase.storage
