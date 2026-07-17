@@ -82,3 +82,25 @@ export function datosEjemplo(): Record<string, string> {
   }
   return datos;
 }
+
+// ---------- variables personalizadas (por plantilla) ----------
+
+export interface VariablePersonalizada {
+  clave: string;    // slug: "fecha_de_nacimiento"
+  etiqueta: string; // "Fecha de nacimiento"
+  /** Valor FIJO ("dominicano"). Vacío = se pregunta al generar, por proceso. */
+  valor: string;
+}
+
+// "Fecha de nacimiento" → "fecha_de_nacimiento" (sin chocar con las del sistema).
+export function claveDesdeEtiqueta(etiqueta: string): string {
+  const slug = etiqueta
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+  return variablePorClave(slug) ? `x_${slug}` : slug;
+}

@@ -147,6 +147,19 @@ describe("aplicarAsignaciones", () => {
     expect(textoDe(doc.toBuffer())).toBe("Señores OGTICReferencia: CP-2026-0011");
   });
 
+  it("acepta variables personalizadas vía clavesExtra", () => {
+    const buf = docx([["Nacionalidad: ________"]]);
+    const out = aplicarAsignaciones(
+      buf,
+      [{ parrafo: 0, inicio: 14, fin: 22, variable: "nacionalidad" }],
+      ["nacionalidad"],
+    );
+    expect(textoDe(out)).toBe("Nacionalidad: {nacionalidad}");
+    const doc = new Docxtemplater(new PizZip(out), { nullGetter: () => "" });
+    doc.render({ nacionalidad: "dominicano" });
+    expect(textoDe(doc.toBuffer())).toBe("Nacionalidad: dominicano");
+  });
+
   it("rechaza variables desconocidas y párrafos inexistentes", () => {
     const buf = docx([["hola"]]);
     expect(() =>

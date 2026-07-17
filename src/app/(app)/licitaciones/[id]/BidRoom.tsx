@@ -1,21 +1,25 @@
 "use client";
 
-// La "Bid Room": la licitación como LÍNEA DE TIEMPO. Arriba, el recorrido
-// del proceso (captura → … → sometido → resultado); abajo, las estaciones:
-// 1 Proceso (los datos) → 2 Pliego (qué piden) → 3 Cotización (nuestra
-// oferta) → 4 Paquete (el gate y la validación del expediente).
+// La "Bid Room": la licitación como UNA SOLA PÁGINA. Arriba, la identidad y
+// el recorrido del proceso; debajo, las secciones en orden de trabajo
+// (Proceso → Requisitos → Ítems → Paquete) — nada de pestañas que obligan a
+// ir y volver para comparar. Cada sección se pliega/expande (lo plegado
+// sigue mostrando su estado y se recuerda entre visitas), y una barra fija
+// acompaña el scroll con el estado vivo de cada una y salta a la que toque.
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
+  Loader2,
   PackageOpen,
   ShieldAlert,
 } from "lucide-react";
-import { Panel, btnGhost, btnPrimary } from "@/components/ui";
+import { Hoja, Panel, btnGhost, btnPrimary } from "@/components/ui";
 import { diasRestantes, formatRD, nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, textoDias } from "@/lib/ui";
 import {
@@ -37,13 +41,85 @@ import RequisitosPanel from "./_components/RequisitosPanel";
 
 type Estacion = "proceso" | "requisitos" | "items" | "paquete";
 
-// En qué estación te deja cada estado de la línea de tiempo: primero los
-// datos, después QUÉ PIDEN (requisitos), después el cotizador de ítems.
-function estacionInicial(estado: EstadoLicitacion): Estacion {
+const ORDEN: Estacion[] = ["proceso", "requisitos", "items", "paquete"];
+
+// A qué sección lleva cada estado de la línea de tiempo cuando se avanza.
+function estacionDelEstado(estado: EstadoLicitacion): Estacion {
   if (estado === "captura") return "proceso";
   if (estado === "calificacion") return "requisitos";
   if (estado === "costeo") return "items";
   return "paquete";
+}
+
+const LS_COLAPSADAS = "bidroom-colapsadas";
+
+// Lo que se le cuenta al usuario mientras el paquete se arma (tarda unos
+// segundos y sin señales la espera desespera). Los pasos avanzan con un
+// reloj — el servidor no reporta progreso real, pero el orden es el real.
+const PASOS_DOCX = [
+  "Validando el expediente…",
+  "Rellenando los formularios oficiales…",
+  "Estampando firma y sello…",
+  "Anexando lo subido y lo de Empresa…",
+  "Armando los sobres y el índice…",
+];
+const PASOS_PDF = [
+  "Validando el expediente…",
+  "Rellenando los formularios oficiales…",
+  "Estampando firma y sello…",
+  "Convirtiendo cada documento a PDF…",
+  "Anexando lo subido y lo de Empresa…",
+  "Armando los sobres y el índice…",
+];
+
+// Cada sección se pliega/expande. Definido FUERA del padre (regla de la
+// casa: un componente inline se remonta en cada render y pierde el foco).
+function Seccion({
+  id,
+  titulo,
+  hint,
+  alerta,
+  colapsada,
+  onToggle,
+  children,
+}: {
+  id: Estacion;
+  titulo: string;
+  hint: string;
+  alerta?: boolean;
+  colapsada: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-24 md:scroll-mt-14">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!colapsada}
+        className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-surface-2"
+      >
+        <ChevronDown
+          className={`h-3.5 w-3.5 flex-none text-muted transition-transform ${colapsada ? "-rotate-90" : ""}`}
+          strokeWidth={2}
+          aria-hidden
+        />
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+          {titulo}
+        </span>
+        {hint && (
+          <span
+            className={`rounded px-1.5 font-mono text-[10.5px] ${
+              alerta ? "bg-danger-soft font-semibold text-danger" : "bg-surface-2 text-muted"
+            }`}
+          >
+            {hint}
+          </span>
+        )}
+      </button>
+      {!colapsada && <div className="mt-1.5">{children}</div>}
+    </section>
+  );
 }
 
 export default function BidRoom({
@@ -56,7 +132,11 @@ export default function BidRoom({
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
-  plantillasOrg: { codigo: string; nombre: string }[];
+  plantillasOrg: {
+    codigo: string;
+    nombre: string;
+    preguntas: { clave: string; etiqueta: string }[];
+  }[];
   params: ParamsCotizacion;
   tieneFirmantes: boolean;
   tienePerfil: boolean;
@@ -64,10 +144,69 @@ export default function BidRoom({
   const router = useRouter();
   const { proceso, items, requisitos, institucion } = detalle;
   const [validacion, setValidacion] = useState<string[] | "ok" | null>(null);
+  const [pasoTexto, setPasoTexto] = useState<string | null>(null);
+  const [reusado, setReusado] = useState<"docx" | "pdf" | null>(null);
   const [pendiente, startTransition] = useTransition();
-  const [estacion, setEstacion] = useState<Estacion>(() =>
-    estacionInicial(proceso.estado),
-  );
+  const [activa, setActiva] = useState<Estacion>("proceso");
+  const [colapsadas, setColapsadas] = useState<Set<Estacion>>(new Set());
+
+  // Lo plegado se recuerda entre visitas. Se lee después de montar para no
+  // desajustar la hidratación (el servidor siempre pinta todo expandido);
+  // ese doble render inicial es justamente lo que se quiere aquí.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_COLAPSADAS);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setColapsadas(new Set(JSON.parse(raw) as Estacion[]));
+    } catch {
+      // localStorage corrupto o bloqueado: se arranca todo expandido
+    }
+  }, []);
+
+  function toggleSeccion(k: Estacion) {
+    setColapsadas((prev) => {
+      const s = new Set(prev);
+      if (s.has(k)) s.delete(k);
+      else s.add(k);
+      try {
+        localStorage.setItem(LS_COLAPSADAS, JSON.stringify([...s]));
+      } catch {}
+      return s;
+    });
+  }
+
+  // Saltar a una sección la expande primero si estaba plegada.
+  function irA(k: Estacion) {
+    setColapsadas((prev) => {
+      if (!prev.has(k)) return prev;
+      const s = new Set(prev);
+      s.delete(k);
+      try {
+        localStorage.setItem(LS_COLAPSADAS, JSON.stringify([...s]));
+      } catch {}
+      return s;
+    });
+    setTimeout(() => {
+      document.getElementById(k)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }
+
+  // Scroll-spy: la barra resalta la sección que está en pantalla.
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) setActiva(e.target.id as Estacion);
+        }
+      },
+      { rootMargin: "-15% 0px -70% 0px" },
+    );
+    for (const k of ORDEN) {
+      const el = document.getElementById(k);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, []);
 
   const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
   const nivel = nivelUrgencia(dias);
@@ -87,35 +226,50 @@ export default function BidRoom({
     (i) => i.ofertamos && i.precio_unitario === null,
   ).length;
 
-  function generarPaquete(formato: "docx" | "pdf" = "docx") {
+  function generarPaquete(formato: "docx" | "pdf" = "docx", forzar = false) {
     setValidacion(null);
+    setReusado(null);
+    const pasos = formato === "pdf" ? PASOS_PDF : PASOS_DOCX;
+    setPasoTexto(pasos[0]);
+    let i = 0;
+    const reloj = setInterval(() => {
+      i = Math.min(i + 1, pasos.length - 1);
+      setPasoTexto(pasos[i]);
+    }, 2600);
     startTransition(async () => {
-      const res = await fetch(
-        `/api/licitaciones/${proceso.id}/generar?formato=${formato}`,
-      );
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
-        return;
+      try {
+        const res = await fetch(
+          `/api/licitaciones/${proceso.id}/generar?formato=${formato}${forzar ? "&regenerar=1" : ""}`,
+        );
+        if (!res.ok) {
+          const j = await res.json().catch(() => null);
+          setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
+          irA("paquete"); // el detalle del error vive en la sección Paquete
+          return;
+        }
+        if (res.headers.get("X-Paquete-Reusado") === "1") setReusado(formato);
+        const blob = await res.blob();
+        const nombre =
+          res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ??
+          "paquete.zip";
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nombre;
+        a.click();
+        URL.revokeObjectURL(url);
+        router.refresh(); // los requisitos generados quedaron listos
+      } finally {
+        clearInterval(reloj);
+        setPasoTexto(null);
       }
-      const blob = await res.blob();
-      const nombre =
-        res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ??
-        "paquete.zip";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = nombre;
-      a.click();
-      URL.revokeObjectURL(url);
-      router.refresh(); // los requisitos generados quedaron listos
     });
   }
 
   function cambiarEstado(estado: EstadoLicitacion) {
     startTransition(async () => {
       await actualizarProcesoAction(proceso.id, { estado });
-      setEstacion(estacionInicial(estado));
+      irA(estacionDelEstado(estado));
       router.refresh();
     });
   }
@@ -127,15 +281,36 @@ export default function BidRoom({
     });
   }
 
-  const ESTACIONES: { key: Estacion; label: string; hint: string }[] = [
-    { key: "proceso", label: "1 · Proceso", hint: institucion?.nombre ?? "sin entidad" },
-    { key: "requisitos", label: "2 · Requisitos", hint: criticosPendientes > 0 ? `${criticosPendientes} críticos pendientes` : `${requisitos.length}` },
-    { key: "items", label: "3 · Ítems", hint: sinCotizar > 0 ? `${sinCotizar} sin cotizar` : totales.total > 0 ? formatRD(totales.total) : `${items.length}` },
-    { key: "paquete", label: "4 · Paquete", hint: criticosPendientes > 0 ? "bloqueado" : "" },
+  // El estado vivo de cada sección, siempre a la vista en la barra.
+  const ESTACIONES: {
+    key: Estacion;
+    label: string;
+    hint: string;
+    alerta?: boolean;
+  }[] = [
+    { key: "proceso", label: "Proceso", hint: institucion?.siglas ?? institucion?.nombre?.split(" ")[0] ?? "sin entidad" },
+    {
+      key: "requisitos",
+      label: "Requisitos",
+      hint: criticosPendientes > 0 ? `${criticosPendientes} críticos` : `${requisitos.length} ✓`,
+      alerta: criticosPendientes > 0,
+    },
+    {
+      key: "items",
+      label: "Ítems",
+      hint: sinCotizar > 0 ? `${sinCotizar} sin cotizar` : totales.total > 0 ? formatRD(totales.total) : `${items.length}`,
+      alerta: sinCotizar > 0,
+    },
+    {
+      key: "paquete",
+      label: "Paquete",
+      hint: criticosBloqueantes > 0 ? "bloqueado" : "listo",
+      alerta: criticosBloqueantes > 0,
+    },
   ];
 
   return (
-    <div className="space-y-4">
+    <Hoja ancho="ficha" className="space-y-4">
       {/* Cabecera: identidad + reloj + la línea de tiempo */}
       <Panel className="space-y-3 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -182,46 +357,142 @@ export default function BidRoom({
         )}
       </Panel>
 
-      {/* Las estaciones de la línea */}
-      <div className="flex flex-wrap gap-1 border-b border-line">
+      {/* La barra que acompaña: anclas a la izquierda y LA ACCIÓN EVIDENTE a
+          la derecha — generar el paquete nunca queda al fondo del scroll.
+          Sticky — en móvil debajo del header de la app. */}
+      <nav className="sticky top-12 z-20 -mx-1 flex flex-wrap items-center gap-1 rounded-lg border border-line bg-canvas/95 px-1 py-1 backdrop-blur md:top-2">
         {ESTACIONES.map((e) => (
           <button
             key={e.key}
             type="button"
-            onClick={() => setEstacion(e.key)}
-            className={`-mb-px border-b-2 px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-              estacion === e.key
-                ? "border-primary text-ink"
-                : "border-transparent text-muted hover:text-ink"
+            onClick={() => irA(e.key)}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+              activa === e.key
+                ? "bg-surface-2 text-ink"
+                : "text-muted hover:text-ink"
             }`}
           >
             {e.label}
             {e.hint && (
-              <span className="ml-2 hidden font-mono text-[11px] font-normal text-muted sm:inline">
+              <span
+                className={`rounded px-1 font-mono text-[10.5px] font-normal ${
+                  e.alerta ? "bg-danger-soft text-danger" : "text-muted"
+                }`}
+              >
                 {e.hint}
               </span>
             )}
           </button>
         ))}
-      </div>
 
-      {estacion === "proceso" && (
+        <span className="ml-auto flex flex-wrap items-center gap-1.5 pl-1">
+          {pasoTexto ? (
+            <span className="flex items-center gap-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-soft">
+              <Loader2 className="h-3.5 w-3.5 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
+              <span className="max-w-56 truncate">{pasoTexto}</span>
+            </span>
+          ) : (
+            <>
+              {reusado && (
+                <button
+                  type="button"
+                  onClick={() => irA("paquete")}
+                  className="flex items-center gap-1 rounded bg-ok-soft px-2 py-1 text-[11.5px] font-medium text-ok"
+                  title="Nada cambió: se descargó el paquete ya generado. Detalle en la sección Paquete."
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  sin cambios
+                </button>
+              )}
+              {criticosBloqueantes > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => irA("requisitos")}
+                  className="flex items-center gap-1 rounded bg-danger-soft px-2 py-1 text-[11.5px] font-medium text-danger"
+                  title="Requisitos NO subsanables pendientes — resuélvelos para poder generar"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  {criticosBloqueantes} crítico{criticosBloqueantes === 1 ? "" : "s"}
+                </button>
+              ) : (
+                <span className="hidden items-center gap-1 rounded bg-ok-soft px-2 py-1 text-[11.5px] font-medium text-ok sm:flex">
+                  <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  listo
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => generarPaquete("docx")}
+                disabled={pendiente || criticosBloqueantes > 0}
+                title={
+                  criticosBloqueantes > 0
+                    ? "Bloqueado: hay requisitos NO subsanables pendientes"
+                    : "Arma el expediente completo por sobres y descarga el ZIP"
+                }
+                className={btnPrimary("!px-3 !py-1.5 !text-[12.5px]")}
+              >
+                <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                Generar paquete
+              </button>
+              <button
+                type="button"
+                onClick={() => generarPaquete("pdf")}
+                disabled={pendiente || criticosBloqueantes > 0}
+                title="Los mismos documentos, convertidos a PDF"
+                className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
+              >
+                PDF
+              </button>
+            </>
+          )}
+        </span>
+      </nav>
+
+      <Seccion
+        id="proceso"
+        titulo={ESTACIONES[0].label}
+        hint={ESTACIONES[0].hint}
+        alerta={ESTACIONES[0].alerta}
+        colapsada={colapsadas.has("proceso")}
+        onToggle={() => toggleSeccion("proceso")}
+      >
         <DatosProceso proceso={proceso} instituciones={instituciones} />
-      )}
+      </Seccion>
 
-      {estacion === "requisitos" && (
+      <Seccion
+        id="requisitos"
+        titulo={ESTACIONES[1].label}
+        hint={ESTACIONES[1].hint}
+        alerta={ESTACIONES[1].alerta}
+        colapsada={colapsadas.has("requisitos")}
+        onToggle={() => toggleSeccion("requisitos")}
+      >
         <RequisitosPanel
           procesoId={proceso.id}
           requisitos={requisitos}
           plantillasOrg={plantillasOrg}
         />
-      )}
+      </Seccion>
 
-      {estacion === "items" && (
+      <Seccion
+        id="items"
+        titulo={ESTACIONES[2].label}
+        hint={ESTACIONES[2].hint}
+        alerta={ESTACIONES[2].alerta}
+        colapsada={colapsadas.has("items")}
+        onToggle={() => toggleSeccion("items")}
+      >
         <CotizadorItems proceso={proceso} items={items} params={params} />
-      )}
+      </Seccion>
 
-      {estacion === "paquete" && (
+      <Seccion
+        id="paquete"
+        titulo={ESTACIONES[3].label}
+        hint={ESTACIONES[3].hint}
+        alerta={ESTACIONES[3].alerta}
+        colapsada={colapsadas.has("paquete")}
+        onToggle={() => toggleSeccion("paquete")}
+      >
         <Panel className="space-y-3 p-4">
           {/* El gate: los no-subsanables mandan. */}
           <div className="flex flex-wrap items-center gap-2">
@@ -246,6 +517,8 @@ export default function BidRoom({
             )}
           </div>
 
+          {/* La generación vive en la barra sticky de arriba (la acción
+              evidente nunca al fondo); aquí queda el detalle. */}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -256,31 +529,33 @@ export default function BidRoom({
               <ClipboardCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
               {pendiente ? "Validando…" : "Validar expediente"}
             </button>
-            <button
-              type="button"
-              onClick={() => generarPaquete("docx")}
-              disabled={pendiente || criticosBloqueantes > 0}
-              title={
-                criticosBloqueantes > 0
-                  ? "Bloqueado: hay requisitos NO subsanables pendientes (los formularios que este botón genera no cuentan)"
-                  : "Rellena los formularios oficiales (F.033/034/042) con el expediente y descarga el ZIP"
-              }
-              className={btnPrimary(criticosBloqueantes > 0 ? "opacity-50" : "")}
-            >
-              <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-              {pendiente ? "Generando…" : "Generar paquete (Word)"}
-            </button>
-            <button
-              type="button"
-              onClick={() => generarPaquete("pdf")}
-              disabled={pendiente || criticosBloqueantes > 0}
-              title="Los mismos documentos, convertidos a PDF en el servidor de la empresa"
-              className={btnGhost(criticosBloqueantes > 0 ? "opacity-50" : "")}
-            >
-              <PackageOpen className="h-4 w-4" strokeWidth={2} aria-hidden />
-              PDF
-            </button>
           </div>
+
+          {pasoTexto && (
+            <div className="flex items-center gap-2 rounded bg-surface-2 px-3 py-2 text-[12.5px] text-ink-soft">
+              <Loader2 className="h-4 w-4 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
+              <span className="font-medium">{pasoTexto}</span>
+              <span className="text-muted">
+                Puede tardar medio minuto — no cierres la página, el ZIP baja solo.
+              </span>
+            </div>
+          )}
+
+          {reusado && (
+            <p className="flex flex-wrap items-center gap-1.5 rounded bg-ok-soft px-3 py-2 text-[12.5px] text-ok">
+              <CheckCircle2 className="h-3.5 w-3.5 flex-none" strokeWidth={2} aria-hidden />
+              Nada cambió desde la última generación: se descargó el mismo paquete al
+              instante.
+              <button
+                type="button"
+                onClick={() => generarPaquete(reusado, true)}
+                className="font-medium underline"
+                title="Vuelve a armarlo desde cero (por ejemplo, para refrescar la fecha de las cartas)"
+              >
+                Generar de nuevo de todos modos
+              </button>
+            </p>
+          )}
 
           {validacion === "ok" && (
             <p className="flex items-center gap-1.5 rounded bg-ok-soft px-2 py-1.5 text-[12.5px] text-ok">
@@ -300,7 +575,7 @@ export default function BidRoom({
             </div>
           )}
         </Panel>
-      )}
-    </div>
+      </Seccion>
+    </Hoja>
   );
 }

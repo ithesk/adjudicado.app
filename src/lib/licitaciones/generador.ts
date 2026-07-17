@@ -165,6 +165,31 @@ export interface DocGenerado {
   buffer: Buffer;
 }
 
+// El módulo de imágenes (free) solo renderiza UN tag de imagen por run: con
+// "{%firma} {%sello}" en el mismo run, el segundo se consume sin pintar nada
+// (así se perdía el sello del F.033 y de las cartas). Antes de rellenar,
+// cada tag de imagen se aísla en su propio run conservando el formato.
+export function separarTagsDeImagen(xml: string): string {
+  return xml.replace(
+    /<w:r(?:\s[^>]*)?>([\s\S]*?)<\/w:r>/g,
+    (run: string, contenido: string) => {
+      // Solo runs simples: rPr opcional + una única w:t. Cualquier otra
+      // estructura se deja intacta.
+      const m = contenido.match(
+        /^\s*(<w:rPr>[\s\S]*?<\/w:rPr>)?\s*<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>\s*$/,
+      );
+      if (!m) return run;
+      const [, rPr = "", texto] = m;
+      const partes = texto.split(/(\{%[^}]+\})/).filter((p) => p !== "");
+      const imagenes = partes.filter((p) => /^\{%[^}]+\}$/.test(p)).length;
+      if (imagenes === 0 || partes.length === 1) return run;
+      return partes
+        .map((p) => `<w:r>${rPr}<w:t xml:space="preserve">${p}</w:t></w:r>`)
+        .join("");
+    },
+  );
+}
+
 // Rellena CUALQUIER plantilla taggeada (del repo o del constructor de la
 // organización) con un objeto de datos.
 export function rellenarPlantilla(
@@ -173,6 +198,11 @@ export function rellenarPlantilla(
   imagenes: ImagenesFirma = {},
 ): Buffer {
   const zip = new PizZip(plantilla);
+  for (const nombre of Object.keys(zip.files)) {
+    if (!/^word\/(document|header\d*|footer\d*)\.xml$/.test(nombre)) continue;
+    const xml = zip.file(nombre)!.asText();
+    if (xml.includes("{%")) zip.file(nombre, separarTagsDeImagen(xml));
+  }
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
@@ -194,12 +224,15 @@ export function generarDesdeBuffer(
   plantilla: Buffer,
   canonico: ProcesoCanonico,
   imagenes: ImagenesFirma = {},
+  // Variables personalizadas: valores fijos de la plantilla + los capturados
+  // en el requisito de este proceso.
+  extra: Record<string, string> = {},
 ): DocGenerado {
   return {
     codigo,
     nombre,
     archivo: `${codigo.replace(/[^\w-]+/g, "_")}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}.docx`,
-    buffer: rellenarPlantilla(plantilla, construirDatos(canonico), imagenes),
+    buffer: rellenarPlantilla(plantilla, { ...construirDatos(canonico), ...extra }, imagenes),
   };
 }
 

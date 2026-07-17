@@ -8,6 +8,181 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — Sistema de página desktop-first (estilo ERP/Odoo)
+
+**Hecho:** Pablo: «parece una app móvil alargada viéndose en desktop» — la acción
+evidente al fondo (Generar PDF en la licitación), campos estirados a todo el ancho, sin
+sistema. Plan aprobado en plan mode (2 agentes: auditoría + patrones Odoo/ERP) y
+ejecutado completo (commits fases 1-3 y 4-5):
+
+- **Primitivas** en ui.tsx: `CabeceraPagina` (título+volver+acciones — la acción
+  principal SIEMPRE arriba), `Hoja` (anchos por tipo: form 2xl / feed 3xl / lista 4xl /
+  ficha 1200px; las tablas densas siguen full-width) y `DisposicionFicha` (riel sticky
+  360px con orden móvil correcto).
+- **BidRoom**: Generar paquete/PDF + chip del gate + progreso viven en la barra sticky;
+  la sección Paquete queda para Validar y el detalle de errores (y al fallar, salta ahí).
+- **FichaEntidad**: sheet capado, bitácora al riel derecho (chatter con scroll interno),
+  contactos con anchos según contenido (email 11rem, tel 7rem, ext 3.5rem).
+- **Adopción total**: cabecera única en actividad/documentos/licitaciones/entidades/
+  orden-nueva/precios/configuración; licitaciones/layout.tsx ELIMINADO (metía un h1
+  ajeno encima de la Bid Room).
+- **docs/sistema-ui.md**: las reglas para que todo lo futuro siga el sistema.
+
+**Deuda visible:** eslint global marca `set-state-in-effect` preexistente en
+BuscadorGlobal y TriageTable (patrón localStorage-tras-montar; mismo caso documentado).
+
+---
+
+## 2026-07-17 — Navegación al nivel de las mejores tools (sin tocar la línea gráfica)
+
+**Hecho:** Pablo pidió mejores menús y jerarquía de información, investigado con dos
+agentes (auditoría de la app + patrones de Linear/Notion/Attio). Cambios, mismos tokens
+y colores:
+
+- **Sidebar colapsable a rail de iconos** (60px, tooltips, preferencia recordada) — el
+  beneficio real es espacio horizontal para las tablas anchas. Extraído a
+  `_components/Sidebar.tsx` (client); el layout solo prepara datos serializables.
+- **Sección "Estados" plegable** con chevron y contador agregado al plegarse; recordada.
+- **Configuración y Equipo a la vista** al pie del sidebar (antes enterrados dentro del
+  menú desplegable del usuario).
+- **Menú móvil (drawer)**: antes en móvil la navegación NO existía (solo logo + buscar +
+  nueva). Ahora hamburguesa → drawer con el nav completo + estados + configuración.
+- **Jerarquía Bandeja**: la tabla de órdenes vivas sube; "Actividad reciente" pasa
+  después de la mesa de trabajo (era contexto empujando la tarea hacia abajo).
+- **Orden [id] en móvil**: el riel (Detalles/Plazos/Documentos/contactos) se intercala
+  después del estado y ANTES de ítems/bitácora (antes caía al fondo). En desktop igual
+  que siempre (grid explícito col-start/row-start + order).
+
+**Regla aprendida:** grupos de sidebar <3 ítems no se agrupan; el rail exige tooltips e
+iconos distinguibles; los KPIs que no filtran son decoración.
+
+---
+
+## 2026-07-17 — Gestión de entidades: ficha completa con bitácora
+
+**Hecho:** herramienta nueva `/entidades` (pedido de Pablo). Se apoya en lo que YA
+existía — `institucion` es el catálogo único que enlazan órdenes y licitaciones,
+`contacto` ya era polimórfico (suplidor O institución), `grupo` ya existía — y agrega lo
+que faltaba:
+
+- **Migración** `supabase_entidades.sql` (aplicada a producción, 201): `institucion` gana
+  telefono/logo_url/notas; `contacto` gana extension/notas; tablas nuevas
+  `institucion_asignacion` (persona O grupo, check exactly-one, RLS es_miembro) e
+  `institucion_evento` (la bitácora: perfil|logo|contacto|asignacion|nota).
+- **Lista** `/entidades`: tarjetas con logo, RNC, conteo de órdenes/procesos y asignados.
+- **Ficha** `/entidades/[id]`: perfil con autosave + logo subible (storage
+  `{org}/entidades/{id}/`, URL firmada 1h para el `<img>`); contactos con cargo, email,
+  tel. directo y extensión (autosave por campo, mailto:); asignación por chips toggle a
+  personas y grupos; "De esta entidad" (licitaciones y órdenes enlazadas); **bitácora**
+  con TODOS los movimientos: cada acción de la ficha se registra sola + se mezclan las
+  entradas de bitácora de las órdenes de esa entidad (badge "orden" con link) + notas
+  manuales.
+- Menú lateral gana "Entidades"; el catálogo de Configuración → Entidades enlaza "Ficha".
+
+**Pendiente de verificación de Pablo:** entrar a /entidades, subir un logo, asignarse
+una entidad, crear un contacto con extensión y ver la bitácora moverse.
+
+---
+
+## 2026-07-17 — Sello cazado, espera amigable y paquetes que no se regeneran en vano
+
+**El sello del F.033 (y las cartas sin timbrar) — CAZADO.** No era la imagen ni la
+plantilla: docxtemplater-image-module-free solo renderiza UN tag de imagen por run.
+Todas las plantillas tienen `{%firma} {%sello}` en el mismo run → la firma salía y el
+sello se consumía sin pintar nada. Arreglo en el motor (`separarTagsDeImagen` en
+generador.ts): antes de rellenar, cada tag de imagen se aísla en su propio run
+conservando el formato — cubre las plantillas del sistema Y las del constructor, en
+document.xml, headers y footers. Tests contra el F.033 real y las 3 cartas (firma+sello
+= 2 dibujos nuevos cada una).
+
+**Espera amigable al generar:** la generación tarda (Gotenberg, adjuntos); ahora el
+botón muestra pasos en vivo («Rellenando los formularios…», «Convirtiendo a PDF…»,
+«Armando los sobres…») con spinner y el aviso de que el ZIP baja solo. Los pasos avanzan
+con reloj — el orden es el real aunque el servidor no reporte progreso.
+
+**Idempotencia de verdad:** `/generar` calcula una huella sha256 de TODO lo que cambia
+el resultado (expediente sin meta — la versión sube sola —, adjuntos, datos capturados,
+firma/sello, formato) y si ya existe un lic_paquete con esa huella devuelve su ZIP de
+storage al instante (header `X-Paquete-Reusado`). La Bid Room lo dice en verde y ofrece
+«Generar de nuevo de todos modos» (`?regenerar=1`) — útil p. ej. para refrescar la fecha
+de las cartas, que no entra en la huella a propósito.
+
+**Pendiente de verificación de Pablo:** regenerar su paquete real → el F.033 y las 3
+cartas deben salir con firma Y sello; segunda descarga sin cambios = instantánea.
+
+---
+
+## 2026-07-17 — El paquete es ahora el EXPEDIENTE COMPLETO por sobres
+
+**Hecho:** Pablo reportó que el ZIP «solo está generando al azar» — llevaba únicamente
+los formularios que el motor genera; lo subido a mano y lo de Empresa quedaban fuera.
+Ahora `/generar` arma el expediente presentable:
+
+- **Todos los requisitos marcados** salen con su archivo: los `genera` se rellenan como
+  siempre; los `sube` anexan lo subido al requisito; los `empresa` anexan el documento
+  enlazado de Configuración → Empresa.
+- **Ordenado por sobre**: carpetas `Sobre A` (legal/financiera/técnica/otros) y
+  `Sobre B` (económica), archivos numerados `NN CODIGO — Nombre.ext`.
+- **`00 INDICE.txt`**: qué contiene cada sobre y de dónde salió cada archivo; lo
+  verificado en línea (DGII/TSS/RPE) se declara sin archivo, y lo pendiente sale como
+  «¡FALTA!» + lista final — nada desaparece en silencio.
+- En el paquete PDF los adjuntos Word también se convierten vía Gotenberg; PDFs e
+  imágenes viajan tal cual.
+
+**Pendiente de verificación de Pablo:** generar el paquete de su proceso real y revisar
+que el ZIP traiga los sobres con lo subido + lo de Empresa + lo generado y el índice.
+
+---
+
+## 2026-07-16 — Bid Room: una sola página con secciones plegables
+
+**Hecho:** Pablo reportó que la Bid Room era confusa — las 4 estaciones eran pestañas
+excluyentes y para comparar cualquier dato había que ir y volver. Rediseño (commits
+`7a37246` + `dc71856`):
+
+- **Una sola página**: Proceso → Requisitos → Ítems → Paquete apiladas en orden de
+  trabajo; se cotiza mirando el pliego sin cambiar de vista.
+- **Barra sticky** con el estado vivo de cada sección (críticos en rojo, "N sin cotizar",
+  total de la oferta, gate bloqueado/listo); clic = saltar; scroll-spy resalta la actual.
+- **Secciones plegables** (pedido explícito): chevron por sección, el estado sigue
+  visible aunque esté cerrada, lo plegado se recuerda en localStorage, y saltar desde la
+  barra o avanzar la línea de tiempo expande la sección destino antes de desplazarse.
+
+**Decisión no obvia:** la regla nueva `react-hooks/set-state-in-effect` prohíbe el
+patrón de "leer localStorage tras montar" (que TriageTable ya usa); se desactivó en esa
+línea con justificación — el doble render inicial es deliberado para no romper la
+hidratación.
+
+---
+
+## 2026-07-16 — Variables personalizadas: "dominicano" y los datos que se preguntan
+
+**Hecho:** las plantillas del constructor ahora aceptan variables PROPIAS, en dos sabores
+(pedido de Pablo: «hay variable por ejemplo dominicano, y personalizados»):
+
+- **Valor fijo** — se define una vez en la plantilla ("Nacionalidad" = "dominicano") y
+  sale igual en todos los procesos.
+- **Se pregunta al generar** — se define sin valor; cada proceso captura el suyo en el
+  requisito (2 · Requisitos muestra un mini-form con autosave; el campo vacío marca
+  "— falta" en ámbar). Los valores viven en `lic_requisito.datos` (jsonb).
+
+Piezas: migración aplicada a producción (`lic_plantilla.variables_personalizadas` jsonb +
+`lic_requisito.datos` jsonb); el editor gana la sección "De esta plantilla" (crear con
+etiqueta + valor fijo opcional, chips arrastrables con badge fija/se pregunta, quitar
+limpia sus asignaciones); `aplicarAsignaciones` acepta `clavesExtra`; la vista previa
+rellena con el valor fijo o `[Etiqueta]`; `/generar` mezcla `construirDatos` + fijos +
+capturados y devuelve **422 con la lista** si falta un dato que se pregunta (el Bid Room
+ya la pintaba). Test nuevo de ida y vuelta con clave personalizada (56 en verde).
+
+**Decisión no obvia:** la clave se deriva de la etiqueta (slug) y se prefija `x_` si
+choca con una variable del sistema — el usuario nunca teclea claves.
+
+**Pendiente de verificación de Pablo:** crear en el editor una variable fija
+("Nacionalidad" = dominicano) y una que se pregunta, arrastrarlas, publicar, y en un
+proceso completar el dato en el requisito → generar el paquete.
+
+---
+
 ## 2026-07-16 — Constructor Fase 2: las plantillas propias entran al paquete
 
 **Hecho:** el círculo cerrado. Los requisitos cuyo código coincide con una plantilla

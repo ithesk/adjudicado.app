@@ -8,9 +8,10 @@ import {
   crearPlantilla,
   eliminarPlantilla,
   guardarAsignaciones,
+  guardarVariablesPersonalizadas,
   publicarPlantilla,
 } from "@/lib/licitaciones/queries-plantillas";
-import type { Asignacion } from "@/lib/licitaciones/variables";
+import type { Asignacion, VariablePersonalizada } from "@/lib/licitaciones/variables";
 
 function refrescar() {
   revalidatePath("/configuracion/plantillas");
@@ -27,6 +28,13 @@ export async function guardarAsignacionesAction(
   asignaciones: Asignacion[],
 ): Promise<string | null> {
   return guardarAsignaciones(id, asignaciones);
+}
+
+export async function guardarVariablesPersonalizadasAction(
+  id: string,
+  variables: VariablePersonalizada[],
+): Promise<string | null> {
+  return guardarVariablesPersonalizadas(id, variables);
 }
 
 export async function publicarPlantillaAction(id: string): Promise<string | null> {

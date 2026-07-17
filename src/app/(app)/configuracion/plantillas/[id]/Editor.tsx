@@ -12,16 +12,19 @@ import { ArrowLeft, Check, Eye, Loader2, Rocket, X } from "lucide-react";
 import { Panel, SectionTitle, btnGhost, btnPrimary } from "@/components/ui";
 import {
   guardarAsignacionesAction,
+  guardarVariablesPersonalizadasAction,
   publicarPlantillaAction,
 } from "@/lib/actions/plantillas";
 import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
 import type { Hueco, ParrafoAnalizado } from "@/lib/licitaciones/plantillas";
 import {
+  claveDesdeEtiqueta,
   GRUPO_VARIABLE_LABEL,
   VARIABLES_PLANTILLA,
   variablePorClave,
   type Asignacion,
   type GrupoVariable,
+  type VariablePersonalizada,
 } from "@/lib/licitaciones/variables";
 
 type Analisis = { parrafos: ParrafoAnalizado[]; huecos: Hueco[] };
@@ -31,6 +34,11 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
   const [analisis, setAnalisis] = useState<Analisis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [asignaciones, setAsignaciones] = useState<Asignacion[]>(plantilla.asignaciones);
+  const [personalizadas, setPersonalizadas] = useState<VariablePersonalizada[]>(
+    plantilla.variables_personalizadas ?? [],
+  );
+  const [nuevaEtiqueta, setNuevaEtiqueta] = useState("");
+  const [nuevoValor, setNuevoValor] = useState("");
   const [huecoElegido, setHuecoElegido] = useState<Hueco | null>(null);
   const [guardado, setGuardado] = useState<"idle" | "guardando" | "ok">("idle");
   const [pendiente, startTransition] = useTransition();
@@ -110,6 +118,35 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
   const asignacionDe = (h: Hueco) =>
     asignaciones.find((a) => a.parrafo === h.parrafo && a.inicio === h.inicio);
 
+  // Etiqueta de cualquier variable: del sistema o personalizada.
+  const etiquetaDe = (clave: string) =>
+    variablePorClave(clave)?.etiqueta ??
+    personalizadas.find((v) => v.clave === clave)?.etiqueta ??
+    clave;
+
+  function crearPersonalizada() {
+    const etiqueta = nuevaEtiqueta.trim();
+    if (!etiqueta) return;
+    const clave = claveDesdeEtiqueta(etiqueta);
+    if (personalizadas.some((v) => v.clave === clave)) {
+      setError("Ya existe una variable con ese nombre.");
+      return;
+    }
+    const nuevas = [...personalizadas, { clave, etiqueta, valor: nuevoValor.trim() }];
+    setPersonalizadas(nuevas);
+    setNuevaEtiqueta("");
+    setNuevoValor("");
+    guardarVariablesPersonalizadasAction(plantilla.id, nuevas).then((err) => err && setError(err));
+  }
+
+  function quitarPersonalizada(clave: string) {
+    const nuevas = personalizadas.filter((v) => v.clave !== clave);
+    setPersonalizadas(nuevas);
+    // También sus asignaciones: un tag sin variable rompería la generación.
+    autosave(asignaciones.filter((a) => a.variable !== clave));
+    guardarVariablesPersonalizadasAction(plantilla.id, nuevas).then((err) => err && setError(err));
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -173,6 +210,7 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
                 parrafo={p}
                 huecos={analisis.huecos.filter((h) => h.parrafo === p.indice)}
                 asignacionDe={asignacionDe}
+                etiquetaDe={etiquetaDe}
                 huecoElegido={huecoElegido}
                 onElegir={setHuecoElegido}
                 onSoltar={asignar}
@@ -222,6 +260,67 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
                 </div>
               </div>
             ))}
+            <div className="border-t border-line pt-2">
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+                De esta plantilla
+              </p>
+              <div className="mb-2 flex flex-wrap gap-1">
+                {personalizadas.map((v) => (
+                  <span key={v.clave} className="inline-flex items-center">
+                    <button
+                      type="button"
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData("variable", v.clave)}
+                      onClick={() => huecoElegido && asignar(huecoElegido, v.clave)}
+                      title={v.valor ? `Valor fijo: ${v.valor}` : "Se pregunta al generar, en cada proceso"}
+                      className={`cursor-grab rounded-l-full border border-r-0 px-2 py-0.5 text-[11.5px] transition-colors active:cursor-grabbing ${
+                        huecoElegido
+                          ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+                          : "border-line text-ink-soft hover:border-line-strong"
+                      }`}
+                    >
+                      {v.etiqueta}
+                      <span className="ml-1 text-[9.5px] uppercase opacity-60">
+                        {v.valor ? "fija" : "se pregunta"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => quitarPersonalizada(v.clave)}
+                      className="rounded-r-full border border-l-0 border-line px-1 py-0.5 text-muted hover:bg-danger-soft hover:text-danger"
+                      aria-label={`Quitar ${v.etiqueta}`}
+                    >
+                      <X className="h-3 w-3" strokeWidth={2.5} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <div className="space-y-1">
+                <input
+                  value={nuevaEtiqueta}
+                  onChange={(e) => setNuevaEtiqueta(e.target.value)}
+                  placeholder="Nueva variable (Fecha de nacimiento…)"
+                  className="w-full rounded-md border border-line bg-surface px-2 py-1 text-[12px] text-ink outline-none focus:border-primary"
+                />
+                <div className="flex gap-1">
+                  <input
+                    value={nuevoValor}
+                    onChange={(e) => setNuevoValor(e.target.value)}
+                    placeholder="Valor fijo (vacío = se pregunta al generar)"
+                    className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2 py-1 text-[12px] text-ink outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={crearPersonalizada}
+                    disabled={!nuevaEtiqueta.trim()}
+                    className={btnPrimary("!px-2 !py-1 !text-[12px]")}
+                  >
+                    Crear
+                  </button>
+                </div>
+              </div>
+            </div>
+
             {huecoElegido && (
               <p className="rounded bg-primary/10 px-2 py-1.5 text-[11.5px] text-primary">
                 Hueco elegido: «{huecoElegido.texto.slice(0, 30)}…» — haz clic
@@ -240,6 +339,7 @@ function Parrafo({
   parrafo,
   huecos,
   asignacionDe,
+  etiquetaDe,
   huecoElegido,
   onElegir,
   onSoltar,
@@ -248,6 +348,7 @@ function Parrafo({
   parrafo: ParrafoAnalizado;
   huecos: Hueco[];
   asignacionDe: (h: Hueco) => Asignacion | undefined;
+  etiquetaDe: (clave: string) => string;
   huecoElegido: Hueco | null;
   onElegir: (h: Hueco | null) => void;
   onSoltar: (h: Hueco, variable: string) => void;
@@ -267,7 +368,7 @@ function Parrafo({
           key={`h${h.inicio}`}
           className="mx-0.5 inline-flex items-center gap-1 rounded bg-ok-soft px-1.5 py-0.5 text-[11.5px] font-medium text-ok"
         >
-          {variablePorClave(asig.variable)?.etiqueta ?? asig.variable}
+          {etiquetaDe(asig.variable)}
           <button
             type="button"
             onClick={() => onQuitar(asig)}

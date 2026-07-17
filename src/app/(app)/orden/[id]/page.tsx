@@ -79,7 +79,7 @@ export default async function OrdenDetallePage({
       currentUser={currentUser}
       suplidores={suplidores}
     >
-      <div className="space-y-5">
+      <div className="mx-auto w-full max-w-[1200px] space-y-5">
         <Link
           href="/"
           className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-ink"
@@ -165,17 +165,20 @@ export default async function OrdenDetallePage({
       </div>
 
       {/* Workspace: columna principal (trabajo) + riel lateral (consulta).
-          En desktop/tablet ancho = 2 columnas; en móvil colapsa a una. */}
+          En desktop el riel va a la derecha, pegajoso. En móvil el riel se
+          intercala DESPUÉS del estado y ANTES de ítems/bitácora — antes caía
+          al fondo de la página y los detalles quedaban inaccesibles. */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:items-start">
-        {/* Columna principal */}
-        <div className="space-y-5 lg:col-span-2">
+        <div className="order-1 space-y-5 lg:col-span-2">
           <div className="rounded-lg border border-line bg-surface p-5 shadow-card">
             <Stepper estado={orden.estado} />
             <div className="mt-4 border-t border-line pt-4">
               <EstadoControl ordenId={orden.id} estado={orden.estado} />
             </div>
           </div>
+        </div>
 
+        <div className="order-3 space-y-5 lg:col-span-2 lg:col-start-1">
           <ItemsPanel
             ordenId={orden.id}
             items={orden.item}
@@ -191,7 +194,7 @@ export default async function OrdenDetallePage({
         </div>
 
         {/* Riel lateral: detalles, plazos, documentos, contactos. Pegajoso. */}
-        <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+        <aside className="order-2 space-y-5 lg:sticky lg:top-6 lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:self-start">
           <Panel>
             <SectionTitle icon={Info}>Detalles</SectionTitle>
             <div className="space-y-3.5 px-4 pb-4">
