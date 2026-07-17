@@ -163,6 +163,59 @@ export async function GET(
     if (archivo) imagenes[tipo] = Buffer.from(await archivo.arrayBuffer());
   }
 
+  // 4b) ¿Este paquete ya existe? La huella cubre todo lo que cambia el
+  //     resultado: el expediente (sin meta — la versión sube sola), los
+  //     archivos anexados, los datos capturados, la firma/sello y el
+  //     formato. Mismo contenido → se devuelve el ZIP ya generado en vez
+  //     de regenerar (y con ?regenerar=1 se fuerza).
+  const { meta: _meta, ...canonicoSinMeta } = canonico;
+  void _meta;
+  const huella = createHash("sha256")
+    .update(
+      JSON.stringify({
+        formato,
+        canonico: canonicoSinMeta,
+        requisitos: (requisitos ?? [])
+          .map((q) => ({
+            codigo: q.codigo,
+            datos: q.datos ?? {},
+            adjunto: esGenerable(q.codigo)
+              ? null
+              : q.storage_path ?? q.documento_empresa_id ?? null,
+          }))
+          .sort((a, b) => a.codigo.localeCompare(b.codigo)),
+        sellos: (docsImagen ?? []).map((d) => d.archivo_url),
+      }),
+    )
+    .digest("hex");
+  const regenerar = new URL(req.url).searchParams.get("regenerar") === "1";
+  if (!regenerar) {
+    const { data: previo } = await supabase
+      .from("lic_paquete")
+      .select("storage_path")
+      .eq("proceso_id", id)
+      .eq("org_id", miembro.org_id)
+      .eq("payload_hash", huella)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (previo?.storage_path) {
+      const { data: zipPrevio } = await supabase.storage
+        .from("documentos")
+        .download(previo.storage_path);
+      if (zipPrevio) {
+        const nombre = previo.storage_path.split("/").pop() ?? "paquete.zip";
+        return new NextResponse(new Uint8Array(await zipPrevio.arrayBuffer()), {
+          headers: {
+            "Content-Type": "application/zip",
+            "Content-Disposition": `attachment; filename="${nombre}"`,
+            "X-Paquete-Reusado": "1",
+          },
+        });
+      }
+    }
+  }
+
   // 5) Generar (sistema + plantillas de la org).
   const documentos: DocGenerado[] = [];
   for (const codigo of codigos) {
@@ -311,9 +364,6 @@ export async function GET(
   let zipNombre = `paquete_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;
   if (formato === "pdf") zipNombre = zipNombre.replace(/\.zip$/, "_pdf.zip");
   const user = await getUser();
-  const payloadHash = createHash("sha256")
-    .update(JSON.stringify(canonico))
-    .digest("hex");
 
   const base = `${miembro.org_id}/licitaciones/${id}/v${canonico.meta.version}`;
   await supabase.storage
@@ -347,7 +397,7 @@ export async function GET(
     proceso_id: id,
     version: canonico.meta.version,
     payload: canonico,
-    payload_hash: payloadHash,
+    payload_hash: huella,
     storage_path: `${base}/${zipNombre}`,
     generado_por: user?.id ?? null,
   });

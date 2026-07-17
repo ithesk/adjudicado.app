@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
+  Loader2,
   PackageOpen,
   ShieldAlert,
 } from "lucide-react";
@@ -51,6 +52,25 @@ function estacionDelEstado(estado: EstadoLicitacion): Estacion {
 }
 
 const LS_COLAPSADAS = "bidroom-colapsadas";
+
+// Lo que se le cuenta al usuario mientras el paquete se arma (tarda unos
+// segundos y sin señales la espera desespera). Los pasos avanzan con un
+// reloj — el servidor no reporta progreso real, pero el orden es el real.
+const PASOS_DOCX = [
+  "Validando el expediente…",
+  "Rellenando los formularios oficiales…",
+  "Estampando firma y sello…",
+  "Anexando lo subido y lo de Empresa…",
+  "Armando los sobres y el índice…",
+];
+const PASOS_PDF = [
+  "Validando el expediente…",
+  "Rellenando los formularios oficiales…",
+  "Estampando firma y sello…",
+  "Convirtiendo cada documento a PDF…",
+  "Anexando lo subido y lo de Empresa…",
+  "Armando los sobres y el índice…",
+];
 
 // Cada sección se pliega/expande. Definido FUERA del padre (regla de la
 // casa: un componente inline se remonta en cada render y pierde el foco).
@@ -124,6 +144,8 @@ export default function BidRoom({
   const router = useRouter();
   const { proceso, items, requisitos, institucion } = detalle;
   const [validacion, setValidacion] = useState<string[] | "ok" | null>(null);
+  const [pasoTexto, setPasoTexto] = useState<string | null>(null);
+  const [reusado, setReusado] = useState<"docx" | "pdf" | null>(null);
   const [pendiente, startTransition] = useTransition();
   const [activa, setActiva] = useState<Estacion>("proceso");
   const [colapsadas, setColapsadas] = useState<Set<Estacion>>(new Set());
@@ -204,28 +226,42 @@ export default function BidRoom({
     (i) => i.ofertamos && i.precio_unitario === null,
   ).length;
 
-  function generarPaquete(formato: "docx" | "pdf" = "docx") {
+  function generarPaquete(formato: "docx" | "pdf" = "docx", forzar = false) {
     setValidacion(null);
+    setReusado(null);
+    const pasos = formato === "pdf" ? PASOS_PDF : PASOS_DOCX;
+    setPasoTexto(pasos[0]);
+    let i = 0;
+    const reloj = setInterval(() => {
+      i = Math.min(i + 1, pasos.length - 1);
+      setPasoTexto(pasos[i]);
+    }, 2600);
     startTransition(async () => {
-      const res = await fetch(
-        `/api/licitaciones/${proceso.id}/generar?formato=${formato}`,
-      );
-      if (!res.ok) {
-        const j = await res.json().catch(() => null);
-        setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
-        return;
+      try {
+        const res = await fetch(
+          `/api/licitaciones/${proceso.id}/generar?formato=${formato}${forzar ? "&regenerar=1" : ""}`,
+        );
+        if (!res.ok) {
+          const j = await res.json().catch(() => null);
+          setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
+          return;
+        }
+        if (res.headers.get("X-Paquete-Reusado") === "1") setReusado(formato);
+        const blob = await res.blob();
+        const nombre =
+          res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ??
+          "paquete.zip";
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nombre;
+        a.click();
+        URL.revokeObjectURL(url);
+        router.refresh(); // los requisitos generados quedaron listos
+      } finally {
+        clearInterval(reloj);
+        setPasoTexto(null);
       }
-      const blob = await res.blob();
-      const nombre =
-        res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ??
-        "paquete.zip";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = nombre;
-      a.click();
-      URL.revokeObjectURL(url);
-      router.refresh(); // los requisitos generados quedaron listos
     });
   }
 
@@ -452,6 +488,32 @@ export default function BidRoom({
               PDF
             </button>
           </div>
+
+          {pasoTexto && (
+            <div className="flex items-center gap-2 rounded bg-surface-2 px-3 py-2 text-[12.5px] text-ink-soft">
+              <Loader2 className="h-4 w-4 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
+              <span className="font-medium">{pasoTexto}</span>
+              <span className="text-muted">
+                Puede tardar medio minuto — no cierres la página, el ZIP baja solo.
+              </span>
+            </div>
+          )}
+
+          {reusado && (
+            <p className="flex flex-wrap items-center gap-1.5 rounded bg-ok-soft px-3 py-2 text-[12.5px] text-ok">
+              <CheckCircle2 className="h-3.5 w-3.5 flex-none" strokeWidth={2} aria-hidden />
+              Nada cambió desde la última generación: se descargó el mismo paquete al
+              instante.
+              <button
+                type="button"
+                onClick={() => generarPaquete(reusado, true)}
+                className="font-medium underline"
+                title="Vuelve a armarlo desde cero (por ejemplo, para refrescar la fecha de las cartas)"
+              >
+                Generar de nuevo de todos modos
+              </button>
+            </p>
+          )}
 
           {validacion === "ok" && (
             <p className="flex items-center gap-1.5 rounded bg-ok-soft px-2 py-1.5 text-[12.5px] text-ok">

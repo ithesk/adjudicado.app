@@ -8,6 +8,34 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — Sello cazado, espera amigable y paquetes que no se regeneran en vano
+
+**El sello del F.033 (y las cartas sin timbrar) — CAZADO.** No era la imagen ni la
+plantilla: docxtemplater-image-module-free solo renderiza UN tag de imagen por run.
+Todas las plantillas tienen `{%firma} {%sello}` en el mismo run → la firma salía y el
+sello se consumía sin pintar nada. Arreglo en el motor (`separarTagsDeImagen` en
+generador.ts): antes de rellenar, cada tag de imagen se aísla en su propio run
+conservando el formato — cubre las plantillas del sistema Y las del constructor, en
+document.xml, headers y footers. Tests contra el F.033 real y las 3 cartas (firma+sello
+= 2 dibujos nuevos cada una).
+
+**Espera amigable al generar:** la generación tarda (Gotenberg, adjuntos); ahora el
+botón muestra pasos en vivo («Rellenando los formularios…», «Convirtiendo a PDF…»,
+«Armando los sobres…») con spinner y el aviso de que el ZIP baja solo. Los pasos avanzan
+con reloj — el orden es el real aunque el servidor no reporte progreso.
+
+**Idempotencia de verdad:** `/generar` calcula una huella sha256 de TODO lo que cambia
+el resultado (expediente sin meta — la versión sube sola —, adjuntos, datos capturados,
+firma/sello, formato) y si ya existe un lic_paquete con esa huella devuelve su ZIP de
+storage al instante (header `X-Paquete-Reusado`). La Bid Room lo dice en verde y ofrece
+«Generar de nuevo de todos modos» (`?regenerar=1`) — útil p. ej. para refrescar la fecha
+de las cartas, que no entra en la huella a propósito.
+
+**Pendiente de verificación de Pablo:** regenerar su paquete real → el F.033 y las 3
+cartas deben salir con firma Y sello; segunda descarga sin cambios = instantánea.
+
+---
+
 ## 2026-07-17 — El paquete es ahora el EXPEDIENTE COMPLETO por sobres
 
 **Hecho:** Pablo reportó que el ZIP «solo está generando al azar» — llevaba únicamente
