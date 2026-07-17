@@ -8,6 +8,19 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — Búsqueda tolerante en toda la app (regla permanente)
+
+**Hecho:** Pablo buscó «instituto» y no encontró «Instituto…» (en uno de los buscadores
+viejos, sin normalizar). Su regla, ahora permanente: *el usuario no sabe cómo está creado
+el nombre* — mayúsculas, acentos y faltas ortográficas no pueden romper una búsqueda.
+Nuevo `src/lib/buscar-texto.ts` (`coincideTexto`): pliega mayúsculas/acentos, tolera 1-2
+letras de error según el largo (Levenshtein con banda) y acepta prefijos a medio teclear.
+Aplicado a los 5 buscadores en memoria (entidades, bandeja, actividad, documentos,
+bitácora de orden); el Cmd+K global ya usaba unaccent en SQL. «insituto» → Instituto ✓.
+68 tests. También: buscador nuevo en /entidades (tabla filtrable con contador).
+
+---
+
 ## 2026-07-17 — Cartas timbradas: el logo de la empresa encabeza las cartas
 
 **Hecho:** Pablo pidió que la empresa suba su logo para cartas timbradas. Piezas:
