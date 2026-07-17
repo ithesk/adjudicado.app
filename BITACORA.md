@@ -8,6 +8,31 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — Sistema de página desktop-first (estilo ERP/Odoo)
+
+**Hecho:** Pablo: «parece una app móvil alargada viéndose en desktop» — la acción
+evidente al fondo (Generar PDF en la licitación), campos estirados a todo el ancho, sin
+sistema. Plan aprobado en plan mode (2 agentes: auditoría + patrones Odoo/ERP) y
+ejecutado completo (commits fases 1-3 y 4-5):
+
+- **Primitivas** en ui.tsx: `CabeceraPagina` (título+volver+acciones — la acción
+  principal SIEMPRE arriba), `Hoja` (anchos por tipo: form 2xl / feed 3xl / lista 4xl /
+  ficha 1200px; las tablas densas siguen full-width) y `DisposicionFicha` (riel sticky
+  360px con orden móvil correcto).
+- **BidRoom**: Generar paquete/PDF + chip del gate + progreso viven en la barra sticky;
+  la sección Paquete queda para Validar y el detalle de errores (y al fallar, salta ahí).
+- **FichaEntidad**: sheet capado, bitácora al riel derecho (chatter con scroll interno),
+  contactos con anchos según contenido (email 11rem, tel 7rem, ext 3.5rem).
+- **Adopción total**: cabecera única en actividad/documentos/licitaciones/entidades/
+  orden-nueva/precios/configuración; licitaciones/layout.tsx ELIMINADO (metía un h1
+  ajeno encima de la Bid Room).
+- **docs/sistema-ui.md**: las reglas para que todo lo futuro siga el sistema.
+
+**Deuda visible:** eslint global marca `set-state-in-effect` preexistente en
+BuscadorGlobal y TriageTable (patrón localStorage-tras-montar; mismo caso documentado).
+
+---
+
 ## 2026-07-17 — Navegación al nivel de las mejores tools (sin tocar la línea gráfica)
 
 **Hecho:** Pablo pidió mejores menús y jerarquía de información, investigado con dos
