@@ -8,6 +8,31 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — Navegación al nivel de las mejores tools (sin tocar la línea gráfica)
+
+**Hecho:** Pablo pidió mejores menús y jerarquía de información, investigado con dos
+agentes (auditoría de la app + patrones de Linear/Notion/Attio). Cambios, mismos tokens
+y colores:
+
+- **Sidebar colapsable a rail de iconos** (60px, tooltips, preferencia recordada) — el
+  beneficio real es espacio horizontal para las tablas anchas. Extraído a
+  `_components/Sidebar.tsx` (client); el layout solo prepara datos serializables.
+- **Sección "Estados" plegable** con chevron y contador agregado al plegarse; recordada.
+- **Configuración y Equipo a la vista** al pie del sidebar (antes enterrados dentro del
+  menú desplegable del usuario).
+- **Menú móvil (drawer)**: antes en móvil la navegación NO existía (solo logo + buscar +
+  nueva). Ahora hamburguesa → drawer con el nav completo + estados + configuración.
+- **Jerarquía Bandeja**: la tabla de órdenes vivas sube; "Actividad reciente" pasa
+  después de la mesa de trabajo (era contexto empujando la tarea hacia abajo).
+- **Orden [id] en móvil**: el riel (Detalles/Plazos/Documentos/contactos) se intercala
+  después del estado y ANTES de ítems/bitácora (antes caía al fondo). En desktop igual
+  que siempre (grid explícito col-start/row-start + order).
+
+**Regla aprendida:** grupos de sidebar <3 ítems no se agrupan; el rail exige tooltips e
+iconos distinguibles; los KPIs que no filtran son decoración.
+
+---
+
 ## 2026-07-17 — Gestión de entidades: ficha completa con bitácora
 
 **Hecho:** herramienta nueva `/entidades` (pedido de Pablo). Se apoya en lo que YA

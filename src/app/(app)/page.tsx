@@ -38,8 +38,6 @@ export default async function TableroPage({
     <div className="space-y-6">
       <MetricBar ordenes={ordenes} />
 
-      {!hayFiltro && <ActividadReciente actividad={actividad} />}
-
       {ordenes.length === 0 ? (
         <EmptyState />
       ) : (
@@ -68,6 +66,10 @@ export default async function TableroPage({
               />
             )}
           </section>
+
+          {/* La actividad va DESPUÉS de la mesa de trabajo: es contexto,
+              no la tarea — antes empujaba la tabla de órdenes abajo. */}
+          {!hayFiltro && <ActividadReciente actividad={actividad} />}
 
           {cerradas.length > 0 && (
             <section className="space-y-2.5">
