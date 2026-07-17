@@ -32,7 +32,11 @@ export default async function ProcesoPage({
       instituciones={instituciones.map((i) => ({ id: i.id, nombre: i.nombre }))}
       plantillasOrg={plantillas
         .filter((p) => p.estado === "lista")
-        .map((p) => ({ codigo: p.codigo, nombre: p.nombre }))}
+        .map((p) => ({
+          codigo: p.codigo,
+          nombre: p.nombre,
+          preguntas: p.variables_personalizadas.filter((v) => !v.valor),
+        }))}
       params={paramsCotizacion(detalle.proceso, perfil)}
       tieneFirmantes={firmantes.length > 0}
       tienePerfil={!!perfil}

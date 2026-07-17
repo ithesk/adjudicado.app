@@ -194,12 +194,15 @@ export function generarDesdeBuffer(
   plantilla: Buffer,
   canonico: ProcesoCanonico,
   imagenes: ImagenesFirma = {},
+  // Variables personalizadas: valores fijos de la plantilla + los capturados
+  // en el requisito de este proceso.
+  extra: Record<string, string> = {},
 ): DocGenerado {
   return {
     codigo,
     nombre,
     archivo: `${codigo.replace(/[^\w-]+/g, "_")}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}.docx`,
-    buffer: rellenarPlantilla(plantilla, construirDatos(canonico), imagenes),
+    buffer: rellenarPlantilla(plantilla, { ...construirDatos(canonico), ...extra }, imagenes),
   };
 }
 

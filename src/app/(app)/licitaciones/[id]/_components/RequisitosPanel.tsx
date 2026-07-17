@@ -60,7 +60,11 @@ export default function RequisitosPanel({
 }: {
   procesoId: string;
   requisitos: LicRequisito[];
-  plantillasOrg?: { codigo: string; nombre: string }[];
+  plantillasOrg?: {
+    codigo: string;
+    nombre: string;
+    preguntas: { clave: string; etiqueta: string }[];
+  }[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -156,6 +160,7 @@ export default function RequisitosPanel({
               <FilaRequisito
                 key={r.id}
                 r={r}
+                preguntas={plantillasOrg.find((p) => p.codigo === r.codigo)?.preguntas ?? []}
                 pendiente={pendiente}
                 onPatch={(patch) => correr(() => actualizarRequisitoAction(r.id, patch))}
                 onSubir={(fd) => correr(() => subirArchivoRequisitoAction(r.id, fd))}
@@ -372,12 +377,16 @@ function FormManual({
 
 function FilaRequisito({
   r,
+  preguntas,
   pendiente,
   onPatch,
   onSubir,
   onEliminar,
 }: {
   r: LicRequisito;
+  // Variables "se pregunta al generar" de la plantilla de la org detrás de
+  // este requisito — cada proceso captura sus valores aquí.
+  preguntas: { clave: string; etiqueta: string }[];
   pendiente: boolean;
   onPatch: (patch: Parameters<typeof actualizarRequisitoAction>[1]) => void;
   onSubir: (fd: FormData) => void;
@@ -524,6 +533,33 @@ function FilaRequisito({
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
         </button>
       </div>
+
+      {/* Los datos que la plantilla pregunta en cada proceso. Autosave al
+          salir del campo; sin todos completos, Generar paquete avisa. */}
+      {preguntas.length > 0 && (
+        <div className="ml-5 mt-1.5 grid gap-1.5 sm:grid-cols-2">
+          {preguntas.map((p) => {
+            const valor = r.datos?.[p.clave] ?? "";
+            return (
+              <label key={p.clave} className="block">
+                <span className={`text-[11px] ${valor ? "text-muted" : "font-semibold text-warn"}`}>
+                  {p.etiqueta}
+                  {!valor && " — falta"}
+                </span>
+                <input
+                  defaultValue={valor}
+                  placeholder={p.etiqueta}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v !== valor) onPatch({ datos: { ...r.datos, [p.clave]: v } });
+                  }}
+                  className={`${inputSm} w-full`}
+                />
+              </label>
+            );
+          })}
+        </div>
+      )}
     </li>
   );
 }

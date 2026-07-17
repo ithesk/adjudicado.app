@@ -67,7 +67,7 @@ export async function GET(
   const [{ data: requisitos }, { data: plantillasOrg }] = await Promise.all([
     supabase
       .from("lic_requisito")
-      .select("id, codigo, subsanable, estado, nombre")
+      .select("id, codigo, subsanable, estado, nombre, datos")
       .eq("proceso_id", id)
       .eq("org_id", miembro.org_id),
     supabase
@@ -98,6 +98,24 @@ export async function GET(
   const codigos = (requisitos ?? [])
     .filter((q) => esGenerable(q.codigo))
     .map((q) => q.codigo);
+  // Las variables "se pregunta al generar" deben estar completas.
+  const datosFaltantes: string[] = [];
+  for (const q of requisitos ?? []) {
+    const plantilla = plantillaPorCodigo.get(q.codigo);
+    if (!plantilla) continue;
+    const datos = (q.datos ?? {}) as Record<string, string>;
+    for (const v of plantilla.variables_personalizadas ?? []) {
+      if (!v.valor && !datos[v.clave]?.trim()) {
+        datosFaltantes.push(`${plantilla.nombre}: falta "${v.etiqueta}" — complétalo en el requisito (2 · Requisitos)`);
+      }
+    }
+  }
+  if (datosFaltantes.length > 0) {
+    return NextResponse.json(
+      { error: "Faltan datos de tus plantillas.", faltantes: datosFaltantes },
+      { status: 422 },
+    );
+  }
   if (codigos.length === 0) {
     return NextResponse.json(
       { error: "Este proceso no tiene requisitos generables (F.033/034/042 o plantillas propias). Agrégalos con el checklist." },
@@ -139,6 +157,15 @@ export async function GET(
         { status: 500 },
       );
     }
+    // Datos: los del expediente + valores fijos de la plantilla + los
+    // capturados en el requisito de ESTE proceso.
+    const requisito = (requisitos ?? []).find((q) => q.codigo === codigo);
+    const fijos = Object.fromEntries(
+      (plantilla.variables_personalizadas ?? [])
+        .filter((v) => v.valor)
+        .map((v) => [v.clave, v.valor]),
+    );
+    const capturados = (requisito?.datos ?? {}) as Record<string, string>;
     documentos.push(
       generarDesdeBuffer(
         codigo,
@@ -146,6 +173,7 @@ export async function GET(
         Buffer.from(await tpl.arrayBuffer()),
         canonico,
         imagenes,
+        { ...fijos, ...capturados },
       ),
     );
   }

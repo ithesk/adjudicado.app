@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMiembro, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { aplicarAsignaciones } from "./plantillas";
-import type { Asignacion } from "./variables";
+import type { Asignacion, VariablePersonalizada } from "./variables";
 
 export interface LicPlantilla {
   id: string;
@@ -17,6 +17,7 @@ export interface LicPlantilla {
   archivo_original: string;
   archivo_tpl: string | null;
   asignaciones: Asignacion[];
+  variables_personalizadas: VariablePersonalizada[];
   estado: "borrador" | "lista";
   created_at: string;
   updated_at: string;
@@ -115,6 +116,22 @@ export async function guardarAsignaciones(
   return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
+export async function guardarVariablesPersonalizadas(
+  id: string,
+  variables: VariablePersonalizada[],
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_plantilla")
+    .update({ variables_personalizadas: variables, estado: "borrador" })
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo guardar: ${error.message}` : null;
+}
+
 // "Guardar": aplica las asignaciones al original, sube el taggeado y la
 // plantilla queda LISTA para usarse en la generación.
 export async function publicarPlantilla(id: string): Promise<string | null> {
@@ -143,6 +160,7 @@ export async function publicarPlantilla(id: string): Promise<string | null> {
     taggeado = aplicarAsignaciones(
       Buffer.from(await original.arrayBuffer()),
       plantilla.asignaciones,
+      plantilla.variables_personalizadas.map((v) => v.clave),
     );
   } catch (e) {
     return `No se pudo taggear: ${e instanceof Error ? e.message : String(e)}`;

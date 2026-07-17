@@ -435,7 +435,7 @@ export async function crearRequisito(
 export async function actualizarRequisito(
   id: string,
   patch: Partial<
-    Pick<LicRequisito, "nombre" | "subsanable" | "fuente" | "firmante_rol" | "estado">
+    Pick<LicRequisito, "nombre" | "subsanable" | "fuente" | "firmante_rol" | "estado" | "datos">
   >,
 ): Promise<string | null> {
   if (isDemo()) return "En modo demo no se guardan cambios.";

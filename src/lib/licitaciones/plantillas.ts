@@ -254,7 +254,11 @@ function asegurarSoporteImagenes(zip: PizZip): void {
 
 // ---------- aplicar todas las asignaciones ----------
 
-export function aplicarAsignaciones(buffer: Buffer, asignaciones: Asignacion[]): Buffer {
+export function aplicarAsignaciones(
+  buffer: Buffer,
+  asignaciones: Asignacion[],
+  clavesExtra: string[] = [],
+): Buffer {
   const zip = new PizZip(buffer);
   let xml = zip.file("word/document.xml")?.asText();
   if (!xml) throw new Error("El archivo no es un .docx válido.");
@@ -262,8 +266,10 @@ export function aplicarAsignaciones(buffer: Buffer, asignaciones: Asignacion[]):
   // Por párrafo, de derecha a izquierda (posiciones estables); los párrafos
   // de atrás hacia adelante (los spans XML no se invalidan entre sí).
   const porParrafo = new Map<number, Asignacion[]>();
+  const extra = new Set(clavesExtra);
   for (const a of asignaciones) {
-    if (!variablePorClave(a.variable)) throw new Error(`Variable desconocida: ${a.variable}`);
+    if (!variablePorClave(a.variable) && !extra.has(a.variable))
+      throw new Error(`Variable desconocida: ${a.variable}`);
     porParrafo.set(a.parrafo, [...(porParrafo.get(a.parrafo) ?? []), a]);
   }
 
@@ -275,7 +281,8 @@ export function aplicarAsignaciones(buffer: Buffer, asignaciones: Asignacion[]):
     let parrafoXml: string = xml.slice(span.inicio, span.fin);
     const lista = porParrafo.get(indice)!.sort((x, y) => y.inicio - x.inicio);
     for (const a of lista) {
-      parrafoXml = aplicarEnParrafo(parrafoXml, a.inicio, a.fin, tagDeVariable(a.variable));
+      const tag = variablePorClave(a.variable) ? tagDeVariable(a.variable) : `{${a.variable}}`;
+      parrafoXml = aplicarEnParrafo(parrafoXml, a.inicio, a.fin, tag);
     }
     parrafoXml = limpiarFormatoDeTags(parrafoXml);
     xml = xml.slice(0, span.inicio) + parrafoXml + xml.slice(span.fin);

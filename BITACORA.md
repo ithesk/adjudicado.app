@@ -8,6 +8,34 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Variables personalizadas: "dominicano" y los datos que se preguntan
+
+**Hecho:** las plantillas del constructor ahora aceptan variables PROPIAS, en dos sabores
+(pedido de Pablo: «hay variable por ejemplo dominicano, y personalizados»):
+
+- **Valor fijo** — se define una vez en la plantilla ("Nacionalidad" = "dominicano") y
+  sale igual en todos los procesos.
+- **Se pregunta al generar** — se define sin valor; cada proceso captura el suyo en el
+  requisito (2 · Requisitos muestra un mini-form con autosave; el campo vacío marca
+  "— falta" en ámbar). Los valores viven en `lic_requisito.datos` (jsonb).
+
+Piezas: migración aplicada a producción (`lic_plantilla.variables_personalizadas` jsonb +
+`lic_requisito.datos` jsonb); el editor gana la sección "De esta plantilla" (crear con
+etiqueta + valor fijo opcional, chips arrastrables con badge fija/se pregunta, quitar
+limpia sus asignaciones); `aplicarAsignaciones` acepta `clavesExtra`; la vista previa
+rellena con el valor fijo o `[Etiqueta]`; `/generar` mezcla `construirDatos` + fijos +
+capturados y devuelve **422 con la lista** si falta un dato que se pregunta (el Bid Room
+ya la pintaba). Test nuevo de ida y vuelta con clave personalizada (56 en verde).
+
+**Decisión no obvia:** la clave se deriva de la etiqueta (slug) y se prefija `x_` si
+choca con una variable del sistema — el usuario nunca teclea claves.
+
+**Pendiente de verificación de Pablo:** crear en el editor una variable fija
+("Nacionalidad" = dominicano) y una que se pregunta, arrastrarlas, publicar, y en un
+proceso completar el dato en el requisito → generar el paquete.
+
+---
+
 ## 2026-07-16 — Constructor Fase 2: las plantillas propias entran al paquete
 
 **Hecho:** el círculo cerrado. Los requisitos cuyo código coincide con una plantilla

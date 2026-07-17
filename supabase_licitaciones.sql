@@ -360,3 +360,9 @@ alter table lic_plantilla enable row level security;
 drop policy if exists lic_plantilla_all on lic_plantilla;
 create policy lic_plantilla_all on lic_plantilla for all
   using (es_miembro(org_id)) with check (es_miembro(org_id));
+
+-- Variables personalizadas del constructor: fijas (valor definido en la
+-- plantilla, ej. "dominicano") o preguntadas al generar (valor vacío → cada
+-- proceso captura el suyo en lic_requisito.datos).
+alter table lic_plantilla add column if not exists variables_personalizadas jsonb not null default '[]'::jsonb;
+alter table lic_requisito add column if not exists datos jsonb not null default '{}'::jsonb;

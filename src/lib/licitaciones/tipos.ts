@@ -163,6 +163,9 @@ export interface LicRequisito {
   estado: "pendiente" | "listo";
   documento_empresa_id: string | null;
   storage_path: string | null;
+  // Valores de las variables "se pregunta al generar" de la plantilla de la
+  // org (clave → valor), propios de ESTE proceso.
+  datos: Record<string, string>;
   orden_indice: number;
 }
 

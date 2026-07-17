@@ -43,11 +43,16 @@ export async function POST(
   if (!archivo) return NextResponse.json({ error: "No se pudo leer el archivo." }, { status: 500 });
 
   try {
+    const personalizadas = plantilla.variables_personalizadas ?? [];
     const taggeado = aplicarAsignaciones(
       Buffer.from(await archivo.arrayBuffer()),
       asignaciones ?? [],
+      personalizadas.map((v) => v.clave),
     );
-    const relleno = rellenarPlantilla(taggeado, datosEjemplo(), {
+    const datosPersonalizados = Object.fromEntries(
+      personalizadas.map((v) => [v.clave, v.valor || `[${v.etiqueta}]`]),
+    );
+    const relleno = rellenarPlantilla(taggeado, { ...datosEjemplo(), ...datosPersonalizados }, {
       firma: PNG_MUESTRA,
       sello: PNG_MUESTRA,
     });

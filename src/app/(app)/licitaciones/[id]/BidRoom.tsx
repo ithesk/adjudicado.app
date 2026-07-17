@@ -56,7 +56,11 @@ export default function BidRoom({
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
-  plantillasOrg: { codigo: string; nombre: string }[];
+  plantillasOrg: {
+    codigo: string;
+    nombre: string;
+    preguntas: { clave: string; etiqueta: string }[];
+  }[];
   params: ParamsCotizacion;
   tieneFirmantes: boolean;
   tienePerfil: boolean;
