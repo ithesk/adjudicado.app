@@ -8,6 +8,27 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Bid Room: una sola página con secciones plegables
+
+**Hecho:** Pablo reportó que la Bid Room era confusa — las 4 estaciones eran pestañas
+excluyentes y para comparar cualquier dato había que ir y volver. Rediseño (commits
+`7a37246` + `dc71856`):
+
+- **Una sola página**: Proceso → Requisitos → Ítems → Paquete apiladas en orden de
+  trabajo; se cotiza mirando el pliego sin cambiar de vista.
+- **Barra sticky** con el estado vivo de cada sección (críticos en rojo, "N sin cotizar",
+  total de la oferta, gate bloqueado/listo); clic = saltar; scroll-spy resalta la actual.
+- **Secciones plegables** (pedido explícito): chevron por sección, el estado sigue
+  visible aunque esté cerrada, lo plegado se recuerda en localStorage, y saltar desde la
+  barra o avanzar la línea de tiempo expande la sección destino antes de desplazarse.
+
+**Decisión no obvia:** la regla nueva `react-hooks/set-state-in-effect` prohíbe el
+patrón de "leer localStorage tras montar" (que TriageTable ya usa); se desactivó en esa
+línea con justificación — el doble render inicial es deliberado para no romper la
+hidratación.
+
+---
+
 ## 2026-07-16 — Variables personalizadas: "dominicano" y los datos que se preguntan
 
 **Hecho:** las plantillas del constructor ahora aceptan variables PROPIAS, en dos sabores
