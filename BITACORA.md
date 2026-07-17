@@ -8,6 +8,155 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-16 — Constructor Fase 2: las plantillas propias entran al paquete
+
+**Hecho:** el círculo cerrado. Los requisitos cuyo código coincide con una plantilla
+"lista" del constructor se generan en el paquete junto a los 7 del sistema:
+
+- La ruta `/generar` resuelve cada requisito contra GENERABLES ∪ `lic_plantilla` (lista):
+  las del sistema salen del repo, las de la org se descargan de storage y se rellenan con
+  el mismo `construirDatos` + firma/sello.
+- El **gate** reconoce las plantillas propias: un requisito crítico cuyo documento genera
+  el propio botón no bloquea.
+- El **picker del checklist** gana el grupo "Tus plantillas" (con chip "Se genera"), y
+  `crearRequisitosLote` crea el requisito desde la plantilla (subsanable por defecto,
+  firma GG, origen generado). Las filas muestran la vía "Se genera aquí".
+
+**Pendiente de verificación de Pablo:** subir una plantilla real en el constructor,
+taggearla, publicarla, agregarla a un proceso por el checklist y generar el paquete — su
+documento debe salir en el ZIP con los datos del expediente.
+
+---
+
+## 2026-07-16 — Constructor de plantillas, Fase 1: taggear sin código
+
+**Contexto:** Pablo pidió que el usuario suba un Word, arrastre variables y la plantilla
+quede reutilizable — sin código. Es la interfaz de lo que hice a mano con las plantillas
+DGCP.
+
+**Hecho:**
+
+- Tabla `lic_plantilla` (org, código→requisito, original + tpl en storage, asignaciones
+  jsonb, borrador/lista) — migración aplicada en producción.
+- `variables.ts`: el catálogo de 24 variables (proceso/empresa/firmante/económico/
+  imágenes) — fuente única para fichas, ejemplos y validación.
+- `plantillas.ts`: **el motor** — `analizarDocx` (párrafos con conteo de profundidad —
+  los cuadros de texto anidan w:p — y detección de huecos: subrayados, [instrucciones],
+  líneas de puntos, controles, tags ya escritos) y `aplicarAsignaciones` (el port a TS del
+  reemplazo quirúrgico sobre runs de taggear-plantillas.py, por posición exacta, con
+  limpieza de formato y los seguros de LibreOffice: xmlns de dibujo, content-types,
+  rels). **8 tests dedicados**, incluyendo tramos que cruzan runs y la ida-y-vuelta con
+  docxtemplater.
+- UI en Configuración → Plantillas: lista + editor de dos paneles — documento con huecos
+  resaltados como zonas de soltar (drag & drop nativo, o clic-hueco + clic-ficha),
+  fichas por grupo con ejemplo, autosave, vista previa en PDF real (Gotenberg) con datos
+  de ejemplo y firma/sello de muestra, y "Guardar y publicar" (aplica, sube el tpl,
+  estado lista).
+
+**Pendiente (Fase 2):** enchufar a la generación — que los requisitos cuyo código coincida
+con una plantilla "lista" de la org se generen en el paquete junto a los 7 del sistema.
+
+---
+
+## 2026-07-16 — Fase 4c: los 7 documentos "se genera aquí", generándose
+
+**Contexto:** Pablo probó "Generar paquete" (funcionó — 3 Word) y pidió el resto de los
+requisitos marcados como generables, más el plan de firma y sello.
+
+**Hecho:**
+
+- **Compromiso Ético oficial** descargado de la DGCP y taggeado (17 espacios en orden fijo
+  → reemplazo secuencial; el subrayado de la firma se queda).
+- **Cartas propias construidas desde cero** (`scripts/generar-cartas-base.py` →
+  `plantillas/cartas/`): Declaración jurada art. 38 Ley 47-25, Aceptación de condiciones,
+  Declaración de no colusión. Son documentos nuestros: sin regla de fidelidad, formato de
+  carta formal.
+- Generador ampliado a 7 GENERABLES (con carpeta dgcp/cartas), datos nuevos (cédula del
+  firmante, día/mes/año en letras, ciudad/provincia), gate y tracing de Vercel al día.
+- Smoke: las 8 plantillas rellenan y pasan textutil. 45 tests.
+
+**Plan de firma y sello (siguiente corte):** (1) subir imagen de firma y sello en
+Configuración → Empresa (tipos nuevos en documento_empresa; lic_firmante ya tiene las FKs);
+(2) incrustar las imágenes EN EL DOCX al generar (módulo libre de imágenes de
+docxtemplater, JS puro, corre en Vercel) sobre tags {%firma}/{%sello} en los bloques de
+firma — la posición la resuelve Word, no coordenadas de PDF; (3) PDF vía Gotenberg
+(contenedor, ~US$5/mes); interim: exportar a PDF desde Word. La "firma en todas las
+páginas + foliado" que piden algunos pliegos = post-proceso del PDF con pdf-lib.
+
+---
+
+## 2026-07-16 — Fase 4b: "Generar paquete" vivo — del expediente al ZIP
+
+**Hecho:** el ciclo completo. `src/lib/licitaciones/letras.ts` (monto en letras es-DO,
+implementación propia — ruta crítica legal, con 22 tests incluyendo apócopes VEINTIÚN/UN y
+el redondeo del monto completo) · `generador.ts` (canónico → datos → docxtemplater →
+.docx; el mapper formatea, la plantilla no calcula) · `GET /api/licitaciones/{id}/generar`:
+valida el expediente (422 con faltantes), aplica **EL GATE como bloqueo duro** (409 si hay
+NO subsanables pendientes — sin contar F.033/034/042, que son lo que la generación
+produce), rellena, sube cada .docx y el ZIP a storage, marca los requisitos generados como
+listos con su archivo, registra `lic_paquete` (payload + hash: idempotencia) y baja el ZIP.
+Botón "Generar paquete" vivo en la Bid Room (deshabilitado si el gate bloquea; errores
+legibles en pantalla). `outputFileTracingIncludes` para que Vercel empaquete las plantillas
+(el ENOENT clásico no aparece en dev).
+
+**Pendiente:** prueba end-to-end de Pablo con su expediente real (clic en Generar → abrir
+el ZIP). PDF + firma estampada = siguiente corte (Gotenberg + pdf-lib). Cartas propias
+(DJ art. 38, aceptación de condiciones) y Compromiso Ético: próxima tanda de plantillas.
+
+---
+
+## 2026-07-16 — Fase 4a: las plantillas DGCP rellenan de verdad (3 bugs de Word cazados)
+
+**Hecho:** plantillas oficiales F.033/034/042/047 descargadas del portal DGCP, taggeadas
+con `scripts/taggear-plantillas.py` (reproducible) y verificadas rellenando con
+docxtemplater (`scripts/probar-relleno.mjs`). Previews con datos de ejemplo en
+~/Downloads/adjudicado-formularios-preview para el ojo de Pablo.
+
+**Tres bugs de "Word no lo abre" — las lecciones importan más que los parches:**
+
+1. **xmlns descartados:** ElementTree solo declara los namespaces USADOS, pero
+   `mc:Ignorable` referencia prefijos por nombre (w14, wp14…) → si su declaración
+   desaparece, Word marca contenido ilegible. Fix: `restaurar_xmlns()` fusiona en la raíz
+   lo que falte.
+2. **sdt de bloque → run:** el control "No. EXPEDIENTE" de los encabezados contiene
+   párrafos; sustituirlo por un run pelado deja XML bien formado que Word NO abre (error
+   duro, en las 4). Fix: detectar el nivel y emitir párrafo con su pPr.
+3. **El dato heredaba el ROJO** de las instrucciones originales (y en los membretes
+   quedaban los textos guía "Nombre del Capítulo…"). Fix: pasada `limpiar_formato_de_tags`
+   (color/cursiva fuera de los runs con marcador) + `TEXTO_GLOBAL` aplicado a headers.
+
+**Lección de proceso:** "XML bien formado" ≠ "Word lo abre". El chequeo estructural
+(runs en nivel de bloque, Ignorable ⊆ declarados, placeholders residuales) quedó en el
+script, y la validación con un lector independiente (textutil) antes de pedirle a Pablo
+que pruebe.
+
+**Sigue (Fase 4b):** cablear "Generar paquete" (expediente → mapper → docx rellenos → ZIP).
+Pendiente señalado por Pablo: plantillas para Compromiso Ético (anexo del pliego), DJ
+art. 38 y carta de aceptación (cartas propias, se generan desde cero); la Debida
+Diligencia es formulario propio de cada entidad (vía "sube").
+
+---
+
+## 2026-07-16 — La Bid Room como línea de tiempo (feedback de Pablo)
+
+**Contexto:** "la primera pantalla debe pedir datos del proceso, todo tiene que ser una
+línea de tiempo de licitaciones."
+
+**Hecho:**
+
+- **`LineaTiempo`**: el recorrido del proceso arriba de la Bid Room — captura →
+  calificación → costeo → armado → listo → sometido, con subsanación como desvío y los
+  terminales (adjudicado/perdido/descartado) como remate. Cada punto es clicable, "Avanzar
+  a X" es la acción principal, y tras someter aparecen los botones de resultado.
+- **Cuatro estaciones**: 1 · Proceso (datos completos con autosave — objeto, entidad,
+  cierre, modalidad, adjudicación, criterio, plazo de pago, overrides de tasa/margen,
+  notas), 2 · Pliego, 3 · Cotización, 4 · Paquete (el gate + validar expediente + botón
+  "Generar paquete" deshabilitado como adelanto de la Fase 4/5).
+- Al cambiar el estado en la línea, la pantalla te lleva a la estación que corresponde
+  (captura → Proceso, calificación → Pliego, costeo → Cotización, armado+ → Paquete).
+
+---
+
 ## 2026-07-15 — La Bid Room en dos pasos: primero el panorama, después la plata
 
 **Contexto:** feedback de dominio de Pablo: "están mezclando ítems, cotización, catálogo y

@@ -39,6 +39,20 @@ export const ESTADO_LIC_LABEL: Record<EstadoLicitacion, string> = {
   descartado: "Descartado",
 };
 
+// Qué se hace en cada etapa, en cristiano (tooltips de la línea de tiempo).
+export const ESTADO_LIC_DESCRIPCION: Record<EstadoLicitacion, string> = {
+  captura: "Cargar el pliego: los datos del proceso, los requisitos y los ítems",
+  calificacion: "Decidir si nos presentamos y qué ítems ofertamos",
+  costeo: "Cotizar: costos, márgenes y precios de cada línea",
+  armado: "Armar el paquete: generar los formularios, juntar los documentos, firmar y sellar",
+  listo: "Paquete completo y verificado, listo para someter",
+  sometido: "Oferta presentada ante la entidad",
+  subsanacion: "La entidad pidió corregir algo subsanable — hay plazo, vigilarlo",
+  adjudicado: "Ganamos: de aquí nace la orden de compra",
+  perdido: "No ganamos este proceso",
+  descartado: "Decidimos no presentarnos",
+};
+
 export const MODALIDAD_LABEL: Record<string, string> = {
   CM: "Compra menor",
   CD: "Compra directa",

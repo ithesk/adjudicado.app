@@ -7,6 +7,7 @@ const TABS = [
   { href: "/configuracion", label: "Suplidores", exact: true },
   { href: "/configuracion/entidades", label: "Entidades", exact: false },
   { href: "/configuracion/empresa", label: "Empresa", exact: false },
+  { href: "/configuracion/plantillas", label: "Plantillas", exact: false },
   { href: "/configuracion/canales", label: "Canales", exact: false },
   { href: "/configuracion/equipo", label: "Equipo", exact: false },
   { href: "/configuracion/grupos", label: "Grupos", exact: false },

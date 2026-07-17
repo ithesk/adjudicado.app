@@ -1,0 +1,27 @@
+# Convertidor Word→PDF para adjudicado.app (VPS 147.93.183.165)
+# Gotenberg (LibreOffice headless tras un endpoint HTTP) protegido por Caddy:
+# HTTPS automático vía sslip.io + llave de API en el header X-Api-Key.
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    # Sin puertos publicados: solo Caddy lo alcanza por la red interna.
+    command:
+      - gotenberg
+      - --api-timeout=60s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      # La llave vive en /opt/gotenberg/.env del VPS, nunca en el repo.
+      - GOTENBERG_TOKEN=${GOTENBERG_TOKEN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

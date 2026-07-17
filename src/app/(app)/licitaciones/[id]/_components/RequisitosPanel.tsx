@@ -56,9 +56,11 @@ const ORDEN_GRUPOS: (GrupoRequisito | "otros")[] = [
 export default function RequisitosPanel({
   procesoId,
   requisitos,
+  plantillasOrg = [],
 }: {
   procesoId: string;
   requisitos: LicRequisito[];
+  plantillasOrg?: { codigo: string; nombre: string }[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +127,7 @@ export default function RequisitosPanel({
       {modo === "checklist" && (
         <ChecklistPicker
           yaEstan={new Set(requisitos.map((r) => r.codigo))}
+          plantillasOrg={plantillasOrg}
           pendiente={pendiente}
           onAgregar={(codigos) => {
             correr(() => crearRequisitosLoteAction(procesoId, codigos));
@@ -190,10 +193,12 @@ export default function RequisitosPanel({
 // los "si aplica". Un clic y entran todos.
 function ChecklistPicker({
   yaEstan,
+  plantillasOrg,
   pendiente,
   onAgregar,
 }: {
   yaEstan: Set<string>;
+  plantillasOrg: { codigo: string; nombre: string }[];
   pendiente: boolean;
   onAgregar: (codigos: string[]) => void;
 }) {
@@ -247,9 +252,19 @@ function ChecklistPicker({
                           No subsanable
                         </span>
                       )}
-                      {r.sinArchivo && (
+                      {r.via === "linea" && (
                         <span className="rounded bg-surface-2 px-1 text-[9.5px] uppercase text-muted">
                           En línea
+                        </span>
+                      )}
+                      {r.via === "genera" && (
+                        <span className="rounded bg-primary/10 px-1 text-[9.5px] font-semibold uppercase text-primary">
+                          Se genera
+                        </span>
+                      )}
+                      {r.via === "empresa" && (
+                        <span className="rounded bg-ok-soft px-1 text-[9.5px] uppercase text-ok">
+                          De Empresa
                         </span>
                       )}
                     </span>
@@ -260,7 +275,37 @@ function ChecklistPicker({
           </div>
         );
       })}
-      {disponibles.length === 0 ? (
+      {plantillasOrg.filter((p) => !yaEstan.has(p.codigo)).length > 0 && (
+        <div className="mb-2">
+          <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+            Tus plantillas (Configuración → Plantillas)
+          </p>
+          <div className="grid gap-0.5 sm:grid-cols-2">
+            {plantillasOrg
+              .filter((p) => !yaEstan.has(p.codigo))
+              .map((p) => (
+                <label
+                  key={p.codigo}
+                  className="flex cursor-pointer items-start gap-2 rounded px-1.5 py-1 text-[12.5px] text-ink transition-colors hover:bg-surface-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={marcados.has(p.codigo)}
+                    onChange={() => toggle(p.codigo)}
+                    className="mt-0.5"
+                  />
+                  <span className="min-w-0">
+                    {p.nombre}
+                    <span className="ml-1 rounded bg-primary/10 px-1 align-middle text-[9.5px] font-semibold uppercase text-primary">
+                      Se genera
+                    </span>
+                  </span>
+                </label>
+              ))}
+          </div>
+        </div>
+      )}
+      {disponibles.length === 0 && plantillasOrg.filter((p) => !yaEstan.has(p.codigo)).length === 0 ? (
         <p className="text-[12.5px] text-muted">
           Todo el checklist estándar ya está en este proceso.
         </p>
@@ -342,6 +387,10 @@ function FilaRequisito({
   const critico = !r.subsanable;
   const pendienteEstado = r.estado === "pendiente";
   const estandar = requisitoEstandar(r.codigo);
+  // Por dónde llega: estándar → su vía; origen "generado" (plantilla de la
+  // org creada en el constructor) → se genera aquí; el resto se sube.
+  const via = estandar?.via ?? (r.origen === "generado" ? "genera" : "sube");
+  const cubiertoPorEmpresa = r.origen === "documento_empresa" && !!r.documento_empresa_id;
 
   return (
     <li className="px-4 py-2">
@@ -373,12 +422,45 @@ function FilaRequisito({
           <p className="text-[11.5px] text-muted">
             <span className="font-mono">{r.codigo}</span>
             {r.fuente ? ` · ${r.fuente}` : ""}
-            {r.origen === "documento_empresa" && " · cubierto por Empresa"}
-            {estandar?.sinArchivo && " · la entidad lo verifica en línea"}
             {" · firma: "}
             {r.firmante_rol === "ninguno" ? "nadie" : ROL_FIRMANTE_LABEL[r.firmante_rol]}
           </p>
         </div>
+
+        {/* La VÍA del documento: no todo se sube. */}
+        {via === "genera" && (
+          <span
+            className="whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-primary"
+            title="Este formulario lo generará el sistema (motor documental). Mientras tanto puedes subirlo hecho."
+          >
+            Se genera aquí
+          </span>
+        )}
+        {via === "linea" && (
+          <span
+            className="whitespace-nowrap rounded bg-surface-2 px-1.5 py-0.5 text-[10.5px] font-medium text-muted"
+            title="No se deposita archivo: la entidad lo verifica en línea"
+          >
+            Verificado en línea
+          </span>
+        )}
+        {via === "empresa" &&
+          (cubiertoPorEmpresa ? (
+            <span
+              className="whitespace-nowrap rounded bg-ok-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-ok"
+              title="El paquete lo toma de la documentación de la empresa"
+            >
+              De Empresa ✓
+            </span>
+          ) : (
+            <a
+              href="/configuracion/empresa"
+              className="whitespace-nowrap rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-warn hover:underline"
+              title="Falta o está vencido en Configuración → Empresa — cárgalo allá una sola vez"
+            >
+              Falta en Empresa
+            </a>
+          ))}
 
         {r.storage_path && (
           <VisorDocumento
@@ -389,34 +471,44 @@ function FilaRequisito({
           />
         )}
 
-        <input
-          ref={fileRef}
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (!f) return;
-            const fd = new FormData();
-            fd.set("archivo", f);
-            onSubir(fd);
-            e.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={pendiente}
-          className="flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-ink"
-          title="Subir el archivo de este requisito (lo marca listo)"
-        >
-          <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-          {r.storage_path ? "Reemplazar" : "Subir"}
-        </button>
+        {/* Subir aplica a lo externo; en lo generado es el plan B mientras
+            llega el motor documental. Lo "en línea" y lo de Empresa no suben. */}
+        {via !== "linea" && !cubiertoPorEmpresa && (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const fd = new FormData();
+                fd.set("archivo", f);
+                onSubir(fd);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={pendiente}
+              className="flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-ink"
+              title={
+                via === "genera"
+                  ? "Mientras el motor documental no existe, súbelo hecho a mano"
+                  : "Subir el archivo de este requisito (lo marca listo)"
+              }
+            >
+              <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              {r.storage_path ? "Reemplazar" : via === "genera" ? "Subir hecho" : "Subir"}
+            </button>
+          </>
+        )}
 
         <label className="flex items-center gap-1 text-[12px] text-ink-soft" title="Listo / pendiente">
           <input
             type="checkbox"
-            checked={r.estado === "listo"}
+            defaultChecked={r.estado === "listo"}
             onChange={(e) => onPatch({ estado: e.target.checked ? "listo" : "pendiente" })}
           />
           Listo

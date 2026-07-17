@@ -72,6 +72,18 @@ export const TIPOS_DOC_EMPRESA: TipoDocEmpresa[] = [
     vence: false,
   },
   {
+    codigo: "firma",
+    label: "Firma del representante (imagen)",
+    descripcion: "PNG con fondo transparente. Se estampa en los documentos generados.",
+    vence: false,
+  },
+  {
+    codigo: "sello",
+    label: "Sello de la empresa (imagen)",
+    descripcion: "PNG con fondo transparente. Se estampa junto a la firma.",
+    vence: false,
+  },
+  {
     codigo: "otro",
     label: "Otro",
     descripcion: "Cualquier documento que no esté en la lista.",

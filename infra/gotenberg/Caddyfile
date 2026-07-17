@@ -1,0 +1,12 @@
+# HTTPS real sin comprar dominio: 147-93-183-165.sslip.io resuelve al VPS y
+# Let's Encrypt le emite certificado. Sin la llave correcta: 401.
+# La llave NO vive aquí: llega por variable de entorno (ver README).
+147-93-183-165.sslip.io {
+	@conLlave header X-Api-Key {$GOTENBERG_TOKEN}
+	handle @conLlave {
+		reverse_proxy gotenberg:3000
+	}
+	handle {
+		respond "No autorizado" 401
+	}
+}

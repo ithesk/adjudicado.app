@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
-import { ProcesoCanonico } from "./contrato";
+import { ProcesoCanonico, traducirIssue } from "./contrato";
 import { paramsCotizacion, precioVentaUnitario } from "./cotizador";
 import { requisitoEstandar } from "./requisitos-estandar";
 import {
@@ -237,6 +237,7 @@ export async function actualizarProceso(
       | "adjudicacion"
       | "criterio"
       | "plazo_pago_dias"
+      | "institucion_id"
       | "tasa_usd_dop"
       | "margen_pct"
       | "itbis_pct"
@@ -476,14 +477,22 @@ export async function crearRequisitosLote(
   if (!miembro) return "No autorizado.";
   const supabase = await createClient();
 
-  const [{ data: existentes }, { data: docs }] = await Promise.all([
+  const [{ data: existentes }, { data: docs }, { data: plantillasOrg }] = await Promise.all([
     supabase.from("lic_requisito").select("codigo").eq("proceso_id", procesoId),
     supabase
       .from("documento_empresa")
       .select("*")
       .eq("org_id", miembro.org_id),
+    supabase
+      .from("lic_plantilla")
+      .select("codigo, nombre")
+      .eq("org_id", miembro.org_id)
+      .eq("estado", "lista"),
   ]);
   const yaEstan = new Set((existentes ?? []).map((r) => r.codigo));
+  const plantillaPorCodigo = new Map(
+    (plantillasOrg ?? []).map((p) => [p.codigo as string, p.nombre as string]),
+  );
 
   // El documento vigente de cada tipo (mismo criterio que la pantalla Empresa).
   const vigentes = new Map(
@@ -493,23 +502,41 @@ export async function crearRequisitosLote(
   );
 
   const filas = codigos
-    .map((c) => requisitoEstandar(c))
-    .filter((r): r is NonNullable<typeof r> => !!r && !yaEstan.has(r.codigo))
-    .map((r, i) => {
-      const doc = r.docEmpresa ? vigentes.get(r.docEmpresa) : undefined;
+    .filter((c) => !yaEstan.has(c))
+    .map((c, i) => {
+      const r = requisitoEstandar(c);
+      if (r) {
+        const doc = r.docEmpresa ? vigentes.get(r.docEmpresa) : undefined;
+        return {
+          org_id: miembro.org_id,
+          proceso_id: procesoId,
+          codigo: r.codigo,
+          nombre: r.nombre,
+          subsanable: r.subsanable,
+          firmante_rol: r.subsanable ? "gerente_ventas" : "gerente_general",
+          origen: doc ? "documento_empresa" : r.sinArchivo ? "externo" : "plantilla_oficial",
+          estado: doc ? "listo" : "pendiente",
+          documento_empresa_id: doc?.id ?? null,
+          orden_indice: i,
+        };
+      }
+      // Plantilla del constructor de la organización.
+      const nombre = plantillaPorCodigo.get(c);
+      if (!nombre) return null;
       return {
         org_id: miembro.org_id,
         proceso_id: procesoId,
-        codigo: r.codigo,
-        nombre: r.nombre,
-        subsanable: r.subsanable,
-        firmante_rol: r.subsanable ? "gerente_ventas" : "gerente_general",
-        origen: doc ? "documento_empresa" : r.sinArchivo ? "externo" : "plantilla_oficial",
-        estado: doc ? "listo" : "pendiente",
-        documento_empresa_id: doc?.id ?? null,
+        codigo: c,
+        nombre,
+        subsanable: true,
+        firmante_rol: "gerente_general",
+        origen: "generado",
+        estado: "pendiente",
+        documento_empresa_id: null,
         orden_indice: i,
       };
-    });
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
   if (filas.length === 0) return null; // todo ya estaba
 
   const { error } = await supabase.from("lic_requisito").insert(filas);
@@ -682,11 +709,8 @@ export async function construirCanonico(procesoId: string): Promise<ResultadoCan
 
   const r = ProcesoCanonico.safeParse(candidato);
   if (r.success) return { canonico: r.data };
-  return {
-    errores: r.error.issues.map(
-      (i) => `${i.path.join(".") || "(raíz)"}: ${i.message}`,
-    ),
-  };
+  // Sin duplicados: varios issues de Zod pueden traducir al mismo consejo.
+  return { errores: [...new Set(r.error.issues.map((i) => traducirIssue(i.path, i.message)))] };
 }
 
 const ROL_CARGO: Record<string, string> = {
