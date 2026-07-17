@@ -128,7 +128,9 @@ export function Hoja({
   className?: string;
 }) {
   return (
-    <div className={`w-full ${ANCHO_HOJA[ancho]} ${className}`}>{children}</div>
+    <div className={`mx-auto w-full ${ANCHO_HOJA[ancho]} ${className}`}>
+      {children}
+    </div>
   );
 }
 

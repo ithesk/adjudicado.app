@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { listarProcesos, perfilEmpresa } from "@/lib/licitaciones/queries";
-import { CabeceraPagina, btnPrimary } from "@/components/ui";
+import { CabeceraPagina, Hoja, btnPrimary } from "@/components/ui";
 import ProcesosLista from "./ProcesosLista";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function LicitacionesPage() {
   const [procesos, perfil] = await Promise.all([listarProcesos(), perfilEmpresa()]);
 
   return (
-    <div className="space-y-4">
+    <Hoja ancho="ficha" className="space-y-4">
       <CabeceraPagina
         titulo="Licitaciones"
         descripcion={
@@ -35,6 +35,6 @@ export default async function LicitacionesPage() {
       )}
 
       <ProcesosLista procesos={procesos} />
-    </div>
+    </Hoja>
   );
 }
