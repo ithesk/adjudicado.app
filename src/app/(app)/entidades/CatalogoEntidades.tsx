@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronRight, Landmark, Search } from "lucide-react";
 import { Panel } from "@/components/ui";
-import { normalizarEntidad } from "@/lib/types";
+import { coincideTexto } from "@/lib/buscar-texto";
 import type { EntidadResumen } from "@/lib/entidades/queries";
 
 const COLS =
@@ -21,12 +21,12 @@ export default function CatalogoEntidades({
   const [q, setQ] = useState("");
 
   const filtradas = useMemo(() => {
-    const buscado = normalizarEntidad(q);
-    if (!buscado) return entidades;
+    if (!q.trim()) return entidades;
     return entidades.filter((e) =>
-      normalizarEntidad(
+      coincideTexto(
         `${e.nombre} ${e.siglas ?? ""} ${e.rnc ?? ""} ${e.telefono ?? ""} ${e.asignados.join(" ")}`,
-      ).includes(buscado),
+        q,
+      ),
     );
   }, [entidades, q]);
 

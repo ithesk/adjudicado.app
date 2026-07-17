@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { coincideTexto } from "@/lib/buscar-texto";
 import Link from "next/link";
 import {
   ChevronDown,
@@ -183,22 +184,25 @@ export default function TriageTable({
   const anchoDe = (c: ColDef) => `${((c.peso / totalPeso) * 100).toFixed(3)}%`;
 
   const filas = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     const def = COLS.find((c) => c.key === sortKey)!;
     const list = ordenes.filter((o) => {
       if (misOrdenes && currentUserId && o.responsable?.id !== currentUserId)
         return false;
       if (!q) return true;
-      return [
-        o.numero_oc,
-        o.institucion,
-        o.suplidor,
-        o.responsable?.nombre,
-        o.grupo?.nombre,
-        ...o.etiquetas,
-      ]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
+      return coincideTexto(
+        [
+          o.numero_oc,
+          o.institucion,
+          o.suplidor,
+          o.responsable?.nombre,
+          o.grupo?.nombre,
+          ...o.etiquetas,
+        ]
+          .filter(Boolean)
+          .join(" "),
+        q,
+      );
     });
     const sorted = [...list].sort((a, b) => {
       const va = def.sort(a);

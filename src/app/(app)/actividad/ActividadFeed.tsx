@@ -1,5 +1,6 @@
 "use client";
 
+import { coincideTexto } from "@/lib/buscar-texto";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -45,13 +46,16 @@ export default function ActividadFeed({
   const [tipo, setTipo] = useState("todo");
 
   const resultados = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     return actividad.filter((a) => {
       if (tipo !== "todo" && a.tipo !== tipo) return false;
       if (!q) return true;
-      return [a.texto, a.numeroOc, a.institucion, a.itemNombre, a.autor?.nombre]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
+      return coincideTexto(
+        [a.texto, a.numeroOc, a.institucion, a.itemNombre, a.autor?.nombre]
+          .filter(Boolean)
+          .join(" "),
+        q,
+      );
     });
   }, [actividad, query, tipo]);
 
