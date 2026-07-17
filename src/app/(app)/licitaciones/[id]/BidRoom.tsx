@@ -1,10 +1,11 @@
 "use client";
 
 // La "Bid Room": la licitación como UNA SOLA PÁGINA. Arriba, la identidad y
-// el recorrido del proceso; debajo, TODO visible en orden de trabajo
+// el recorrido del proceso; debajo, las secciones en orden de trabajo
 // (Proceso → Requisitos → Ítems → Paquete) — nada de pestañas que obligan a
-// ir y volver para comparar. Una barra fija acompaña el scroll con el estado
-// vivo de cada sección y salta a la que toque.
+// ir y volver para comparar. Cada sección se pliega/expande (lo plegado
+// sigue mostrando su estado y se recuerda entre visitas), y una barra fija
+// acompaña el scroll con el estado vivo de cada una y salta a la que toque.
 
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
@@ -12,6 +13,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   PackageOpen,
   ShieldAlert,
@@ -48,10 +50,56 @@ function estacionDelEstado(estado: EstadoLicitacion): Estacion {
   return "paquete";
 }
 
-function irA(estacion: Estacion) {
-  document
-    .getElementById(estacion)
-    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+const LS_COLAPSADAS = "bidroom-colapsadas";
+
+// Cada sección se pliega/expande. Definido FUERA del padre (regla de la
+// casa: un componente inline se remonta en cada render y pierde el foco).
+function Seccion({
+  id,
+  titulo,
+  hint,
+  alerta,
+  colapsada,
+  onToggle,
+  children,
+}: {
+  id: Estacion;
+  titulo: string;
+  hint: string;
+  alerta?: boolean;
+  colapsada: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="scroll-mt-24 md:scroll-mt-14">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!colapsada}
+        className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-surface-2"
+      >
+        <ChevronDown
+          className={`h-3.5 w-3.5 flex-none text-muted transition-transform ${colapsada ? "-rotate-90" : ""}`}
+          strokeWidth={2}
+          aria-hidden
+        />
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+          {titulo}
+        </span>
+        {hint && (
+          <span
+            className={`rounded px-1.5 font-mono text-[10.5px] ${
+              alerta ? "bg-danger-soft font-semibold text-danger" : "bg-surface-2 text-muted"
+            }`}
+          >
+            {hint}
+          </span>
+        )}
+      </button>
+      {!colapsada && <div className="mt-1.5">{children}</div>}
+    </section>
+  );
 }
 
 export default function BidRoom({
@@ -78,6 +126,48 @@ export default function BidRoom({
   const [validacion, setValidacion] = useState<string[] | "ok" | null>(null);
   const [pendiente, startTransition] = useTransition();
   const [activa, setActiva] = useState<Estacion>("proceso");
+  const [colapsadas, setColapsadas] = useState<Set<Estacion>>(new Set());
+
+  // Lo plegado se recuerda entre visitas. Se lee después de montar para no
+  // desajustar la hidratación (el servidor siempre pinta todo expandido);
+  // ese doble render inicial es justamente lo que se quiere aquí.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_COLAPSADAS);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (raw) setColapsadas(new Set(JSON.parse(raw) as Estacion[]));
+    } catch {
+      // localStorage corrupto o bloqueado: se arranca todo expandido
+    }
+  }, []);
+
+  function toggleSeccion(k: Estacion) {
+    setColapsadas((prev) => {
+      const s = new Set(prev);
+      if (s.has(k)) s.delete(k);
+      else s.add(k);
+      try {
+        localStorage.setItem(LS_COLAPSADAS, JSON.stringify([...s]));
+      } catch {}
+      return s;
+    });
+  }
+
+  // Saltar a una sección la expande primero si estaba plegada.
+  function irA(k: Estacion) {
+    setColapsadas((prev) => {
+      if (!prev.has(k)) return prev;
+      const s = new Set(prev);
+      s.delete(k);
+      try {
+        localStorage.setItem(LS_COLAPSADAS, JSON.stringify([...s]));
+      } catch {}
+      return s;
+    });
+    setTimeout(() => {
+      document.getElementById(k)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }
 
   // Scroll-spy: la barra resalta la sección que está en pantalla.
   useEffect(() => {
@@ -258,23 +348,51 @@ export default function BidRoom({
         ))}
       </nav>
 
-      <section id="proceso" className="scroll-mt-24 md:scroll-mt-14">
+      <Seccion
+        id="proceso"
+        titulo={ESTACIONES[0].label}
+        hint={ESTACIONES[0].hint}
+        alerta={ESTACIONES[0].alerta}
+        colapsada={colapsadas.has("proceso")}
+        onToggle={() => toggleSeccion("proceso")}
+      >
         <DatosProceso proceso={proceso} instituciones={instituciones} />
-      </section>
+      </Seccion>
 
-      <section id="requisitos" className="scroll-mt-24 md:scroll-mt-14">
+      <Seccion
+        id="requisitos"
+        titulo={ESTACIONES[1].label}
+        hint={ESTACIONES[1].hint}
+        alerta={ESTACIONES[1].alerta}
+        colapsada={colapsadas.has("requisitos")}
+        onToggle={() => toggleSeccion("requisitos")}
+      >
         <RequisitosPanel
           procesoId={proceso.id}
           requisitos={requisitos}
           plantillasOrg={plantillasOrg}
         />
-      </section>
+      </Seccion>
 
-      <section id="items" className="scroll-mt-24 md:scroll-mt-14">
+      <Seccion
+        id="items"
+        titulo={ESTACIONES[2].label}
+        hint={ESTACIONES[2].hint}
+        alerta={ESTACIONES[2].alerta}
+        colapsada={colapsadas.has("items")}
+        onToggle={() => toggleSeccion("items")}
+      >
         <CotizadorItems proceso={proceso} items={items} params={params} />
-      </section>
+      </Seccion>
 
-      <section id="paquete" className="scroll-mt-24 md:scroll-mt-14">
+      <Seccion
+        id="paquete"
+        titulo={ESTACIONES[3].label}
+        hint={ESTACIONES[3].hint}
+        alerta={ESTACIONES[3].alerta}
+        colapsada={colapsadas.has("paquete")}
+        onToggle={() => toggleSeccion("paquete")}
+      >
         <Panel className="space-y-3 p-4">
           {/* El gate: los no-subsanables mandan. */}
           <div className="flex flex-wrap items-center gap-2">
@@ -353,7 +471,7 @@ export default function BidRoom({
             </div>
           )}
         </Panel>
-      </section>
+      </Seccion>
     </div>
   );
 }
