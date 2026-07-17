@@ -1,4 +1,5 @@
 import ConfigTabs from "./_tabs";
+import { CabeceraPagina } from "@/components/ui";
 
 export default function ConfiguracionLayout({
   children,
@@ -7,12 +8,10 @@ export default function ConfiguracionLayout({
 }) {
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-xl font-semibold">Configuración</h1>
-        <p className="text-sm text-muted">
-          Catálogos reutilizables de tu organización.
-        </p>
-      </div>
+      <CabeceraPagina
+        titulo="Configuración"
+        descripcion="Catálogos reutilizables de tu organización."
+      />
       <ConfigTabs />
       {children}
     </div>

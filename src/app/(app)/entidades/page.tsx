@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Landmark } from "lucide-react";
-import { Panel } from "@/components/ui";
+import { CabeceraPagina, Panel } from "@/components/ui";
 import { listarEntidadesResumen } from "@/lib/entidades/queries";
 import NuevaEntidad from "./NuevaEntidad";
 
@@ -11,16 +11,11 @@ export default async function EntidadesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold text-ink">Entidades</h1>
-          <p className="text-[13px] text-muted">
-            El catálogo único que enlazan las órdenes y las licitaciones — cada
-            entidad con su ficha, contactos, asignación y bitácora.
-          </p>
-        </div>
-        <NuevaEntidad />
-      </div>
+      <CabeceraPagina
+        titulo="Entidades"
+        descripcion="El catálogo único que enlazan las órdenes y las licitaciones — cada entidad con su ficha, contactos, asignación y bitácora."
+        acciones={<NuevaEntidad />}
+      />
 
       {entidades.length === 0 ? (
         <Panel className="p-8 text-center text-sm text-muted">

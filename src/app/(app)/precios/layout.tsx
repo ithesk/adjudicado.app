@@ -1,4 +1,5 @@
 import PreciosTabs from "./_tabs";
+import { CabeceraPagina } from "@/components/ui";
 
 export default function PreciosLayout({
   children,
@@ -7,13 +8,10 @@ export default function PreciosLayout({
 }) {
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-xl font-semibold">Precios</h1>
-        <p className="text-sm text-muted">
-          Listas de precios de tus suplidores: búsqueda instantánea, términos de
-          contrato e historial entre listas.
-        </p>
-      </div>
+      <CabeceraPagina
+        titulo="Precios"
+        descripcion="Listas de precios de tus suplidores: búsqueda instantánea, términos de contrato e historial entre listas."
+      />
       <PreciosTabs />
       {children}
     </div>

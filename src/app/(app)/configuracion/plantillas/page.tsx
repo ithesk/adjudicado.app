@@ -1,5 +1,6 @@
 import { listarPlantillas } from "@/lib/licitaciones/queries-plantillas";
 import PlantillasLista from "./PlantillasLista";
+import { Hoja } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,7 @@ export default async function PlantillasPage() {
   const plantillas = await listarPlantillas();
 
   return (
-    <div className="space-y-4">
+    <Hoja ancho="lista" className="space-y-4">
       <div>
         <h2 className="text-base font-semibold text-ink">Plantillas de documentos</h2>
         <p className="text-[13px] text-muted">
@@ -18,6 +19,6 @@ export default async function PlantillasPage() {
         </p>
       </div>
       <PlantillasLista plantillas={plantillas} />
-    </div>
+    </Hoja>
   );
 }
