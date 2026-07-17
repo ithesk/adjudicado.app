@@ -79,7 +79,7 @@ export default async function OrdenDetallePage({
       currentUser={currentUser}
       suplidores={suplidores}
     >
-      <div className="space-y-5">
+      <div className="mx-auto w-full max-w-[1200px] space-y-5">
         <Link
           href="/"
           className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors hover:text-ink"

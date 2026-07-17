@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { listarActividad, listarOrdenes } from "@/lib/queries";
+import { CabeceraPagina, Hoja, btnPrimary } from "@/components/ui";
 import { getMiembro } from "@/lib/auth";
 import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
 import { metricaPorKey } from "@/lib/metricas";
@@ -35,7 +37,17 @@ export default async function TableroPage({
   const cerradas = hayFiltro ? [] : ordenes.filter((o) => !esViva(o.estado));
 
   return (
-    <div className="space-y-6">
+    <Hoja ancho="ficha" className="space-y-6">
+      <CabeceraPagina
+        titulo="Bandeja"
+        descripcion={`${lista.length} orden${lista.length === 1 ? "" : "es"} ${hayFiltro ? `en ${titulo.toLowerCase()}` : "vivas"} — el trabajo del día, ordenado por urgencia.`}
+        acciones={
+          <Link href="/orden/nueva" className={btnPrimary()}>
+            <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+            Nueva orden
+          </Link>
+        }
+      />
       <MetricBar ordenes={ordenes} />
 
       {ordenes.length === 0 ? (
@@ -82,7 +94,7 @@ export default async function TableroPage({
           )}
         </>
       )}
-    </div>
+    </Hoja>
   );
 }
 

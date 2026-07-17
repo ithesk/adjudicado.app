@@ -19,7 +19,7 @@ import {
   PackageOpen,
   ShieldAlert,
 } from "lucide-react";
-import { Panel, btnGhost, btnPrimary } from "@/components/ui";
+import { Hoja, Panel, btnGhost, btnPrimary } from "@/components/ui";
 import { diasRestantes, formatRD, nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, textoDias } from "@/lib/ui";
 import {
@@ -310,7 +310,7 @@ export default function BidRoom({
   ];
 
   return (
-    <div className="space-y-4">
+    <Hoja ancho="ficha" className="space-y-4">
       {/* Cabecera: identidad + reloj + la línea de tiempo */}
       <Panel className="space-y-3 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -576,6 +576,6 @@ export default function BidRoom({
           )}
         </Panel>
       </Seccion>
-    </div>
+    </Hoja>
   );
 }

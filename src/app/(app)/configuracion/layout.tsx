@@ -1,5 +1,5 @@
 import ConfigTabs from "./_tabs";
-import { CabeceraPagina } from "@/components/ui";
+import { CabeceraPagina, Hoja } from "@/components/ui";
 
 export default function ConfiguracionLayout({
   children,
@@ -7,13 +7,13 @@ export default function ConfiguracionLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-5">
+    <Hoja ancho="ficha" className="space-y-5">
       <CabeceraPagina
         titulo="Configuración"
         descripcion="Catálogos reutilizables de tu organización."
       />
       <ConfigTabs />
       {children}
-    </div>
+    </Hoja>
   );
 }

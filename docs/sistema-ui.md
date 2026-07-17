@@ -24,8 +24,8 @@ ESTRUCTURA.
 
 | Tipo | Hoja | Ejemplos |
 |---|---|---|
-| Tabla/lista densa | (sin Hoja — full width) | Bandeja, Precios, Licitaciones lista |
-| Ficha con riel | `ficha` (1200px) | entidades/[id], orden/[id] |
+| Tabla/lista densa | `ficha` (1200px) | Bandeja, Precios, Entidades, Licitaciones |
+| Ficha con riel | `ficha` (1200px) | entidades/[id], orden/[id], Bid Room |
 | Feed | `feed` (3xl) | Actividad |
 | Lista simple / buscador | `lista` (4xl) | Documentos, Plantillas |
 | Form de creación | `form` (2xl) | orden/nueva, licitaciones/nuevo |
