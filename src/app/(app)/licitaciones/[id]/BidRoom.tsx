@@ -434,7 +434,7 @@ export default function BidRoom({
               title={
                 criticosBloqueantes > 0
                   ? "Bloqueado: hay requisitos NO subsanables pendientes (los formularios que este botón genera no cuentan)"
-                  : "Rellena los formularios oficiales (F.033/034/042) con el expediente y descarga el ZIP"
+                  : "Arma el expediente completo: genera los formularios, anexa lo subido y lo de Empresa, y lo ordena por sobre con su índice"
               }
               className={btnPrimary(criticosBloqueantes > 0 ? "opacity-50" : "")}
             >

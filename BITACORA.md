@@ -8,6 +8,28 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — El paquete es ahora el EXPEDIENTE COMPLETO por sobres
+
+**Hecho:** Pablo reportó que el ZIP «solo está generando al azar» — llevaba únicamente
+los formularios que el motor genera; lo subido a mano y lo de Empresa quedaban fuera.
+Ahora `/generar` arma el expediente presentable:
+
+- **Todos los requisitos marcados** salen con su archivo: los `genera` se rellenan como
+  siempre; los `sube` anexan lo subido al requisito; los `empresa` anexan el documento
+  enlazado de Configuración → Empresa.
+- **Ordenado por sobre**: carpetas `Sobre A` (legal/financiera/técnica/otros) y
+  `Sobre B` (económica), archivos numerados `NN CODIGO — Nombre.ext`.
+- **`00 INDICE.txt`**: qué contiene cada sobre y de dónde salió cada archivo; lo
+  verificado en línea (DGII/TSS/RPE) se declara sin archivo, y lo pendiente sale como
+  «¡FALTA!» + lista final — nada desaparece en silencio.
+- En el paquete PDF los adjuntos Word también se convierten vía Gotenberg; PDFs e
+  imágenes viajan tal cual.
+
+**Pendiente de verificación de Pablo:** generar el paquete de su proceso real y revisar
+que el ZIP traiga los sobres con lo subido + lo de Empresa + lo generado y el índice.
+
+---
+
 ## 2026-07-16 — Bid Room: una sola página con secciones plegables
 
 **Hecho:** Pablo reportó que la Bid Room era confusa — las 4 estaciones eran pestañas

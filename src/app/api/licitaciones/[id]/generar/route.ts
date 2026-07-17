@@ -1,5 +1,9 @@
-// GET /api/licitaciones/{id}/generar — genera el paquete: los formularios
-// oficiales rellenados con el expediente validado, devueltos como ZIP.
+// GET /api/licitaciones/{id}/generar — arma el PAQUETE COMPLETO: todos los
+// requisitos marcados del proceso, cada uno con su archivo — los formularios
+// se generan aquí, los subidos y los de Configuración → Empresa se anexan —
+// ordenados por sobre (A: credenciales, B: económica) con un índice. Lo que
+// no tiene archivo (verificado en línea, pendiente) queda declarado en el
+// índice, no desaparece en silencio.
 //
 // EL GATE (Fase 5) vive aquí y es BLOQUEO DURO: con requisitos NO subsanables
 // pendientes el paquete no sale (409) — no es un warning, es la razón de ser
@@ -26,6 +30,25 @@ import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
 import PizZipLib from "pizzip";
 import { docxAPdf, pdfDisponible } from "@/lib/licitaciones/pdf";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
+import {
+  grupoDeRequisito,
+  requisitoEstandar,
+} from "@/lib/licitaciones/requisitos-estandar";
+
+// En qué sobre se presenta cada grupo del checklist. Lo manual/desconocido
+// va al Sobre A (credenciales); solo la económica viaja en el B.
+const SOBRE: Record<string, string> = {
+  legal: "Sobre A",
+  financiera: "Sobre A",
+  tecnica: "Sobre A",
+  economica: "Sobre B",
+  otros: "Sobre A",
+};
+
+// Nombre apto para archivo dentro del ZIP.
+function limpio(texto: string): string {
+  return texto.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 70);
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -67,7 +90,7 @@ export async function GET(
   const [{ data: requisitos }, { data: plantillasOrg }] = await Promise.all([
     supabase
       .from("lic_requisito")
-      .select("id, codigo, subsanable, estado, nombre, datos")
+      .select("id, codigo, subsanable, estado, nombre, datos, storage_path, documento_empresa_id, orden_indice")
       .eq("proceso_id", id)
       .eq("org_id", miembro.org_id),
     supabase
@@ -140,7 +163,7 @@ export async function GET(
     if (archivo) imagenes[tipo] = Buffer.from(await archivo.arrayBuffer());
   }
 
-  // 5) Generar (sistema + plantillas de la org), convertir si se pidió, registrar.
+  // 5) Generar (sistema + plantillas de la org).
   const documentos: DocGenerado[] = [];
   for (const codigo of codigos) {
     if (GENERABLES[codigo]) {
@@ -177,15 +200,13 @@ export async function GET(
       ),
     );
   }
-  const zipDocx = new PizZipLib();
-  for (const d of documentos) zipDocx.file(d.archivo, d.buffer);
+  // 6) Los generados, convertidos si se pidió PDF (estos también se suben
+  //    sueltos a storage y dejan su requisito en "listo").
   let archivos = documentos.map((d) => ({
     ...d,
     contentType:
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   }));
-  let zipFinal: Buffer = zipDocx.generate({ type: "nodebuffer", compression: "DEFLATE" });
-  let zipNombre = `paquete_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;
   if (formato === "pdf") {
     archivos = await Promise.all(
       archivos.map(async (d) => ({
@@ -195,11 +216,100 @@ export async function GET(
         contentType: "application/pdf",
       })),
     );
-    const zipPdf = new PizZipLib();
-    for (const d of archivos) zipPdf.file(d.archivo, d.buffer);
-    zipFinal = zipPdf.generate({ type: "nodebuffer", compression: "DEFLATE" });
-    zipNombre = zipNombre.replace(/\.zip$/, "_pdf.zip");
   }
+
+  // 7) EL EXPEDIENTE COMPLETO: cada requisito marcado, en orden de sobre,
+  //    con su archivo — generado, subido al requisito, o el documento de
+  //    Empresa enlazado. Lo que no tiene archivo se declara en el índice.
+  const generadoPorCodigo = new Map(archivos.map((d) => [d.codigo, d]));
+
+  const idsDocEmpresa = (requisitos ?? [])
+    .map((q) => q.documento_empresa_id)
+    .filter(Boolean) as string[];
+  const docEmpresaPorId = new Map<string, { archivo_url: string }>();
+  if (idsDocEmpresa.length > 0) {
+    const { data } = await supabase
+      .from("documento_empresa")
+      .select("id, archivo_url")
+      .in("id", idsDocEmpresa);
+    for (const d of data ?? []) docEmpresaPorId.set(d.id, d);
+  }
+
+  const ordenados = [...(requisitos ?? [])].sort((a, b) => {
+    const sa = SOBRE[grupoDeRequisito(a.codigo)] ?? "Sobre A";
+    const sb = SOBRE[grupoDeRequisito(b.codigo)] ?? "Sobre A";
+    if (sa !== sb) return sa < sb ? -1 : 1;
+    return (a.orden_indice ?? 0) - (b.orden_indice ?? 0);
+  });
+
+  const zip = new PizZipLib();
+  const indice: string[] = [
+    `Expediente ${canonico.proceso.codigo} — versión ${canonico.meta.version}`,
+    `Oferente: ${canonico.oferente.razon_social} (RNC ${canonico.oferente.rnc})`,
+    "",
+  ];
+  const sinArchivo: string[] = [];
+  let n = 0;
+  let sobreAnterior = "";
+  for (const q of ordenados) {
+    const sobre = SOBRE[grupoDeRequisito(q.codigo)] ?? "Sobre A";
+    const gen = generadoPorCodigo.get(q.codigo);
+
+    // De dónde sale el archivo de este requisito.
+    let buffer: Buffer | null = null;
+    let ext = "";
+    let origenNota = "";
+    if (gen) {
+      buffer = gen.buffer;
+      ext = formato === "pdf" ? ".pdf" : ".docx";
+      origenNota = "generado";
+    } else {
+      const ruta =
+        q.storage_path ??
+        (q.documento_empresa_id
+          ? docEmpresaPorId.get(q.documento_empresa_id)?.archivo_url ?? null
+          : null);
+      if (ruta) {
+        const { data: adj } = await supabase.storage.from("documentos").download(ruta);
+        if (adj) {
+          buffer = Buffer.from(await adj.arrayBuffer());
+          ext = ruta.match(/\.[a-z0-9]+$/i)?.[0]?.toLowerCase() ?? "";
+          origenNota = q.storage_path ? "subido" : "de Empresa";
+          // En el paquete PDF, los adjuntos Word también se convierten;
+          // el resto (pdf, imágenes) viaja tal cual.
+          if (formato === "pdf" && (ext === ".docx" || ext === ".doc")) {
+            buffer = await docxAPdf(`adj${ext}`, buffer);
+            ext = ".pdf";
+          }
+        }
+      }
+    }
+
+    if (sobre !== sobreAnterior) {
+      indice.push(`${sobre}`);
+      sobreAnterior = sobre;
+    }
+    if (buffer) {
+      n += 1;
+      const nn = String(n).padStart(2, "0");
+      const entrada = `${sobre}/${nn} ${limpio(q.codigo)} — ${limpio(q.nombre)}${ext}`;
+      zip.file(entrada, buffer);
+      indice.push(`  ${nn} ${q.codigo} — ${q.nombre} (${origenNota})`);
+    } else if (requisitoEstandar(q.codigo)?.via === "linea") {
+      indice.push(`  ·· ${q.codigo} — ${q.nombre}: la entidad lo verifica en línea, no lleva archivo`);
+    } else {
+      indice.push(`  ¡FALTA! ${q.codigo} — ${q.nombre}: sin archivo`);
+      sinArchivo.push(`${q.codigo} — ${q.nombre}`);
+    }
+  }
+  if (sinArchivo.length > 0) {
+    indice.push("", "Pendientes de completar antes de presentar:", ...sinArchivo.map((s) => `  - ${s}`));
+  }
+  zip.file("00 INDICE.txt", indice.join("\n") + "\n");
+
+  const zipFinal: Buffer = zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
+  let zipNombre = `paquete_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;
+  if (formato === "pdf") zipNombre = zipNombre.replace(/\.zip$/, "_pdf.zip");
   const user = await getUser();
   const payloadHash = createHash("sha256")
     .update(JSON.stringify(canonico))
@@ -242,7 +352,7 @@ export async function GET(
     generado_por: user?.id ?? null,
   });
 
-  // 5) El ZIP baja directo al navegador.
+  // 8) El ZIP baja directo al navegador.
   return new NextResponse(new Uint8Array(zipFinal), {
     headers: {
       "Content-Type": "application/zip",
