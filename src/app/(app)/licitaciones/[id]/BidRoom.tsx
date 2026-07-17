@@ -1,12 +1,13 @@
 "use client";
 
-// La "Bid Room": la licitación como LÍNEA DE TIEMPO. Arriba, el recorrido
-// del proceso (captura → … → sometido → resultado); abajo, las estaciones:
-// 1 Proceso (los datos) → 2 Pliego (qué piden) → 3 Cotización (nuestra
-// oferta) → 4 Paquete (el gate y la validación del expediente).
+// La "Bid Room": la licitación como UNA SOLA PÁGINA. Arriba, la identidad y
+// el recorrido del proceso; debajo, TODO visible en orden de trabajo
+// (Proceso → Requisitos → Ítems → Paquete) — nada de pestañas que obligan a
+// ir y volver para comparar. Una barra fija acompaña el scroll con el estado
+// vivo de cada sección y salta a la que toque.
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -37,13 +38,20 @@ import RequisitosPanel from "./_components/RequisitosPanel";
 
 type Estacion = "proceso" | "requisitos" | "items" | "paquete";
 
-// En qué estación te deja cada estado de la línea de tiempo: primero los
-// datos, después QUÉ PIDEN (requisitos), después el cotizador de ítems.
-function estacionInicial(estado: EstadoLicitacion): Estacion {
+const ORDEN: Estacion[] = ["proceso", "requisitos", "items", "paquete"];
+
+// A qué sección lleva cada estado de la línea de tiempo cuando se avanza.
+function estacionDelEstado(estado: EstadoLicitacion): Estacion {
   if (estado === "captura") return "proceso";
   if (estado === "calificacion") return "requisitos";
   if (estado === "costeo") return "items";
   return "paquete";
+}
+
+function irA(estacion: Estacion) {
+  document
+    .getElementById(estacion)
+    ?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 export default function BidRoom({
@@ -69,9 +77,24 @@ export default function BidRoom({
   const { proceso, items, requisitos, institucion } = detalle;
   const [validacion, setValidacion] = useState<string[] | "ok" | null>(null);
   const [pendiente, startTransition] = useTransition();
-  const [estacion, setEstacion] = useState<Estacion>(() =>
-    estacionInicial(proceso.estado),
-  );
+  const [activa, setActiva] = useState<Estacion>("proceso");
+
+  // Scroll-spy: la barra resalta la sección que está en pantalla.
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) setActiva(e.target.id as Estacion);
+        }
+      },
+      { rootMargin: "-15% 0px -70% 0px" },
+    );
+    for (const k of ORDEN) {
+      const el = document.getElementById(k);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, []);
 
   const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
   const nivel = nivelUrgencia(dias);
@@ -119,7 +142,7 @@ export default function BidRoom({
   function cambiarEstado(estado: EstadoLicitacion) {
     startTransition(async () => {
       await actualizarProcesoAction(proceso.id, { estado });
-      setEstacion(estacionInicial(estado));
+      irA(estacionDelEstado(estado));
       router.refresh();
     });
   }
@@ -131,11 +154,32 @@ export default function BidRoom({
     });
   }
 
-  const ESTACIONES: { key: Estacion; label: string; hint: string }[] = [
-    { key: "proceso", label: "1 · Proceso", hint: institucion?.nombre ?? "sin entidad" },
-    { key: "requisitos", label: "2 · Requisitos", hint: criticosPendientes > 0 ? `${criticosPendientes} críticos pendientes` : `${requisitos.length}` },
-    { key: "items", label: "3 · Ítems", hint: sinCotizar > 0 ? `${sinCotizar} sin cotizar` : totales.total > 0 ? formatRD(totales.total) : `${items.length}` },
-    { key: "paquete", label: "4 · Paquete", hint: criticosPendientes > 0 ? "bloqueado" : "" },
+  // El estado vivo de cada sección, siempre a la vista en la barra.
+  const ESTACIONES: {
+    key: Estacion;
+    label: string;
+    hint: string;
+    alerta?: boolean;
+  }[] = [
+    { key: "proceso", label: "Proceso", hint: institucion?.siglas ?? institucion?.nombre?.split(" ")[0] ?? "sin entidad" },
+    {
+      key: "requisitos",
+      label: "Requisitos",
+      hint: criticosPendientes > 0 ? `${criticosPendientes} críticos` : `${requisitos.length} ✓`,
+      alerta: criticosPendientes > 0,
+    },
+    {
+      key: "items",
+      label: "Ítems",
+      hint: sinCotizar > 0 ? `${sinCotizar} sin cotizar` : totales.total > 0 ? formatRD(totales.total) : `${items.length}`,
+      alerta: sinCotizar > 0,
+    },
+    {
+      key: "paquete",
+      label: "Paquete",
+      hint: criticosBloqueantes > 0 ? "bloqueado" : "listo",
+      alerta: criticosBloqueantes > 0,
+    },
   ];
 
   return (
@@ -186,46 +230,51 @@ export default function BidRoom({
         )}
       </Panel>
 
-      {/* Las estaciones de la línea */}
-      <div className="flex flex-wrap gap-1 border-b border-line">
+      {/* La barra que acompaña: salta a cada sección y muestra su estado
+          vivo. Sticky — en móvil debajo del header de la app. */}
+      <nav className="sticky top-12 z-20 -mx-1 flex flex-wrap items-center gap-1 rounded-lg border border-line bg-canvas/95 px-1 py-1 backdrop-blur md:top-2">
         {ESTACIONES.map((e) => (
           <button
             key={e.key}
             type="button"
-            onClick={() => setEstacion(e.key)}
-            className={`-mb-px border-b-2 px-3 py-2 text-left text-[13px] font-medium transition-colors ${
-              estacion === e.key
-                ? "border-primary text-ink"
-                : "border-transparent text-muted hover:text-ink"
+            onClick={() => irA(e.key)}
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+              activa === e.key
+                ? "bg-surface-2 text-ink"
+                : "text-muted hover:text-ink"
             }`}
           >
             {e.label}
             {e.hint && (
-              <span className="ml-2 hidden font-mono text-[11px] font-normal text-muted sm:inline">
+              <span
+                className={`rounded px-1 font-mono text-[10.5px] font-normal ${
+                  e.alerta ? "bg-danger-soft text-danger" : "text-muted"
+                }`}
+              >
                 {e.hint}
               </span>
             )}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {estacion === "proceso" && (
+      <section id="proceso" className="scroll-mt-24 md:scroll-mt-14">
         <DatosProceso proceso={proceso} instituciones={instituciones} />
-      )}
+      </section>
 
-      {estacion === "requisitos" && (
+      <section id="requisitos" className="scroll-mt-24 md:scroll-mt-14">
         <RequisitosPanel
           procesoId={proceso.id}
           requisitos={requisitos}
           plantillasOrg={plantillasOrg}
         />
-      )}
+      </section>
 
-      {estacion === "items" && (
+      <section id="items" className="scroll-mt-24 md:scroll-mt-14">
         <CotizadorItems proceso={proceso} items={items} params={params} />
-      )}
+      </section>
 
-      {estacion === "paquete" && (
+      <section id="paquete" className="scroll-mt-24 md:scroll-mt-14">
         <Panel className="space-y-3 p-4">
           {/* El gate: los no-subsanables mandan. */}
           <div className="flex flex-wrap items-center gap-2">
@@ -304,7 +353,7 @@ export default function BidRoom({
             </div>
           )}
         </Panel>
-      )}
+      </section>
     </div>
   );
 }
