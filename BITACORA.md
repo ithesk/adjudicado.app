@@ -8,6 +8,32 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-17 — Gestión de entidades: ficha completa con bitácora
+
+**Hecho:** herramienta nueva `/entidades` (pedido de Pablo). Se apoya en lo que YA
+existía — `institucion` es el catálogo único que enlazan órdenes y licitaciones,
+`contacto` ya era polimórfico (suplidor O institución), `grupo` ya existía — y agrega lo
+que faltaba:
+
+- **Migración** `supabase_entidades.sql` (aplicada a producción, 201): `institucion` gana
+  telefono/logo_url/notas; `contacto` gana extension/notas; tablas nuevas
+  `institucion_asignacion` (persona O grupo, check exactly-one, RLS es_miembro) e
+  `institucion_evento` (la bitácora: perfil|logo|contacto|asignacion|nota).
+- **Lista** `/entidades`: tarjetas con logo, RNC, conteo de órdenes/procesos y asignados.
+- **Ficha** `/entidades/[id]`: perfil con autosave + logo subible (storage
+  `{org}/entidades/{id}/`, URL firmada 1h para el `<img>`); contactos con cargo, email,
+  tel. directo y extensión (autosave por campo, mailto:); asignación por chips toggle a
+  personas y grupos; "De esta entidad" (licitaciones y órdenes enlazadas); **bitácora**
+  con TODOS los movimientos: cada acción de la ficha se registra sola + se mezclan las
+  entradas de bitácora de las órdenes de esa entidad (badge "orden" con link) + notas
+  manuales.
+- Menú lateral gana "Entidades"; el catálogo de Configuración → Entidades enlaza "Ficha".
+
+**Pendiente de verificación de Pablo:** entrar a /entidades, subir un logo, asignarse
+una entidad, crear un contacto con extensión y ver la bitácora moverse.
+
+---
+
 ## 2026-07-17 — Sello cazado, espera amigable y paquetes que no se regeneran en vano
 
 **El sello del F.033 (y las cartas sin timbrar) — CAZADO.** No era la imagen ni la

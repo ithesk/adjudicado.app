@@ -2,6 +2,7 @@
 
 // CRUD del catálogo de entidades, con autosave por campo (onBlur).
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Landmark, Check, Loader2, Plus, Trash2 } from "lucide-react";
@@ -155,6 +156,13 @@ export default function EntidadesEditor({
               ancho="w-56"
               onSave={(v) => correr(() => actualizarEntidadAction(e.id, { direccion: v || null }))}
             />
+            <Link
+              href={`/entidades/${e.id}`}
+              className="text-[12px] font-medium text-primary hover:underline"
+              title="Ficha completa: logo, contactos, asignación y bitácora"
+            >
+              Ficha
+            </Link>
             <button
               type="button"
               onClick={() => {
