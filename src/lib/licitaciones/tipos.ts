@@ -166,7 +166,21 @@ export interface LicRequisito {
   // Valores de las variables "se pregunta al generar" de la plantilla de la
   // org (clave → valor), propios de ESTE proceso.
   datos: Record<string, string>;
+  // Si la subsanación activa pidió este requisito (corregido o faltante).
+  subsanacion_id: string | null;
   orden_indice: number;
+}
+
+// El pedido de la entidad tras presentar: documentos a corregir/entregar
+// con fecha límite. abierta → enviada → cerrada.
+export interface LicSubsanacion {
+  id: string;
+  proceso_id: string;
+  fecha_limite: string;
+  texto: string | null;
+  estado: "abierta" | "enviada" | "cerrada";
+  enviada_at: string | null;
+  created_at: string;
 }
 
 // El detalle completo que consume la Bid Room.
@@ -176,6 +190,8 @@ export interface ProcesoDetalle {
   items: LicItem[];
   requisitos: LicRequisito[];
   institucion: { id: string; nombre: string; siglas: string | null } | null;
+  // La subsanación viva (abierta o enviada); cerrada desaparece de la Bid Room.
+  subsanacion: LicSubsanacion | null;
 }
 
 // Cuántos requisitos críticos faltan (lo que el gate de la Fase 5 bloquea).

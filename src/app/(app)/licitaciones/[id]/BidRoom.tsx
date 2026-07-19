@@ -38,10 +38,11 @@ import LineaTiempo from "./_components/LineaTiempo";
 import DatosProceso from "./_components/DatosProceso";
 import CotizadorItems from "./_components/CotizadorItems";
 import RequisitosPanel from "./_components/RequisitosPanel";
+import SubsanacionPanel from "./_components/SubsanacionPanel";
 
-type Estacion = "proceso" | "requisitos" | "items" | "paquete";
+type Estacion = "proceso" | "requisitos" | "items" | "paquete" | "subsanacion";
 
-const ORDEN: Estacion[] = ["proceso", "requisitos", "items", "paquete"];
+const ORDEN: Estacion[] = ["proceso", "requisitos", "items", "paquete", "subsanacion"];
 
 // A qué sección lleva cada estado de la línea de tiempo cuando se avanza.
 function estacionDelEstado(estado: EstadoLicitacion): Estacion {
@@ -142,8 +143,10 @@ export default function BidRoom({
   tienePerfil: boolean;
 }) {
   const router = useRouter();
-  const { proceso, items, requisitos, institucion } = detalle;
+  const { proceso, items, requisitos, institucion, subsanacion } = detalle;
   const [validacion, setValidacion] = useState<string[] | "ok" | null>(null);
+  // Errores de la generación de la SUBSANACIÓN — se muestran en su sección.
+  const [erroresSub, setErroresSub] = useState<string[] | null>(null);
   const [pasoTexto, setPasoTexto] = useState<string | null>(null);
   const [reusado, setReusado] = useState<"docx" | "pdf" | null>(null);
   const [pendiente, startTransition] = useTransition();
@@ -226,8 +229,27 @@ export default function BidRoom({
     (i) => i.ofertamos && i.precio_unitario === null,
   ).length;
 
-  function generarPaquete(formato: "docx" | "pdf" = "docx", forzar = false) {
+  // La subsanación viva: qué pidieron y qué de eso aún no tiene archivo.
+  const pedidos = subsanacion
+    ? requisitos.filter((q) => q.subsanacion_id === subsanacion.id)
+    : [];
+  const pedidosBloqueantes = pedidos.filter(
+    (q) =>
+      q.estado === "pendiente" &&
+      !CODIGOS_GENERABLES.includes(q.codigo) &&
+      !codigosPlantillas.includes(q.codigo),
+  ).length;
+  const diasSub = subsanacion
+    ? diasRestantes(subsanacion.fecha_limite.slice(0, 10))
+    : null;
+
+  function generarPaquete(
+    formato: "docx" | "pdf" = "docx",
+    forzar = false,
+    subsanacionId: string | null = null,
+  ) {
     setValidacion(null);
+    setErroresSub(null);
     setReusado(null);
     const pasos = formato === "pdf" ? PASOS_PDF : PASOS_DOCX;
     setPasoTexto(pasos[0]);
@@ -239,12 +261,15 @@ export default function BidRoom({
     startTransition(async () => {
       try {
         const res = await fetch(
-          `/api/licitaciones/${proceso.id}/generar?formato=${formato}${forzar ? "&regenerar=1" : ""}`,
+          `/api/licitaciones/${proceso.id}/generar?formato=${formato}${forzar ? "&regenerar=1" : ""}${subsanacionId ? `&subsanacion=${subsanacionId}` : ""}`,
         );
         if (!res.ok) {
           const j = await res.json().catch(() => null);
-          setValidacion(j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."]);
-          irA("paquete"); // el detalle del error vive en la sección Paquete
+          const lista = j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."];
+          // El detalle del error vive en la sección de donde salió el clic.
+          if (subsanacionId) setErroresSub(lista);
+          else setValidacion(lista);
+          irA(subsanacionId ? "subsanacion" : "paquete");
           return;
         }
         if (res.headers.get("X-Paquete-Reusado") === "1") setReusado(formato);
@@ -306,6 +331,16 @@ export default function BidRoom({
       label: "Paquete",
       hint: criticosBloqueantes > 0 ? "bloqueado" : "listo",
       alerta: criticosBloqueantes > 0,
+    },
+    {
+      key: "subsanacion",
+      label: "Subsanación",
+      hint: subsanacion
+        ? subsanacion.estado === "enviada"
+          ? "enviada"
+          : textoDias(diasSub)
+        : "",
+      alerta: subsanacion?.estado === "abierta",
     },
   ];
 
@@ -393,6 +428,17 @@ export default function BidRoom({
             </span>
           ) : (
             <>
+              {subsanacion?.estado === "abierta" && (
+                <button
+                  type="button"
+                  onClick={() => irA("subsanacion")}
+                  className={`flex items-center gap-1 rounded px-2 py-1 font-mono text-[11.5px] font-semibold ${urgenciaChip(nivelUrgencia(diasSub))}`}
+                  title="La entidad pidió una subsanación — el reloj manda. Clic para verla."
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  subsana {textoDias(diasSub)}
+                </button>
+              )}
               {reusado && (
                 <button
                   type="button"
@@ -471,6 +517,7 @@ export default function BidRoom({
           procesoId={proceso.id}
           requisitos={requisitos}
           plantillasOrg={plantillasOrg}
+          subsanacionId={subsanacion?.estado === "abierta" ? subsanacion.id : null}
         />
       </Seccion>
 
@@ -575,6 +622,28 @@ export default function BidRoom({
             </div>
           )}
         </Panel>
+      </Seccion>
+
+      <Seccion
+        id="subsanacion"
+        titulo={ESTACIONES[4].label}
+        hint={ESTACIONES[4].hint}
+        alerta={ESTACIONES[4].alerta}
+        colapsada={colapsadas.has("subsanacion")}
+        onToggle={() => toggleSeccion("subsanacion")}
+      >
+        <SubsanacionPanel
+          procesoId={proceso.id}
+          subsanacion={subsanacion}
+          pedidos={pedidos}
+          bloqueantes={pedidosBloqueantes}
+          generando={pendiente || pasoTexto !== null}
+          errores={erroresSub}
+          onGenerar={(formato) =>
+            subsanacion && generarPaquete(formato, false, subsanacion.id)
+          }
+          onIrARequisitos={() => irA("requisitos")}
+        />
       </Seccion>
     </Hoja>
   );

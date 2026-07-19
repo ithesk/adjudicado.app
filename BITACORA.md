@@ -8,6 +8,35 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — SUBSANACIÓN: registrar → marcar → generar el paquete chico
+
+**Hecho:** el flujo completo de subsanación (la entidad pide por correo documentos
+faltantes/corregidos tras presentar, con fecha límite corta). Piezas:
+
+- **`lic_subsanacion`** (proceso, fecha_limite, texto del correo, estado
+  abierta→enviada→cerrada) + **`lic_requisito.subsanacion_id`** (qué pidieron) +
+  tipo `subsanacion` en la bitácora de la entidad. Migración en prod (201).
+  Una sola subsanación viva por proceso.
+- **Bid Room**: sección nueva «Subsanación» — registrar (datetime-local + correo
+  pegado tal cual), lista de lo pedido con su semáforo, generar (docx/PDF),
+  «Marcar enviada» (fecha registrada) y «Cerrar». El chip del reloj
+  («subsana 2d») vive en la barra sticky con la urgencia de siempre. En
+  2 · Requisitos cada fila gana el botón **«Subsanar»** (marcar lo devuelve a
+  pendiente; los errores de generación caen en la sección de subsanación).
+- **`/generar?subsanacion=id`**: paquete CHICO solo con lo pedido, SIN sobres,
+  índice «SUBSANACIÓN — vence …», zip `subsanacion_*.zip`, huella propia
+  (misma idempotencia). Gate distinto: en una subsanación TODO lo pedido es
+  obligatorio (no existe "subsanable después" — esto ES el después). Puede ser
+  puros adjuntos re-subidos (sin generables) y sale igual.
+- **Lista de licitaciones**: si hay subsanación abierta, su reloj MANDA sobre el
+  del cierre (chip + etiqueta «subsana»).
+
+**Decisión no obvia:** lo pedido se modela marcando los requisitos existentes
+(subsanacion_id), no con una tabla de items aparte — reusa checklist, subida,
+plantillas (incl. variantes MITUR) y generación sin duplicar nada.
+
+---
+
 ## 2026-07-19 — Variantes también de los formularios del SISTEMA (caso MITUR)
 
 **Hecho:** Pablo tiene formularios que MITUR envió para una subsanación, pero en

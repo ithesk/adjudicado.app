@@ -23,6 +23,7 @@ import {
   crearRequisitosLoteAction,
   eliminarRequisitoAction,
   subirArchivoRequisitoAction,
+  toggleRequisitoSubsanacionAction,
 } from "@/lib/actions/licitaciones";
 import {
   ROL_FIRMANTE_LABEL,
@@ -57,6 +58,7 @@ export default function RequisitosPanel({
   procesoId,
   requisitos,
   plantillasOrg = [],
+  subsanacionId = null,
 }: {
   procesoId: string;
   requisitos: LicRequisito[];
@@ -65,6 +67,8 @@ export default function RequisitosPanel({
     nombre: string;
     preguntas: { clave: string; etiqueta: string }[];
   }[];
+  // Con una subsanación ABIERTA, cada fila puede marcarse como "pedido".
+  subsanacionId?: string | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -162,6 +166,12 @@ export default function RequisitosPanel({
                 r={r}
                 preguntas={plantillasOrg.find((p) => p.codigo === r.codigo)?.preguntas ?? []}
                 pendiente={pendiente}
+                subsanacionId={subsanacionId}
+                onToggleSub={(marcar) =>
+                  correr(() =>
+                    toggleRequisitoSubsanacionAction(r.id, marcar ? subsanacionId : null),
+                  )
+                }
                 onPatch={(patch) => correr(() => actualizarRequisitoAction(r.id, patch))}
                 onSubir={(fd) => correr(() => subirArchivoRequisitoAction(r.id, fd))}
                 onEliminar={() => {
@@ -379,6 +389,8 @@ function FilaRequisito({
   r,
   preguntas,
   pendiente,
+  subsanacionId,
+  onToggleSub,
   onPatch,
   onSubir,
   onEliminar,
@@ -388,6 +400,8 @@ function FilaRequisito({
   // este requisito — cada proceso captura sus valores aquí.
   preguntas: { clave: string; etiqueta: string }[];
   pendiente: boolean;
+  subsanacionId: string | null;
+  onToggleSub: (marcar: boolean) => void;
   onPatch: (patch: Parameters<typeof actualizarRequisitoAction>[1]) => void;
   onSubir: (fd: FormData) => void;
   onEliminar: () => void;
@@ -470,6 +484,28 @@ function FilaRequisito({
               Falta en Empresa
             </a>
           ))}
+
+        {/* Con subsanación abierta: marcar este requisito como PEDIDO lo
+            devuelve a pendiente y lo mete al paquete de subsanación. */}
+        {subsanacionId && (
+          <button
+            type="button"
+            onClick={() => onToggleSub(r.subsanacion_id !== subsanacionId)}
+            disabled={pendiente}
+            className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold transition-colors ${
+              r.subsanacion_id === subsanacionId
+                ? "bg-warn-soft text-warn"
+                : "bg-surface-2 text-muted hover:text-ink"
+            }`}
+            title={
+              r.subsanacion_id === subsanacionId
+                ? "La entidad lo pidió en la subsanación — clic para quitarlo"
+                : "La entidad pidió este documento en la subsanación"
+            }
+          >
+            {r.subsanacion_id === subsanacionId ? "Pedido ✓" : "Subsanar"}
+          </button>
+        )}
 
         {r.storage_path && (
           <VisorDocumento

@@ -59,6 +59,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const formato = new URL(req.url).searchParams.get("formato") ?? "docx";
+  // Con ?subsanacion=<id> el paquete es CHICO: solo los requisitos que la
+  // entidad pidió en esa subsanación, todos obligatorios, sin sobres.
+  const subsanacionId = new URL(req.url).searchParams.get("subsanacion");
   if (formato === "pdf" && !pdfDisponible()) {
     return NextResponse.json(
       { error: "El convertidor PDF no está configurado todavía (ver infra/gotenberg)." },
@@ -91,7 +94,7 @@ export async function GET(
   const [{ data: requisitos }, { data: plantillasOrg }, { data: proc }] = await Promise.all([
     supabase
       .from("lic_requisito")
-      .select("id, codigo, subsanable, estado, nombre, datos, storage_path, documento_empresa_id, orden_indice")
+      .select("id, codigo, subsanable, estado, nombre, datos, storage_path, documento_empresa_id, orden_indice, subsanacion_id")
       .eq("proceso_id", id)
       .eq("org_id", miembro.org_id),
     supabase
@@ -114,26 +117,65 @@ export async function GET(
   );
   const esGenerable = (codigo: string) =>
     Boolean(GENERABLES[codigo] || plantillaPorCodigo.has(codigo));
-  const criticos = (requisitos ?? []).filter(
-    (q) => !q.subsanable && q.estado === "pendiente" && !esGenerable(q.codigo),
-  );
-  if (criticos.length > 0) {
-    return NextResponse.json(
-      {
-        error: "Hay requisitos NO subsanables pendientes — el paquete no puede salir así.",
-        criticos: criticos.map((c) => `${c.codigo} — ${c.nombre}`),
-      },
-      { status: 409 },
+
+  // ¿Paquete completo o de subsanación? La subsanación acota el universo a
+  // lo pedido, y ahí TODO es obligatorio (no hay "subsanable después" —
+  // esto ES el después).
+  let subsanacion: { id: string; fecha_limite: string } | null = null;
+  let enPaquete = requisitos ?? [];
+  if (subsanacionId) {
+    const { data: s } = await supabase
+      .from("lic_subsanacion")
+      .select("id, fecha_limite")
+      .eq("id", subsanacionId)
+      .eq("proceso_id", id)
+      .eq("org_id", miembro.org_id)
+      .maybeSingle();
+    if (!s) {
+      return NextResponse.json({ error: "Subsanación no encontrada." }, { status: 404 });
+    }
+    subsanacion = s;
+    enPaquete = enPaquete.filter((q) => q.subsanacion_id === subsanacionId);
+    if (enPaquete.length === 0) {
+      return NextResponse.json(
+        { error: "Marca en 2 · Requisitos qué documentos pidió la subsanación." },
+        { status: 422 },
+      );
+    }
+    const incompletos = enPaquete.filter(
+      (q) => q.estado === "pendiente" && !esGenerable(q.codigo),
     );
+    if (incompletos.length > 0) {
+      return NextResponse.json(
+        {
+          error: "La subsanación no puede salir incompleta — todo lo pedido es obligatorio.",
+          criticos: incompletos.map((c) => `${c.codigo} — ${c.nombre}`),
+        },
+        { status: 409 },
+      );
+    }
+  } else {
+    const criticos = enPaquete.filter(
+      (q) => !q.subsanable && q.estado === "pendiente" && !esGenerable(q.codigo),
+    );
+    if (criticos.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Hay requisitos NO subsanables pendientes — el paquete no puede salir así.",
+          criticos: criticos.map((c) => `${c.codigo} — ${c.nombre}`),
+        },
+        { status: 409 },
+      );
+    }
   }
 
   // 3) Qué se genera: los requisitos con plantilla — del sistema o de la org.
-  const codigos = (requisitos ?? [])
+  const codigos = enPaquete
     .filter((q) => esGenerable(q.codigo))
     .map((q) => q.codigo);
   // Las variables "se pregunta al generar" deben estar completas.
   const datosFaltantes: string[] = [];
-  for (const q of requisitos ?? []) {
+  for (const q of enPaquete) {
     const plantilla = plantillaPorCodigo.get(q.codigo);
     if (!plantilla) continue;
     const datos = (q.datos ?? {}) as Record<string, string>;
@@ -149,7 +191,9 @@ export async function GET(
       { status: 422 },
     );
   }
-  if (codigos.length === 0) {
+  // El paquete completo sin nada que generar no tiene sentido; el de
+  // subsanación sí puede ser puros adjuntos re-subidos.
+  if (codigos.length === 0 && !subsanacion) {
     return NextResponse.json(
       { error: "Este proceso no tiene requisitos generables (F.033/034/042 o plantillas propias). Agrégalos con el checklist." },
       { status: 422 },
@@ -184,8 +228,11 @@ export async function GET(
     .update(
       JSON.stringify({
         formato,
+        // El paquete de subsanación es OTRO paquete: misma maquinaria,
+        // huella propia (acotada a lo pedido).
+        subsanacion: subsanacion?.id ?? null,
         canonico: canonicoSinMeta,
-        requisitos: (requisitos ?? [])
+        requisitos: enPaquete
           .map((q) => ({
             codigo: q.codigo,
             datos: q.datos ?? {},
@@ -256,7 +303,7 @@ export async function GET(
     }
     // Datos: los del expediente + valores fijos de la plantilla + los
     // capturados en el requisito de ESTE proceso.
-    const requisito = (requisitos ?? []).find((q) => q.codigo === codigo);
+    const requisito = enPaquete.find((q) => q.codigo === codigo);
     const fijos = Object.fromEntries(
       (plantilla.variables_personalizadas ?? [])
         .filter((v) => v.valor)
@@ -297,7 +344,7 @@ export async function GET(
   //    Empresa enlazado. Lo que no tiene archivo se declara en el índice.
   const generadoPorCodigo = new Map(archivos.map((d) => [d.codigo, d]));
 
-  const idsDocEmpresa = (requisitos ?? [])
+  const idsDocEmpresa = enPaquete
     .map((q) => q.documento_empresa_id)
     .filter(Boolean) as string[];
   const docEmpresaPorId = new Map<string, { archivo_url: string }>();
@@ -309,7 +356,7 @@ export async function GET(
     for (const d of data ?? []) docEmpresaPorId.set(d.id, d);
   }
 
-  const ordenados = [...(requisitos ?? [])].sort((a, b) => {
+  const ordenados = [...enPaquete].sort((a, b) => {
     const sa = SOBRE[grupoDeRequisito(a.codigo)] ?? "Sobre A";
     const sb = SOBRE[grupoDeRequisito(b.codigo)] ?? "Sobre A";
     if (sa !== sb) return sa < sb ? -1 : 1;
@@ -317,16 +364,26 @@ export async function GET(
   });
 
   const zip = new PizZipLib();
-  const indice: string[] = [
-    `Expediente ${canonico.proceso.codigo} — versión ${canonico.meta.version}`,
-    `Oferente: ${canonico.oferente.razon_social} (RNC ${canonico.oferente.rnc})`,
-    "",
-  ];
+  const indice: string[] = subsanacion
+    ? [
+        `SUBSANACIÓN — ${canonico.proceso.codigo}`,
+        `Vence: ${subsanacion.fecha_limite.slice(8, 10)}/${subsanacion.fecha_limite.slice(5, 7)}/${subsanacion.fecha_limite.slice(0, 4)} ${subsanacion.fecha_limite.slice(11, 16)}`,
+        `Oferente: ${canonico.oferente.razon_social} (RNC ${canonico.oferente.rnc})`,
+        "",
+        "Documentos pedidos por la entidad:",
+        "",
+      ]
+    : [
+        `Expediente ${canonico.proceso.codigo} — versión ${canonico.meta.version}`,
+        `Oferente: ${canonico.oferente.razon_social} (RNC ${canonico.oferente.rnc})`,
+        "",
+      ];
   const sinArchivo: string[] = [];
   let n = 0;
   let sobreAnterior = "";
   for (const q of ordenados) {
-    const sobre = SOBRE[grupoDeRequisito(q.codigo)] ?? "Sobre A";
+    // La subsanación va sin sobres: un solo fajo, en el orden pedido.
+    const sobre = subsanacion ? "" : SOBRE[grupoDeRequisito(q.codigo)] ?? "Sobre A";
     const gen = generadoPorCodigo.get(q.codigo);
 
     // De dónde sale el archivo de este requisito.
@@ -359,14 +416,14 @@ export async function GET(
       }
     }
 
-    if (sobre !== sobreAnterior) {
+    if (sobre && sobre !== sobreAnterior) {
       indice.push(`${sobre}`);
       sobreAnterior = sobre;
     }
     if (buffer) {
       n += 1;
       const nn = String(n).padStart(2, "0");
-      const entrada = `${sobre}/${nn} ${limpio(q.codigo)} — ${limpio(q.nombre)}${ext}`;
+      const entrada = `${sobre ? `${sobre}/` : ""}${nn} ${limpio(q.codigo)} — ${limpio(q.nombre)}${ext}`;
       zip.file(entrada, buffer);
       indice.push(`  ${nn} ${q.codigo} — ${q.nombre} (${origenNota})`);
     } else if (requisitoEstandar(q.codigo)?.via === "linea") {
@@ -382,7 +439,7 @@ export async function GET(
   zip.file("00 INDICE.txt", indice.join("\n") + "\n");
 
   const zipFinal: Buffer = zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
-  let zipNombre = `paquete_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;
+  let zipNombre = `${subsanacion ? "subsanacion" : "paquete"}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;
   if (formato === "pdf") zipNombre = zipNombre.replace(/\.zip$/, "_pdf.zip");
   const user = await getUser();
 

@@ -391,3 +391,40 @@ create index if not exists idx_lic_plantilla_institucion
 alter table institucion_evento drop constraint if exists institucion_evento_tipo;
 alter table institucion_evento add constraint institucion_evento_tipo check (tipo in
   ('perfil','logo','contacto','asignacion','nota','plantilla'));
+
+-- ============================================================
+--  MIGRACIÓN: SUBSANACIÓN
+--  Tras presentar la oferta, la entidad puede pedir por correo
+--  documentos faltantes o corregidos con una FECHA LÍMITE corta.
+--  Se registra el pedido, se marcan los requisitos afectados
+--  (lic_requisito.subsanacion_id) y se genera un paquete chico
+--  solo con eso. Estados: abierta → enviada → cerrada.
+-- ============================================================
+create table if not exists lic_subsanacion (
+  id           uuid primary key default gen_random_uuid(),
+  org_id       uuid not null references organizacion(id) on delete cascade,
+  proceso_id   uuid not null references lic_proceso(id) on delete cascade,
+  fecha_limite timestamptz not null,
+  texto        text,                    -- el correo de la entidad, pegado tal cual
+  estado       text not null default 'abierta',
+  enviada_at   timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint lic_subsanacion_estado_valido check (estado in ('abierta','enviada','cerrada'))
+);
+create index if not exists idx_lic_subsanacion_proceso on lic_subsanacion(proceso_id);
+drop trigger if exists trg_lic_subsanacion_touch on lic_subsanacion;
+create trigger trg_lic_subsanacion_touch before update on lic_subsanacion
+  for each row execute function touch_updated_at();
+alter table lic_subsanacion enable row level security;
+drop policy if exists lic_subsanacion_all on lic_subsanacion;
+create policy lic_subsanacion_all on lic_subsanacion for all
+  using (es_miembro(org_id)) with check (es_miembro(org_id));
+
+-- Qué requisitos pidió la subsanación (marcar = vuelve a "pendiente").
+alter table lic_requisito add column if not exists subsanacion_id uuid references lic_subsanacion(id) on delete set null;
+
+-- La bitácora de la entidad también registra sus subsanaciones.
+alter table institucion_evento drop constraint if exists institucion_evento_tipo;
+alter table institucion_evento add constraint institucion_evento_tipo check (tipo in
+  ('perfil','logo','contacto','asignacion','nota','plantilla','subsanacion'));
