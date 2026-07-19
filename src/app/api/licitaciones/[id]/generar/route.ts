@@ -27,6 +27,7 @@ import {
   type ImagenesFirma,
 } from "@/lib/licitaciones/generador";
 import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
+import { resolverPlantillas } from "@/lib/licitaciones/plantillas";
 import PizZipLib from "pizzip";
 import { docxAPdf, pdfDisponible } from "@/lib/licitaciones/pdf";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
@@ -87,7 +88,7 @@ export async function GET(
   // 2) EL GATE: ningún NO subsanable pendiente. Bloqueo duro. Lo que la
   //    propia generación produce no bloquea — incluidas las plantillas que
   //    la organización construyó (lic_plantilla en estado "lista").
-  const [{ data: requisitos }, { data: plantillasOrg }] = await Promise.all([
+  const [{ data: requisitos }, { data: plantillasOrg }, { data: proc }] = await Promise.all([
     supabase
       .from("lic_requisito")
       .select("id, codigo, subsanable, estado, nombre, datos, storage_path, documento_empresa_id, orden_indice")
@@ -98,9 +99,18 @@ export async function GET(
       .select("*")
       .eq("org_id", miembro.org_id)
       .eq("estado", "lista"),
+    supabase
+      .from("lic_proceso")
+      .select("institucion_id")
+      .eq("id", id)
+      .eq("org_id", miembro.org_id)
+      .maybeSingle(),
   ]);
-  const plantillaPorCodigo = new Map(
-    ((plantillasOrg ?? []) as LicPlantilla[]).map((p) => [p.codigo, p]),
+  // CASCADA por código: variante de la entidad del proceso → genérica de
+  // la org → (más abajo) plantilla del sistema.
+  const plantillaPorCodigo = resolverPlantillas(
+    (plantillasOrg ?? []) as LicPlantilla[],
+    proc?.institucion_id ?? null,
   );
   const esGenerable = (codigo: string) =>
     Boolean(GENERABLES[codigo] || plantillaPorCodigo.has(codigo));
@@ -185,6 +195,15 @@ export async function GET(
           }))
           .sort((a, b) => a.codigo.localeCompare(b.codigo)),
         sellos: (docsImagen ?? []).map((d) => d.archivo_url),
+        // Qué plantilla EXACTA responde cada código (la variante de la
+        // entidad cuenta distinto que la genérica, y editarla invalida).
+        plantillas: Array.from(new Set(codigos))
+          .filter((c) => plantillaPorCodigo.has(c))
+          .map((c) => {
+            const p = plantillaPorCodigo.get(c)!;
+            return { codigo: c, id: p.id, actualizada: p.updated_at };
+          })
+          .sort((a, b) => a.codigo.localeCompare(b.codigo)),
       }),
     )
     .digest("hex");

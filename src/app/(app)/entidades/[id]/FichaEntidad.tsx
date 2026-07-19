@@ -60,6 +60,7 @@ const TIPO_EVENTO: Record<string, { label: string; clase: string }> = {
   asignacion: { label: "asignación", clase: "bg-primary/10 text-primary" },
   nota: { label: "nota", clase: "bg-warn-soft text-warn" },
   orden: { label: "orden", clase: "bg-ok-soft text-ok" },
+  plantilla: { label: "plantilla", clase: "bg-primary/10 text-primary" },
 };
 
 // Campo con autosave onBlur. Definido FUERA (regla de la casa).
@@ -364,6 +365,34 @@ export default function FichaEntidad({
                 </li>
               ))}
             </ul>
+            {e.plantillas.length > 0 && (
+              <>
+                <p className="border-y border-line bg-surface-2 px-4 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+                  Formularios propios ({e.plantillas.length})
+                </p>
+                <ul className="divide-y divide-line">
+                  {e.plantillas.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        href={`/configuracion/plantillas/${p.id}`}
+                        className="flex items-center justify-between gap-2 px-4 py-2 transition-colors hover:bg-surface-2"
+                        title="Esta entidad exige su propia versión — se usa en lugar de la genérica al generar"
+                      >
+                        <span className="min-w-0 truncate text-[12.5px] text-ink">{p.nombre}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="font-mono text-[11px] text-muted">{p.codigo}</span>
+                          <span
+                            className={`h-2 w-2 rounded-full ${p.estado === "lista" ? "bg-ok" : "bg-warn"}`}
+                            title={p.estado === "lista" ? "Lista" : "Borrador"}
+                            aria-hidden
+                          />
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </Panel>
 
           {/* Bitácora de la entidad */}

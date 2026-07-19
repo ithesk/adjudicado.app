@@ -3,7 +3,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { getMiembro, orgActivaLigera } from "@/lib/auth";
+import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { aplicarAsignaciones } from "./plantillas";
 import type { Asignacion, VariablePersonalizada } from "./variables";
@@ -19,8 +19,13 @@ export interface LicPlantilla {
   asignaciones: Asignacion[];
   variables_personalizadas: VariablePersonalizada[];
   estado: "borrador" | "lista";
+  // null = genérica de la organización; con valor = variante que gana
+  // cuando el proceso es de esa entidad (cascada entidad → org → sistema).
+  institucion_id: string | null;
   created_at: string;
   updated_at: string;
+  // Solo en el listado: la entidad de la variante, para mostrarla.
+  institucion?: { id: string; nombre: string; siglas: string | null } | null;
 }
 
 export async function listarPlantillas(): Promise<LicPlantilla[]> {
@@ -30,7 +35,7 @@ export async function listarPlantillas(): Promise<LicPlantilla[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("lic_plantilla")
-    .select("*")
+    .select("*, institucion:institucion_id(id, nombre, siglas)")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false });
   return (data as LicPlantilla[] | null) ?? [];
@@ -43,7 +48,7 @@ export async function obtenerPlantilla(id: string): Promise<LicPlantilla | null>
   const supabase = await createClient();
   const { data } = await supabase
     .from("lic_plantilla")
-    .select("*")
+    .select("*, institucion:institucion_id(id, nombre, siglas)")
     .eq("id", id)
     .eq("org_id", orgId)
     .maybeSingle();
@@ -191,7 +196,7 @@ export async function eliminarPlantilla(id: string): Promise<string | null> {
   const supabase = await createClient();
   const { data: fila } = await supabase
     .from("lic_plantilla")
-    .select("archivo_original, archivo_tpl")
+    .select("nombre, archivo_original, archivo_tpl, institucion_id")
     .eq("id", id)
     .eq("org_id", miembro.org_id)
     .maybeSingle();
@@ -201,7 +206,116 @@ export async function eliminarPlantilla(id: string): Promise<string | null> {
     .eq("id", id)
     .eq("org_id", miembro.org_id);
   if (error) return `No se pudo eliminar: ${error.message}`;
+  if (fila?.institucion_id) {
+    await registrarEventoEntidad(
+      fila.institucion_id,
+      miembro.org_id,
+      `Eliminó la plantilla propia "${fila.nombre}"`,
+    );
+  }
   const rutas = [fila?.archivo_original, fila?.archivo_tpl].filter(Boolean) as string[];
   if (rutas.length) await supabase.storage.from("documentos").remove(rutas);
   return null;
+}
+
+// El movimiento queda escrito en la bitácora de la entidad (chatter).
+async function registrarEventoEntidad(
+  institucionId: string,
+  orgId: string,
+  texto: string,
+) {
+  const supabase = await createClient();
+  const user = await getUser();
+  await supabase.from("institucion_evento").insert({
+    org_id: orgId,
+    institucion_id: institucionId,
+    autor_id: user?.id ?? null,
+    tipo: "plantilla",
+    texto,
+  });
+}
+
+// "Crear variante para una entidad": duplica una plantilla YA construida
+// (archivos + variables) asignada a la entidad. Solo se edita lo que esa
+// entidad cambió — nunca se re-taggea desde cero.
+export async function duplicarPlantillaParaEntidad(
+  id: string,
+  institucionId: string,
+): Promise<{ id?: string; error?: string }> {
+  if (isDemo()) return { error: "En modo demo no se guardan cambios." };
+  const miembro = await getMiembro();
+  if (!miembro) return { error: "No autorizado." };
+  const supabase = await createClient();
+
+  const [{ data: fila }, { data: entidad }] = await Promise.all([
+    supabase
+      .from("lic_plantilla")
+      .select("*")
+      .eq("id", id)
+      .eq("org_id", miembro.org_id)
+      .maybeSingle(),
+    supabase
+      .from("institucion")
+      .select("id, nombre, siglas")
+      .eq("id", institucionId)
+      .eq("org_id", miembro.org_id)
+      .maybeSingle(),
+  ]);
+  const base = fila as LicPlantilla | null;
+  if (!base) return { error: "Plantilla no encontrada." };
+  if (!entidad) return { error: "Entidad no encontrada." };
+  if (base.institucion_id === institucionId) {
+    return { error: "Esta plantilla ya es la variante de esa entidad." };
+  }
+
+  // Copia los archivos en storage para que la variante viva sola.
+  const copiar = async (origen: string | null): Promise<string | null> => {
+    if (!origen) return null;
+    const { data: archivo } = await supabase.storage.from("documentos").download(origen);
+    if (!archivo) return null;
+    const destino = `${miembro.org_id}/plantillas/${randomUUID()}${origen.endsWith("-tpl.docx") ? "-tpl.docx" : ".docx"}`;
+    const { error: errSubida } = await supabase.storage
+      .from("documentos")
+      .upload(destino, new Uint8Array(await archivo.arrayBuffer()), {
+        contentType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+    return errSubida ? null : destino;
+  };
+  const original = await copiar(base.archivo_original);
+  if (!original) return { error: "No se pudo copiar el archivo de la plantilla." };
+  const tpl = await copiar(base.archivo_tpl);
+
+  const { data: creada, error } = await supabase
+    .from("lic_plantilla")
+    .insert({
+      org_id: miembro.org_id,
+      codigo: base.codigo,
+      nombre: base.nombre,
+      descripcion: base.descripcion,
+      archivo_original: original,
+      archivo_tpl: tpl,
+      asignaciones: base.asignaciones,
+      variables_personalizadas: base.variables_personalizadas,
+      estado: tpl ? base.estado : "borrador",
+      institucion_id: institucionId,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    await supabase.storage
+      .from("documentos")
+      .remove([original, tpl].filter(Boolean) as string[]);
+    if (error.code === "23505") {
+      return { error: `${entidad.siglas ?? entidad.nombre} ya tiene su variante de ${base.codigo}.` };
+    }
+    return { error: `No se pudo crear la variante: ${error.message}` };
+  }
+
+  await registrarEventoEntidad(
+    institucionId,
+    miembro.org_id,
+    `Creó la plantilla propia "${base.nombre}" (${base.codigo}) — variante de la genérica`,
+  );
+  return { id: creada.id };
 }

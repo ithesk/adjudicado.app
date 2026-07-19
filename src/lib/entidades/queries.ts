@@ -61,6 +61,8 @@ export interface EntidadDetalle {
   eventos: EventoEntidad[];
   ordenes: { id: string; numero_oc: string | null; estado: string; monto: number | null; fecha_oc: string | null }[];
   procesos: { id: string; codigo: string; estado: string; cierre: string | null }[];
+  // Formularios que esta entidad exige en SU versión (variantes de plantilla).
+  plantillas: { id: string; codigo: string; nombre: string; estado: string }[];
 }
 
 function nombreLegible(nombre: string | null): string {
@@ -80,6 +82,22 @@ async function urlFirmada(
     .from("documentos")
     .createSignedUrl(path, 3600);
   return data?.signedUrl ?? null;
+}
+
+// Para selectores (ej. "crear variante de plantilla para…").
+export async function listarEntidadesLigero(): Promise<
+  { id: string; nombre: string; siglas: string | null }[]
+> {
+  if (isDemo()) return [];
+  const orgId = await orgActivaLigera();
+  if (!orgId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("institucion")
+    .select("id, nombre, siglas")
+    .eq("org_id", orgId)
+    .order("nombre");
+  return data ?? [];
 }
 
 export async function listarEntidadesResumen(): Promise<EntidadResumen[]> {
@@ -159,6 +177,7 @@ export async function obtenerEntidadDetalle(id: string): Promise<EntidadDetalle 
     { data: procesos },
     { data: miembros },
     { data: grupos },
+    { data: plantillas },
   ] = await Promise.all([
     supabase
       .from("contacto")
@@ -191,6 +210,12 @@ export async function obtenerEntidadDetalle(id: string): Promise<EntidadDetalle 
       .limit(10),
     supabase.from("miembro").select("user_id, nombre").eq("org_id", orgId),
     supabase.from("grupo").select("id, nombre").eq("org_id", orgId),
+    supabase
+      .from("lic_plantilla")
+      .select("id, codigo, nombre, estado")
+      .eq("institucion_id", id)
+      .eq("org_id", orgId)
+      .order("codigo"),
   ]);
 
   const porPersona = new Map((miembros ?? []).map((m) => [m.user_id, nombreLegible(m.nombre)]));
@@ -250,5 +275,6 @@ export async function obtenerEntidadDetalle(id: string): Promise<EntidadDetalle 
     eventos: feed,
     ordenes: ordenes ?? [],
     procesos: procesos ?? [],
+    plantillas: plantillas ?? [],
   };
 }

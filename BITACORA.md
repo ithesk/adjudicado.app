@@ -8,6 +8,34 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-18 — Variantes de plantilla por entidad (cascada entidad → org → sistema)
+
+**Hecho:** Pablo: «a veces las entidades tienen su propia versión con pequeños cambios
+de los formularios». Solución tipo ERP: una plantilla puede ser **genérica** de la org
+o **variante de una entidad** (`lic_plantilla.institucion_id`, unicidad partida en dos
+índices parciales — migración aplicada a prod, 201). Piezas:
+
+- **Cascada al generar** (`resolverPlantillas`, pura, 5 tests): para cada código gana
+  la variante de la entidad del proceso; si no hay, la genérica; si no, el sistema.
+  El usuario no configura nada por proceso.
+- **«Variante para una entidad…»** en Configuración → Plantillas: duplica la plantilla
+  YA construida (archivos en storage + asignaciones + variables) asignada a la entidad
+  — solo se edita lo que esa entidad cambió. Las variantes cuelgan agrupadas bajo su
+  genérica con la etiqueta de la entidad; el editor muestra el badge «Variante · X».
+- **Ficha de la entidad**: riel «Formularios propios (n)» + eventos tipo `plantilla`
+  en su bitácora (crear/eliminar variante quedan escritos).
+- **La huella del paquete ahora incluye qué plantilla exacta respondió cada código**
+  (id + updated_at). Esto además tapa un hueco previo: editar/republicar una plantilla
+  no invalidaba el ZIP reusado. Efecto: una regeneración única tras el deploy.
+
+**Decisión no obvia:** la variante comparte el `codigo` del requisito — el checklist no
+cambia; solo cambia *cuál archivo* responde. Si solo existe la variante (sin genérica),
+responde únicamente a su entidad. 73 tests.
+
+**Pendiente:** PR a main sigue abierto (con las env de Gotenberg en Vercel antes).
+
+---
+
 ## 2026-07-17 — Búsqueda tolerante en toda la app (regla permanente)
 
 **Hecho:** Pablo buscó «instituto» y no encontró «Instituto…» (en uno de los buscadores

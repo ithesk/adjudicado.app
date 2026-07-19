@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
-import { analizarDocx, aplicarAsignaciones } from "./plantillas";
+import { analizarDocx, aplicarAsignaciones, resolverPlantillas } from "./plantillas";
 
 // Construye un .docx mínimo. Cada párrafo es una lista de runs (para poder
 // probar texto PARTIDO entre runs — el caso que muerde en Word real).
@@ -168,5 +168,46 @@ describe("aplicarAsignaciones", () => {
     expect(() =>
       aplicarAsignaciones(buf, [{ parrafo: 9, inicio: 0, fin: 4, variable: "rnc" }]),
     ).toThrow(/no existe/);
+  });
+});
+
+// ============================================================
+// La CASCADA de variantes por entidad: para cada código gana la
+// variante de la entidad del proceso; sin entidad (o sin
+// variante), la genérica de la organización.
+// ============================================================
+describe("resolverPlantillas — variante de la entidad gana sobre la genérica", () => {
+  const generica = { id: "g1", codigo: "DADM-FO-031", institucion_id: null };
+  const varianteSalud = { id: "v1", codigo: "DADM-FO-031", institucion_id: "ent-salud" };
+  const otraGenerica = { id: "g2", codigo: "MI-CARTA-X", institucion_id: null };
+  const todas = [generica, varianteSalud, otraGenerica];
+
+  it("proceso de la entidad con variante: usa SU versión", () => {
+    const mapa = resolverPlantillas(todas, "ent-salud");
+    expect(mapa.get("DADM-FO-031")?.id).toBe("v1");
+    expect(mapa.get("MI-CARTA-X")?.id).toBe("g2"); // sin variante → genérica
+  });
+
+  it("proceso de OTRA entidad: la variante ajena no contamina", () => {
+    const mapa = resolverPlantillas(todas, "ent-itla");
+    expect(mapa.get("DADM-FO-031")?.id).toBe("g1");
+  });
+
+  it("proceso sin entidad: solo genéricas", () => {
+    const mapa = resolverPlantillas(todas, null);
+    expect(mapa.get("DADM-FO-031")?.id).toBe("g1");
+    expect(mapa.size).toBe(2);
+  });
+
+  it("solo existe la variante (sin genérica): responde únicamente a su entidad", () => {
+    const solas = [varianteSalud];
+    expect(resolverPlantillas(solas, "ent-salud").get("DADM-FO-031")?.id).toBe("v1");
+    expect(resolverPlantillas(solas, "ent-itla").has("DADM-FO-031")).toBe(false);
+    expect(resolverPlantillas(solas, null).has("DADM-FO-031")).toBe(false);
+  });
+
+  it("el orden de llegada no importa: la variante gana aunque venga primero", () => {
+    const mapa = resolverPlantillas([varianteSalud, generica], "ent-salud");
+    expect(mapa.get("DADM-FO-031")?.id).toBe("v1");
   });
 });

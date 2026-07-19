@@ -6,6 +6,7 @@
 import { revalidatePath } from "next/cache";
 import {
   crearPlantilla,
+  duplicarPlantillaParaEntidad,
   eliminarPlantilla,
   guardarAsignaciones,
   guardarVariablesPersonalizadas,
@@ -45,6 +46,22 @@ export async function publicarPlantillaAction(id: string): Promise<string | null
 
 export async function eliminarPlantillaAction(id: string): Promise<string | null> {
   const error = await eliminarPlantilla(id);
-  if (!error) refrescar();
+  if (!error) {
+    refrescar();
+    revalidatePath("/entidades", "layout");
+  }
   return error;
+}
+
+// Duplica una plantilla como VARIANTE de una entidad (cascada al generar).
+export async function crearVariantePlantillaAction(
+  id: string,
+  institucionId: string,
+) {
+  const r = await duplicarPlantillaParaEntidad(id, institucionId);
+  if (r.id) {
+    refrescar();
+    revalidatePath("/entidades", "layout");
+  }
+  return r;
 }

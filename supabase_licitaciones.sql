@@ -366,3 +366,28 @@ create policy lic_plantilla_all on lic_plantilla for all
 -- proceso captura el suyo en lic_requisito.datos).
 alter table lic_plantilla add column if not exists variables_personalizadas jsonb not null default '[]'::jsonb;
 alter table lic_requisito add column if not exists datos jsonb not null default '{}'::jsonb;
+
+-- ============================================================
+--  MIGRACIÓN: variantes de plantilla por ENTIDAD
+--  A veces una entidad exige su propia versión de un formulario
+--  (pequeños cambios sobre el estándar). Una plantilla sin
+--  institucion_id es la genérica de la organización; con
+--  institucion_id es la variante que GANA cuando el proceso es
+--  de esa entidad (cascada: entidad → org → sistema).
+-- ============================================================
+alter table lic_plantilla add column if not exists institucion_id uuid references institucion(id) on delete cascade;
+
+-- La unicidad deja de ser (org, codigo) a secas: una genérica por código
+-- + una variante por código y entidad.
+alter table lic_plantilla drop constraint if exists lic_plantilla_org_id_codigo_key;
+create unique index if not exists uq_lic_plantilla_base
+  on lic_plantilla(org_id, codigo) where institucion_id is null;
+create unique index if not exists uq_lic_plantilla_variante
+  on lic_plantilla(org_id, codigo, institucion_id) where institucion_id is not null;
+create index if not exists idx_lic_plantilla_institucion
+  on lic_plantilla(institucion_id) where institucion_id is not null;
+
+-- La bitácora de la entidad también registra sus plantillas propias.
+alter table institucion_evento drop constraint if exists institucion_evento_tipo;
+alter table institucion_evento add constraint institucion_evento_tipo check (tipo in
+  ('perfil','logo','contacto','asignacion','nota','plantilla'));

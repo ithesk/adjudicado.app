@@ -155,7 +155,17 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
           Plantillas
         </Link>
         <div className="min-w-0">
-          <p className="text-[13.5px] font-semibold text-ink">{plantilla.nombre}</p>
+          <p className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
+            <span className="truncate">{plantilla.nombre}</span>
+            {plantilla.institucion && (
+              <span
+                className="inline-flex flex-none items-center rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-medium text-primary"
+                title={`Variante SOLO para ${plantilla.institucion.nombre} — al generar gana sobre la genérica`}
+              >
+                Variante · {plantilla.institucion.siglas ?? plantilla.institucion.nombre}
+              </span>
+            )}
+          </p>
           <p className="font-mono text-[11px] text-muted">
             {plantilla.codigo} · {plantilla.estado === "lista" ? "lista" : "borrador"}
           </p>
