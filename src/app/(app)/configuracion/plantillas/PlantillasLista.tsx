@@ -1,14 +1,16 @@
 "use client";
 
-// Lista de plantillas con VARIANTES por entidad: la genérica encabeza y sus
-// variantes cuelgan debajo con la etiqueta de la entidad. "Variante para una
-// entidad…" duplica la plantilla ya construida — solo se edita lo que esa
-// entidad cambió, nunca se re-taggea desde cero.
+// Lista de plantillas con VARIANTES por entidad. Dos bloques:
+// (1) Plantillas propias de la organización (códigos suyos), con la genérica
+//     encabezando y sus variantes debajo con la etiqueta de la entidad.
+// (2) Formularios del sistema (F.033, cartas…): el sistema los trae listos,
+//     pero si una entidad exige SU versión (caso MITUR), «Variante» sube el
+//     Word que esa entidad envió y al generar gana sobre el del sistema.
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CornerDownRight, CopyPlus, FileStack, Landmark, Plus, Trash2 } from "lucide-react";
+import { CornerDownRight, CopyPlus, FileStack, Landmark, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Panel, SectionTitle, btnPrimary, inputBase } from "@/components/ui";
 import {
   crearPlantillaAction,
@@ -21,6 +23,11 @@ interface EntidadLigera {
   id: string;
   nombre: string;
   siglas: string | null;
+}
+
+interface PlantillaSistema {
+  codigo: string;
+  nombre: string;
 }
 
 // Genéricas primero (en su orden), cada una seguida de sus variantes; las
@@ -43,6 +50,25 @@ function ordenarConVariantes(plantillas: LicPlantilla[]): LicPlantilla[] {
   return filas;
 }
 
+function SelectorEntidad({
+  entidades,
+  ...props
+}: { entidades: EntidadLigera[] } & React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select {...props} className={`${inputBase} !w-auto !py-1 text-[12.5px]`}>
+      <option value="" disabled>
+        Elige la entidad…
+      </option>
+      {entidades.map((ent) => (
+        <option key={ent.id} value={ent.id}>
+          {ent.siglas ? `${ent.siglas} — ` : ""}
+          {ent.nombre}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function FilaPlantilla({
   plantilla,
   entidades,
@@ -58,8 +84,6 @@ function FilaPlantilla({
 }) {
   const [eligiendo, setEligiendo] = useState(false);
   const esVariante = Boolean(plantilla.institucion_id);
-  // Entidades que aún no tienen su variante de este código no las sabemos
-  // aquí; el server devuelve el error legible si ya existe.
   return (
     <li className={esVariante ? "bg-surface-2/40" : ""}>
       <div className="flex items-center gap-3 px-4 py-2.5">
@@ -121,24 +145,14 @@ function FilaPlantilla({
       {eligiendo && (
         <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface-2/60 px-4 py-2 pl-9">
           <p className="text-[12px] text-muted">Variante de {plantilla.codigo} para:</p>
-          <select
+          <SelectorEntidad
+            entidades={entidades}
             defaultValue=""
             disabled={ocupado}
             onChange={(e) => {
               if (e.target.value) onVariante(plantilla.id, e.target.value);
             }}
-            className={`${inputBase} !w-auto !py-1 text-[12.5px]`}
-          >
-            <option value="" disabled>
-              Elige la entidad…
-            </option>
-            {entidades.map((ent) => (
-              <option key={ent.id} value={ent.id}>
-                {ent.siglas ? `${ent.siglas} — ` : ""}
-                {ent.nombre}
-              </option>
-            ))}
-          </select>
+          />
           <p className="text-[11.5px] text-muted">
             Se copia ya construida; edita solo lo que esa entidad cambió.
           </p>
@@ -148,12 +162,101 @@ function FilaPlantilla({
   );
 }
 
+// Un formulario del sistema: siempre listo, y debajo sus variantes (si una
+// entidad exige su propia versión, se sube el archivo QUE ELLA ENVIÓ).
+function FilaSistema({
+  doc,
+  variantes,
+  entidades,
+  ocupado,
+  onSubir,
+  onVariante,
+  onEliminar,
+}: {
+  doc: PlantillaSistema;
+  variantes: LicPlantilla[];
+  entidades: EntidadLigera[];
+  ocupado: boolean;
+  onSubir: (fd: FormData) => void;
+  onVariante: (plantillaId: string, institucionId: string) => void;
+  onEliminar: (plantilla: LicPlantilla) => void;
+}) {
+  const [eligiendo, setEligiendo] = useState(false);
+  return (
+    <>
+      <li>
+        <div className="flex items-center gap-3 px-4 py-2.5">
+          <ShieldCheck className="h-4 w-4 flex-none text-ok" strokeWidth={2} aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-medium text-ink">{doc.nombre}</p>
+            <p className="truncate text-[11.5px] text-muted">
+              <span className="font-mono">{doc.codigo}</span> · lo trae el sistema, siempre listo
+            </p>
+          </div>
+          {entidades.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setEligiendo((v) => !v)}
+              disabled={ocupado}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+              title="Una entidad exige su propia versión: sube el Word que ella envió"
+            >
+              <CopyPlus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              Variante
+            </button>
+          )}
+        </div>
+        {eligiendo && (
+          <form
+            action={(fd) => {
+              fd.set("codigo", doc.codigo);
+              fd.set("nombre", doc.nombre);
+              onSubir(fd);
+            }}
+            className="flex flex-wrap items-center gap-2 border-t border-line bg-surface-2/60 px-4 py-2 pl-9"
+          >
+            <p className="text-[12px] text-muted">Versión de {doc.codigo} para:</p>
+            <SelectorEntidad name="institucion_id" entidades={entidades} defaultValue="" required disabled={ocupado} />
+            <input
+              type="file"
+              name="archivo"
+              required
+              accept=".docx"
+              className={`${inputBase} !w-auto !py-1 text-[12px] file:mr-2 file:rounded file:border-0 file:bg-surface-2 file:px-2 file:py-0.5 file:text-[11.5px]`}
+            />
+            <button type="submit" disabled={ocupado} className={btnPrimary("!px-2.5 !py-1 !text-[12px]")}>
+              {ocupado ? "Subiendo…" : "Subir y taggear"}
+            </button>
+            <p className="w-full text-[11.5px] text-muted">
+              Sube el Word tal cual lo envió la entidad; después arrastra las
+              variables sobre sus huecos. Al generar un proceso de esa entidad,
+              esta versión gana sobre la del sistema.
+            </p>
+          </form>
+        )}
+      </li>
+      {variantes.map((v) => (
+        <FilaPlantilla
+          key={v.id}
+          plantilla={v}
+          entidades={entidades}
+          ocupado={ocupado}
+          onVariante={onVariante}
+          onEliminar={onEliminar}
+        />
+      ))}
+    </>
+  );
+}
+
 export default function PlantillasLista({
   plantillas,
   entidades,
+  sistema,
 }: {
   plantillas: LicPlantilla[];
   entidades: EntidadLigera[];
+  sistema: PlantillaSistema[];
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -187,7 +290,12 @@ export default function PlantillasLista({
     });
   }
 
-  const filas = ordenarConVariantes(plantillas);
+  // Los códigos del sistema viven en su bloque (con sus variantes debajo);
+  // el bloque de la organización queda para los códigos propios.
+  const codigosSistema = new Set(sistema.map((s) => s.codigo));
+  const propias = ordenarConVariantes(plantillas.filter((p) => !codigosSistema.has(p.codigo)));
+  const variantesDeSistema = (codigo: string) =>
+    plantillas.filter((p) => p.codigo === codigo);
 
   return (
     <div className="space-y-3">
@@ -209,7 +317,7 @@ export default function PlantillasLista({
             </button>
           }
         >
-          Plantillas de la organización ({plantillas.length})
+          Plantillas de la organización ({propias.length})
         </SectionTitle>
 
         {subiendo && (
@@ -228,7 +336,7 @@ export default function PlantillasLista({
         )}
 
         <ul className="divide-y divide-line">
-          {filas.map((p) => (
+          {propias.map((p) => (
             <FilaPlantilla
               key={p.id}
               plantilla={p}
@@ -238,12 +346,37 @@ export default function PlantillasLista({
               onEliminar={eliminar}
             />
           ))}
-          {plantillas.length === 0 && (
+          {propias.length === 0 && (
             <li className="px-4 py-8 text-center text-sm text-muted">
               Sube el primer Word — por ejemplo un formulario interno de una
               entidad — y arrastra las variables sobre sus huecos.
             </li>
           )}
+        </ul>
+      </Panel>
+
+      <Panel>
+        <SectionTitle icon={ShieldCheck}>
+          Formularios del sistema ({sistema.length})
+        </SectionTitle>
+        <p className="border-b border-line px-4 py-2 text-[11.5px] text-muted">
+          Vienen incluidos y se generan solos. Si una entidad te envió su propia
+          versión (p. ej. para una subsanación), crea su «Variante» con ese
+          archivo — al generar procesos de esa entidad, gana la suya.
+        </p>
+        <ul className="divide-y divide-line">
+          {sistema.map((doc) => (
+            <FilaSistema
+              key={doc.codigo}
+              doc={doc}
+              variantes={variantesDeSistema(doc.codigo)}
+              entidades={entidades}
+              ocupado={pendiente}
+              onSubir={subir}
+              onVariante={crearVariante}
+              onEliminar={eliminar}
+            />
+          ))}
         </ul>
       </Panel>
     </div>

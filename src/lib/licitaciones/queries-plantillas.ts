@@ -68,6 +68,9 @@ export async function crearPlantilla(
   const archivo = formData.get("archivo");
   const nombre = String(formData.get("nombre") || "").trim();
   const codigo = String(formData.get("codigo") || "").trim().toUpperCase();
+  // Con entidad, la plantilla nace como VARIANTE: al generar un proceso de
+  // esa entidad gana sobre la genérica y sobre el formulario del sistema.
+  const institucionId = String(formData.get("institucion_id") || "").trim() || null;
   if (!(archivo instanceof File) || archivo.size === 0) return { error: "Elige un archivo .docx." };
   if (!archivo.name.toLowerCase().endsWith(".docx")) {
     return { error: "Solo .docx (Word). Los PDF planos vienen en una versión futura." };
@@ -93,13 +96,27 @@ export async function crearPlantilla(
       codigo,
       nombre,
       archivo_original: path,
+      institucion_id: institucionId,
     })
     .select("id")
     .single();
   if (error) {
     await supabase.storage.from("documentos").remove([path]);
-    if (error.code === "23505") return { error: `Ya existe una plantilla con el código ${codigo}.` };
+    if (error.code === "23505") {
+      return {
+        error: institucionId
+          ? `Esa entidad ya tiene su variante de ${codigo}.`
+          : `Ya existe una plantilla con el código ${codigo}.`,
+      };
+    }
     return { error: `No se pudo crear: ${error.message}` };
+  }
+  if (institucionId) {
+    await registrarEventoEntidad(
+      institucionId,
+      miembro.org_id,
+      `Creó la plantilla propia "${nombre}" (${codigo}) con el archivo de la entidad`,
+    );
   }
   return { id: data.id };
 }

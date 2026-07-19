@@ -20,7 +20,10 @@ function refrescar() {
 
 export async function crearPlantillaAction(formData: FormData) {
   const r = await crearPlantilla(formData);
-  if (r.id) refrescar();
+  if (r.id) {
+    refrescar();
+    revalidatePath("/entidades", "layout");
+  }
   return r;
 }
 

@@ -8,6 +8,28 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — Variantes también de los formularios del SISTEMA (caso MITUR)
+
+**Hecho:** Pablo tiene formularios que MITUR envió para una subsanación, pero en
+Plantillas solo salían los códigos propios de la org — no los 7 del sistema. Dos arreglos:
+
+- **Configuración → Plantillas ahora tiene el bloque «Formularios del sistema»** (desde
+  GENERABLES): cada uno con su botón «Variante» — eliges la entidad y subes el Word TAL
+  CUAL lo envió esa entidad (nace como borrador con el código del sistema, p. ej.
+  SNCC.F.033 + institucion_id, y se taggea en el constructor). Sus variantes cuelgan
+  debajo; los códigos del sistema ya no se mezclan con el bloque de la organización.
+- **La cascada ahora es completa en la generación**: antes `GENERABLES[codigo]` ganaba
+  SIEMPRE — una variante del F.033 jamás habría salido. Ahora la plantilla resuelta
+  (variante de la entidad → genérica de la org) gana sobre el formulario del sistema,
+  que queda como último recurso. La huella ya lo cubría (incluye la plantilla usada).
+
+**Pendiente de diseño:** flujo de SUBSANACIÓN (la entidad pide por correo documentos
+faltantes/corregidos tras presentar). Análisis entregado a Pablo: nueva `lic_subsanacion`
+con fecha límite + selección de requisitos afectados + mini-paquete solo con eso.
+Sin código todavía — esperando su OK.
+
+---
+
 ## 2026-07-18 — Variantes de plantilla por entidad (cascada entidad → org → sistema)
 
 **Hecho:** Pablo: «a veces las entidades tienen su propia versión con pequeños cambios

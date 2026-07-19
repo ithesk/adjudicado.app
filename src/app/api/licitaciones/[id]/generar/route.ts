@@ -235,14 +235,16 @@ export async function GET(
     }
   }
 
-  // 5) Generar (sistema + plantillas de la org).
+  // 5) Generar. La CASCADA completa: la plantilla resuelta (variante de la
+  //    entidad o genérica de la org) GANA sobre el formulario del sistema —
+  //    si MITUR exige su propia versión del F.033, sale la de MITUR.
   const documentos: DocGenerado[] = [];
   for (const codigo of codigos) {
-    if (GENERABLES[codigo]) {
+    const plantilla = plantillaPorCodigo.get(codigo);
+    if (!plantilla) {
       documentos.push(generarDocumento(codigo, canonico, imagenes));
       continue;
     }
-    const plantilla = plantillaPorCodigo.get(codigo)!;
     const { data: tpl } = await supabase.storage
       .from("documentos")
       .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
