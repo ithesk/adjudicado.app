@@ -8,6 +8,18 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — «Reemplazar Word»: subir el archivo de la entidad sobre una plantilla
+
+**Hecho:** Pablo creó la variante MITUR pero solo podía *modificar* la copia — no
+subirle el Word que la entidad envió. Nueva acción **Reemplazar Word** en dos sitios:
+el botón «Word» en cada fila de la lista de plantillas y «Reemplazar Word» en el
+editor. Sube el .docx nuevo, limpia las asignaciones (los huecos del documento nuevo
+son otros), la plantilla vuelve a borrador y te deja en el editor para arrastrar las
+variables. Borra los archivos viejos de storage y lo registra en la bitácora de la
+entidad si es variante. Con confirm() antes — se pierde el taggeo anterior a propósito.
+
+---
+
 ## 2026-07-19 — SUBSANACIÓN: registrar → marcar → generar el paquete chico
 
 **Hecho:** el flujo completo de subsanación (la entidad pide por correo documentos

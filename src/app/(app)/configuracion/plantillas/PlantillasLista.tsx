@@ -8,14 +8,15 @@
 //     Word que esa entidad envió y al generar gana sobre el del sistema.
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CornerDownRight, CopyPlus, FileStack, Landmark, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { CornerDownRight, CopyPlus, FileStack, Landmark, Paperclip, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Panel, SectionTitle, btnPrimary, inputBase } from "@/components/ui";
 import {
   crearPlantillaAction,
   crearVariantePlantillaAction,
   eliminarPlantillaAction,
+  reemplazarArchivoPlantillaAction,
 } from "@/lib/actions/plantillas";
 import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
 
@@ -74,15 +75,18 @@ function FilaPlantilla({
   entidades,
   ocupado,
   onVariante,
+  onReemplazar,
   onEliminar,
 }: {
   plantilla: LicPlantilla;
   entidades: EntidadLigera[];
   ocupado: boolean;
   onVariante: (plantillaId: string, institucionId: string) => void;
+  onReemplazar: (plantilla: LicPlantilla, archivo: File) => void;
   onEliminar: (plantilla: LicPlantilla) => void;
 }) {
   const [eligiendo, setEligiendo] = useState(false);
+  const archivoRef = useRef<HTMLInputElement>(null);
   const esVariante = Boolean(plantilla.institucion_id);
   return (
     <li className={esVariante ? "bg-surface-2/40" : ""}>
@@ -126,6 +130,37 @@ function FilaPlantilla({
             Variante
           </button>
         )}
+        <input
+          ref={archivoRef}
+          type="file"
+          accept=".docx"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (!f) return;
+            if (
+              confirm(
+                `¿Reemplazar el Word de "${plantilla.nombre}" por el archivo elegido?\n\nLas variables ya arrastradas se limpian y la plantilla vuelve a borrador para taggear el documento nuevo.`,
+              )
+            )
+              onReemplazar(plantilla, f);
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => archivoRef.current?.click()}
+          disabled={ocupado}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+          title={
+            esVariante
+              ? "Sube el Word que envió la entidad — sustituye la copia con la que nació esta variante"
+              : "Sube otro Word sobre esta plantilla"
+          }
+        >
+          <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          Word
+        </button>
         <Link
           href={`/configuracion/plantillas/${plantilla.id}`}
           className="text-[12.5px] font-medium text-primary hover:underline"
@@ -171,6 +206,7 @@ function FilaSistema({
   ocupado,
   onSubir,
   onVariante,
+  onReemplazar,
   onEliminar,
 }: {
   doc: PlantillaSistema;
@@ -179,6 +215,7 @@ function FilaSistema({
   ocupado: boolean;
   onSubir: (fd: FormData) => void;
   onVariante: (plantillaId: string, institucionId: string) => void;
+  onReemplazar: (plantilla: LicPlantilla, archivo: File) => void;
   onEliminar: (plantilla: LicPlantilla) => void;
 }) {
   const [eligiendo, setEligiendo] = useState(false);
@@ -242,6 +279,7 @@ function FilaSistema({
           entidades={entidades}
           ocupado={ocupado}
           onVariante={onVariante}
+          onReemplazar={onReemplazar}
           onEliminar={onEliminar}
         />
       ))}
@@ -278,6 +316,18 @@ export default function PlantillasLista({
       const r = await crearVariantePlantillaAction(plantillaId, institucionId);
       if (r.error) setError(r.error);
       else if (r.id) router.push(`/configuracion/plantillas/${r.id}`);
+    });
+  }
+
+  function reemplazar(p: LicPlantilla, archivo: File) {
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("archivo", archivo);
+      const err = await reemplazarArchivoPlantillaAction(p.id, fd);
+      if (err) setError(err);
+      // Directo al editor: toca arrastrar las variables sobre el Word nuevo.
+      else router.push(`/configuracion/plantillas/${p.id}`);
     });
   }
 
@@ -343,6 +393,7 @@ export default function PlantillasLista({
               entidades={entidades}
               ocupado={pendiente}
               onVariante={crearVariante}
+              onReemplazar={reemplazar}
               onEliminar={eliminar}
             />
           ))}
@@ -374,6 +425,7 @@ export default function PlantillasLista({
               ocupado={pendiente}
               onSubir={subir}
               onVariante={crearVariante}
+              onReemplazar={reemplazar}
               onEliminar={eliminar}
             />
           ))}

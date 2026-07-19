@@ -235,6 +235,73 @@ export async function eliminarPlantilla(id: string): Promise<string | null> {
   return null;
 }
 
+// "Reemplazar Word": sube OTRO archivo sobre una plantilla existente (el
+// caso típico: la variante nació duplicada de la genérica, pero la entidad
+// envió SU propio Word). Las asignaciones se limpian — los huecos del
+// archivo nuevo son otros — y la plantilla vuelve a borrador para taggear.
+export async function reemplazarArchivoPlantilla(
+  id: string,
+  formData: FormData,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+
+  const archivo = formData.get("archivo");
+  if (!(archivo instanceof File) || archivo.size === 0) return "Elige un archivo .docx.";
+  if (!archivo.name.toLowerCase().endsWith(".docx")) {
+    return "Solo .docx (Word). Los PDF planos vienen en una versión futura.";
+  }
+  if (archivo.size > MAX_MB * 1024 * 1024) return `El archivo pesa más de ${MAX_MB} MB.`;
+
+  const supabase = await createClient();
+  const { data: fila } = await supabase
+    .from("lic_plantilla")
+    .select("nombre, codigo, archivo_original, archivo_tpl, institucion_id")
+    .eq("id", id)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  if (!fila) return "Plantilla no encontrada.";
+
+  const path = `${miembro.org_id}/plantillas/${randomUUID()}.docx`;
+  const bytes = new Uint8Array(await archivo.arrayBuffer());
+  const { error: errSubida } = await supabase.storage
+    .from("documentos")
+    .upload(path, bytes, {
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+  if (errSubida) return `No se pudo subir: ${errSubida.message}`;
+
+  const { error } = await supabase
+    .from("lic_plantilla")
+    .update({
+      archivo_original: path,
+      archivo_tpl: null,
+      asignaciones: [],
+      estado: "borrador",
+    })
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  if (error) {
+    await supabase.storage.from("documentos").remove([path]);
+    return `No se pudo reemplazar: ${error.message}`;
+  }
+
+  // El Word viejo ya no sirve a nadie.
+  const viejos = [fila.archivo_original, fila.archivo_tpl].filter(Boolean) as string[];
+  if (viejos.length) await supabase.storage.from("documentos").remove(viejos);
+
+  if (fila.institucion_id) {
+    await registrarEventoEntidad(
+      fila.institucion_id,
+      miembro.org_id,
+      `Reemplazó el Word de la plantilla propia "${fila.nombre}" (${fila.codigo}) por el archivo de la entidad`,
+    );
+  }
+  return null;
+}
+
 // El movimiento queda escrito en la bitácora de la entidad (chatter).
 async function registrarEventoEntidad(
   institucionId: string,

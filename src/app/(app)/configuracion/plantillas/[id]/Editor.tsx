@@ -8,12 +8,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Eye, Loader2, Rocket, X } from "lucide-react";
+import { ArrowLeft, Check, Eye, Loader2, Paperclip, Rocket, X } from "lucide-react";
 import { Panel, SectionTitle, btnGhost, btnPrimary } from "@/components/ui";
 import {
   guardarAsignacionesAction,
   guardarVariablesPersonalizadasAction,
   publicarPlantillaAction,
+  reemplazarArchivoPlantillaAction,
 } from "@/lib/actions/plantillas";
 import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
 import type { Hueco, ParrafoAnalizado } from "@/lib/licitaciones/plantillas";
@@ -43,6 +44,21 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
   const [guardado, setGuardado] = useState<"idle" | "guardando" | "ok">("idle");
   const [pendiente, startTransition] = useTransition();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const archivoRef = useRef<HTMLInputElement>(null);
+
+  // Subir OTRO Word sobre esta plantilla (p. ej. la versión que envió la
+  // entidad para su variante). Los huecos cambian → asignaciones a cero.
+  function reemplazarWord(archivo: File) {
+    setError(null);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("archivo", archivo);
+      const err = await reemplazarArchivoPlantillaAction(plantilla.id, fd);
+      if (err) setError(err);
+      // Documento nuevo, asignaciones limpias: recarga completa del editor.
+      else window.location.reload();
+    });
+  }
 
   // Cargar el análisis (párrafos + huecos) del documento original.
   useEffect(() => {
@@ -182,6 +198,33 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
               <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden /> Guardado
             </span>
           )}
+          <input
+            ref={archivoRef}
+            type="file"
+            accept=".docx"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) return;
+              if (
+                confirm(
+                  "¿Reemplazar el Word de esta plantilla por el archivo elegido?\n\nLas variables ya arrastradas se limpian (los huecos del documento nuevo son otros) y la plantilla vuelve a borrador.",
+                )
+              )
+                reemplazarWord(f);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => archivoRef.current?.click()}
+            disabled={pendiente}
+            className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
+            title="Sube otro Word sobre esta plantilla — p. ej. la versión que envió la entidad para su variante"
+          >
+            <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            Reemplazar Word
+          </button>
           <button type="button" onClick={vistaPrevia} disabled={pendiente} className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}>
             <Eye className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             {pendiente ? "Generando…" : "Vista previa"}

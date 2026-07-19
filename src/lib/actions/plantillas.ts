@@ -11,6 +11,7 @@ import {
   guardarAsignaciones,
   guardarVariablesPersonalizadas,
   publicarPlantilla,
+  reemplazarArchivoPlantilla,
 } from "@/lib/licitaciones/queries-plantillas";
 import type { Asignacion, VariablePersonalizada } from "@/lib/licitaciones/variables";
 
@@ -49,6 +50,20 @@ export async function publicarPlantillaAction(id: string): Promise<string | null
 
 export async function eliminarPlantillaAction(id: string): Promise<string | null> {
   const error = await eliminarPlantilla(id);
+  if (!error) {
+    refrescar();
+    revalidatePath("/entidades", "layout");
+  }
+  return error;
+}
+
+// Sube OTRO Word sobre una plantilla existente (p. ej. el archivo que la
+// entidad envió para su variante). Vuelve a borrador para re-taggear.
+export async function reemplazarArchivoPlantillaAction(
+  id: string,
+  formData: FormData,
+): Promise<string | null> {
+  const error = await reemplazarArchivoPlantilla(id, formData);
   if (!error) {
     refrescar();
     revalidatePath("/entidades", "layout");
