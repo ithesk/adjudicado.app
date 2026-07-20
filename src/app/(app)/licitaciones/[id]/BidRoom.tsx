@@ -1,27 +1,33 @@
 "use client";
 
-// La "Bid Room": la licitación como UNA SOLA PÁGINA. Arriba, la identidad y
-// el recorrido del proceso; debajo, las secciones en orden de trabajo
-// (Proceso → Requisitos → Ítems → Paquete) — nada de pestañas que obligan a
-// ir y volver para comparar. Cada sección se pliega/expande (lo plegado
-// sigue mostrando su estado y se recuerda entre visitas), y una barra fija
-// acompaña el scroll con el estado vivo de cada una y salta a la que toque.
+// La "Bid Room": la licitación como FICHA CON RIEL (mismo patrón que la
+// orden y la entidad — docs/sistema-ui.md). A la izquierda el trabajo
+// (Proceso → Requisitos → Ítems, y Subsanación cuando existe); a la
+// derecha, SIEMPRE visible, el estado del expediente: el gate, el total,
+// la validación y los paquetes ya generados. La acción evidente —
+// generar — vive arriba, en la cabecera.
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
   ClipboardCheck,
   Download,
   Loader2,
   PackageOpen,
   ShieldAlert,
 } from "lucide-react";
+import {
+  CabeceraPagina,
+  DisposicionFicha,
+  Hoja,
+  Panel,
+  btnGhost,
+  btnPrimary,
+} from "@/components/ui";
 import { urlFirmada } from "@/lib/actions/storage";
-import { Hoja, Panel, btnGhost, btnPrimary } from "@/components/ui";
 import { diasRestantes, formatRD, nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, textoDias } from "@/lib/ui";
 import {
@@ -42,19 +48,17 @@ import CotizadorItems from "./_components/CotizadorItems";
 import RequisitosPanel from "./_components/RequisitosPanel";
 import SubsanacionPanel from "./_components/SubsanacionPanel";
 
-type Estacion = "proceso" | "requisitos" | "items" | "paquete" | "subsanacion";
-
-const ORDEN: Estacion[] = ["proceso", "requisitos", "items", "paquete", "subsanacion"];
-
-// A qué sección lleva cada estado de la línea de tiempo cuando se avanza.
-function estacionDelEstado(estado: EstadoLicitacion): Estacion {
+// A qué bloque se salta cuando se avanza en la línea de tiempo.
+function seccionDelEstado(estado: EstadoLicitacion): string | null {
   if (estado === "captura") return "proceso";
   if (estado === "calificacion") return "requisitos";
   if (estado === "costeo") return "items";
-  return "paquete";
+  return null; // armado en adelante: el estado vive en el riel, ya visible
 }
 
-const LS_COLAPSADAS = "bidroom-colapsadas";
+function irA(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 // Lo que se le cuenta al usuario mientras el paquete se arma (tarda unos
 // segundos y sin señales la espera desespera). Los pasos avanzan con un
@@ -88,15 +92,14 @@ function FilaPaquete({ p }: { p: PaqueteGenerado }) {
   const nombre = p.storage_path.split("/").pop() ?? "paquete.zip";
   const esPdf = /_pdf\.zip$/.test(nombre);
   return (
-    <li className="flex items-center gap-2 py-1">
+    <li className="flex items-center gap-2 py-1.5">
       <span className="font-mono text-[11.5px] text-muted">v{p.version}</span>
       <span
         className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${esPdf ? "bg-primary/10 text-primary" : "bg-surface-2 text-muted"}`}
       >
         {esPdf ? "PDF" : "Word"}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[12px] text-ink-soft">{nombre}</span>
-      <span className="font-mono text-[11px] text-muted">
+      <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
         {p.generado_at.slice(8, 10)}/{p.generado_at.slice(5, 7)} {p.generado_at.slice(11, 16)}
       </span>
       <button
@@ -117,7 +120,7 @@ function FilaPaquete({ p }: { p: PaqueteGenerado }) {
           }
         }}
         className="flex items-center gap-1 text-[12px] font-medium text-primary transition-colors hover:underline"
-        title="Baja el ZIP tal cual se generó — no regenera nada"
+        title={`Baja ${nombre} tal cual se generó — no regenera nada`}
       >
         {bajando ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
@@ -127,56 +130,6 @@ function FilaPaquete({ p }: { p: PaqueteGenerado }) {
         Descargar
       </button>
     </li>
-  );
-}
-
-// Cada sección se pliega/expande. Definido FUERA del padre (regla de la
-// casa: un componente inline se remonta en cada render y pierde el foco).
-function Seccion({
-  id,
-  titulo,
-  hint,
-  alerta,
-  colapsada,
-  onToggle,
-  children,
-}: {
-  id: Estacion;
-  titulo: string;
-  hint: string;
-  alerta?: boolean;
-  colapsada: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <section id={id} className="scroll-mt-24 md:scroll-mt-14">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={!colapsada}
-        className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-surface-2"
-      >
-        <ChevronDown
-          className={`h-3.5 w-3.5 flex-none text-muted transition-transform ${colapsada ? "-rotate-90" : ""}`}
-          strokeWidth={2}
-          aria-hidden
-        />
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
-          {titulo}
-        </span>
-        {hint && (
-          <span
-            className={`rounded px-1.5 font-mono text-[10.5px] ${
-              alerta ? "bg-danger-soft font-semibold text-danger" : "bg-surface-2 text-muted"
-            }`}
-          >
-            {hint}
-          </span>
-        )}
-      </button>
-      {!colapsada && <div className="mt-1.5">{children}</div>}
-    </section>
   );
 }
 
@@ -214,66 +167,6 @@ export default function BidRoom({
   const [pasoTexto, setPasoTexto] = useState<string | null>(null);
   const [reusado, setReusado] = useState<"docx" | "pdf" | null>(null);
   const [pendiente, startTransition] = useTransition();
-  const [activa, setActiva] = useState<Estacion>("proceso");
-  const [colapsadas, setColapsadas] = useState<Set<Estacion>>(new Set());
-
-  // Lo plegado se recuerda entre visitas. Se lee después de montar para no
-  // desajustar la hidratación (el servidor siempre pinta todo expandido);
-  // ese doble render inicial es justamente lo que se quiere aquí.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_COLAPSADAS);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setColapsadas(new Set(JSON.parse(raw) as Estacion[]));
-    } catch {
-      // localStorage corrupto o bloqueado: se arranca todo expandido
-    }
-  }, []);
-
-  function toggleSeccion(k: Estacion) {
-    setColapsadas((prev) => {
-      const s = new Set(prev);
-      if (s.has(k)) s.delete(k);
-      else s.add(k);
-      try {
-        localStorage.setItem(LS_COLAPSADAS, JSON.stringify([...s]));
-      } catch {}
-      return s;
-    });
-  }
-
-  // Saltar a una sección la expande primero si estaba plegada.
-  function irA(k: Estacion) {
-    setColapsadas((prev) => {
-      if (!prev.has(k)) return prev;
-      const s = new Set(prev);
-      s.delete(k);
-      try {
-        localStorage.setItem(LS_COLAPSADAS, JSON.stringify([...s]));
-      } catch {}
-      return s;
-    });
-    setTimeout(() => {
-      document.getElementById(k)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 60);
-  }
-
-  // Scroll-spy: la barra resalta la sección que está en pantalla.
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) setActiva(e.target.id as Estacion);
-        }
-      },
-      { rootMargin: "-15% 0px -70% 0px" },
-    );
-    for (const k of ORDEN) {
-      const el = document.getElementById(k);
-      if (el) observer.observe(el);
-    }
-    return () => observer.disconnect();
-  }, []);
 
   const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
   const nivel = nivelUrgencia(dias);
@@ -294,6 +187,7 @@ export default function BidRoom({
   ).length;
 
   // La subsanación viva: qué pidieron y qué de eso aún no tiene archivo.
+  const subAbierta = subsanacion?.estado === "abierta";
   const pedidos = subsanacion
     ? requisitos.filter((q) => q.subsanacion_id === subsanacion.id)
     : [];
@@ -306,6 +200,12 @@ export default function BidRoom({
   const diasSub = subsanacion
     ? diasRestantes(subsanacion.fecha_limite.slice(0, 10))
     : null;
+  // La sección Subsanación solo se monta cuando toca: hay una registrada, o
+  // el proceso ya se sometió (y puede llegar el correo).
+  const conSubsanacion =
+    subsanacion !== null ||
+    proceso.estado === "sometido" ||
+    proceso.estado === "subsanacion";
 
   function generarPaquete(
     formato: "docx" | "pdf" = "docx",
@@ -330,10 +230,13 @@ export default function BidRoom({
         if (!res.ok) {
           const j = await res.json().catch(() => null);
           const lista = j?.faltantes ?? j?.criticos ?? [j?.error ?? "No se pudo generar."];
-          // El detalle del error vive en la sección de donde salió el clic.
-          if (subsanacionId) setErroresSub(lista);
-          else setValidacion(lista);
-          irA(subsanacionId ? "subsanacion" : "paquete");
+          // El detalle del error vive junto a donde salió el clic.
+          if (subsanacionId) {
+            setErroresSub(lista);
+            irA("subsanacion");
+          } else {
+            setValidacion(lista);
+          }
           return;
         }
         if (res.headers.get("X-Paquete-Reusado") === "1") setReusado(formato);
@@ -358,7 +261,8 @@ export default function BidRoom({
   function cambiarEstado(estado: EstadoLicitacion) {
     startTransition(async () => {
       await actualizarProcesoAction(proceso.id, { estado });
-      irA(estacionDelEstado(estado));
+      const destino = seccionDelEstado(estado);
+      if (destino) irA(destino);
       router.refresh();
     });
   }
@@ -370,366 +274,303 @@ export default function BidRoom({
     });
   }
 
-  // El estado vivo de cada sección, siempre a la vista en la barra.
-  const ESTACIONES: {
-    key: Estacion;
-    label: string;
-    hint: string;
-    alerta?: boolean;
-  }[] = [
-    { key: "proceso", label: "Proceso", hint: institucion?.siglas ?? institucion?.nombre?.split(" ")[0] ?? "sin entidad" },
-    {
-      key: "requisitos",
-      label: "Requisitos",
-      hint: criticosPendientes > 0 ? `${criticosPendientes} críticos` : `${requisitos.length} ✓`,
-      alerta: criticosPendientes > 0,
-    },
-    {
-      key: "items",
-      label: "Ítems",
-      hint: sinCotizar > 0 ? `${sinCotizar} sin cotizar` : totales.total > 0 ? formatRD(totales.total) : `${items.length}`,
-      alerta: sinCotizar > 0,
-    },
-    {
-      key: "paquete",
-      label: "Paquete",
-      hint: criticosBloqueantes > 0 ? "bloqueado" : "listo",
-      alerta: criticosBloqueantes > 0,
-    },
-    {
-      key: "subsanacion",
-      label: "Subsanación",
-      hint: subsanacion
-        ? subsanacion.estado === "enviada"
-          ? "enviada"
-          : textoDias(diasSub)
-        : "",
-      alerta: subsanacion?.estado === "abierta",
-    },
-  ];
+  const fmtPrincipal: "docx" | "pdf" = pdfListo ? "pdf" : "docx";
 
   return (
     <Hoja ancho="ficha" className="space-y-4">
-      {/* Cabecera: identidad + reloj + la línea de tiempo */}
-      <Panel className="space-y-3 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="font-mono text-sm font-semibold text-ink">{proceso.codigo}</p>
-            <p className="text-[13px] text-muted">
-              {institucion?.nombre ?? "Sin entidad"} ·{" "}
-              {MODALIDAD_LABEL[proceso.modalidad] ?? proceso.modalidad}
-              {proceso.objeto ? ` · ${proceso.objeto}` : ""}
-            </p>
-          </div>
-          <div className="text-right">
-            <span className={`rounded px-2 py-1 font-mono text-sm font-semibold ${urgenciaChip(nivel)}`}>
+      <CabeceraPagina
+        volver="/licitaciones"
+        titulo={proceso.codigo}
+        descripcion={[
+          institucion?.nombre ?? "Sin entidad",
+          MODALIDAD_LABEL[proceso.modalidad] ?? proceso.modalidad,
+          proceso.objeto ?? null,
+          proceso.cierre
+            ? `cierra ${proceso.cierre.slice(8, 10)}/${proceso.cierre.slice(5, 7)} ${proceso.cierre.slice(11, 16)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        acciones={
+          <span className="flex flex-wrap items-center justify-end gap-1.5">
+            <span className={`rounded px-2 py-1 font-mono text-[13px] font-semibold ${urgenciaChip(nivel)}`}>
               {textoDias(dias)}
             </span>
-            {proceso.cierre && (
-              // Formato manual desde el texto guardado: sin new Date() no hay
-              // desajuste de hidratación ni corrimiento de zona horaria — la
-              // hora del pliego es la hora que se ve.
-              <p className="mt-1 text-[11px] text-muted">
-                Cierre: {proceso.cierre.slice(8, 10)}/{proceso.cierre.slice(5, 7)}{" "}
-                {proceso.cierre.slice(11, 16)}
-              </p>
+            {pasoTexto ? (
+              <span className="flex items-center gap-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-soft">
+                <Loader2 className="h-3.5 w-3.5 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
+                <span className="max-w-56 truncate">{pasoTexto}</span>
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => generarPaquete(fmtPrincipal)}
+                  disabled={pendiente || criticosBloqueantes > 0}
+                  title={
+                    criticosBloqueantes > 0
+                      ? "Bloqueado: hay requisitos NO subsanables pendientes"
+                      : pdfListo
+                        ? "Arma el expediente completo por sobres EN PDF, listo para presentar"
+                        : "Arma el expediente completo por sobres y descarga el ZIP"
+                  }
+                  // Con una subsanación abierta, ESA es la acción del momento
+                  // (vive en el riel); el paquete completo baja a secundario.
+                  className={
+                    subAbierta
+                      ? btnGhost("!px-3 !py-1.5 !text-[12.5px]")
+                      : btnPrimary("!px-3 !py-1.5 !text-[12.5px]")
+                  }
+                >
+                  <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  Generar paquete{pdfListo ? " PDF" : ""}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => generarPaquete(pdfListo ? "docx" : "pdf")}
+                  disabled={pendiente || criticosBloqueantes > 0}
+                  title={
+                    pdfListo
+                      ? "Los mismos documentos en Word, por si hay que retocar algo a mano"
+                      : "Los mismos documentos, convertidos a PDF"
+                  }
+                  className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
+                >
+                  {pdfListo ? "Word" : "PDF"}
+                </button>
+              </>
             )}
-          </div>
-        </div>
+          </span>
+        }
+      />
 
+      <Panel className="p-4">
         <LineaTiempo
           estado={proceso.estado}
           pendiente={pendiente}
           onCambiar={cambiarEstado}
         />
-
-        {(!tienePerfil || !tieneFirmantes) && (
-          <p className="flex items-center gap-1.5 rounded bg-warn-soft px-2 py-1.5 text-[12.5px] text-warn">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
-            {!tienePerfil ? "Faltan los datos de la empresa" : "Faltan los firmantes"} —
-            complétalos en{" "}
-            <Link href="/configuracion/empresa" className="font-medium underline">
-              Configuración → Empresa
-            </Link>
-            .
-          </p>
-        )}
       </Panel>
 
-      {/* La barra que acompaña: anclas a la izquierda y LA ACCIÓN EVIDENTE a
-          la derecha — generar el paquete nunca queda al fondo del scroll.
-          Sticky — en móvil debajo del header de la app. */}
-      <nav className="sticky top-12 z-20 -mx-1 flex flex-wrap items-center gap-1 rounded-lg border border-line bg-canvas/95 px-1 py-1 backdrop-blur md:top-2">
-        {ESTACIONES.map((e) => (
-          <button
-            key={e.key}
-            type="button"
-            onClick={() => irA(e.key)}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-              activa === e.key
-                ? "bg-surface-2 text-ink"
-                : "text-muted hover:text-ink"
-            }`}
-          >
-            {e.label}
-            {e.hint && (
-              <span
-                className={`rounded px-1 font-mono text-[10.5px] font-normal ${
-                  e.alerta ? "bg-danger-soft text-danger" : "text-muted"
-                }`}
-              >
-                {e.hint}
-              </span>
-            )}
-          </button>
-        ))}
+      <DisposicionFicha
+        principal={
+          <div className="space-y-4">
+            <section id="proceso" className="scroll-mt-14">
+              <DatosProceso proceso={proceso} instituciones={instituciones} />
+            </section>
 
-        <span className="ml-auto flex flex-wrap items-center gap-1.5 pl-1">
-          {pasoTexto ? (
-            <span className="flex items-center gap-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-soft">
-              <Loader2 className="h-3.5 w-3.5 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
-              <span className="max-w-56 truncate">{pasoTexto}</span>
-            </span>
-          ) : (
-            <>
-              {subsanacion?.estado === "abierta" && (
+            <section id="requisitos" className="scroll-mt-14">
+              <RequisitosPanel
+                procesoId={proceso.id}
+                requisitos={requisitos}
+                plantillasOrg={plantillasOrg}
+                subsanacionId={subAbierta && subsanacion ? subsanacion.id : null}
+              />
+            </section>
+
+            <section id="items" className="scroll-mt-14">
+              <CotizadorItems proceso={proceso} items={items} params={params} />
+            </section>
+
+            {conSubsanacion && (
+              <section id="subsanacion" className="scroll-mt-14">
+                <SubsanacionPanel
+                  procesoId={proceso.id}
+                  subsanacion={subsanacion}
+                  pedidos={pedidos}
+                  bloqueantes={pedidosBloqueantes}
+                  generando={pendiente || pasoTexto !== null}
+                  errores={erroresSub}
+                  pdfListo={pdfListo}
+                  onGenerar={(formato) =>
+                    subsanacion && generarPaquete(formato, false, subsanacion.id)
+                  }
+                  onIrARequisitos={() => irA("requisitos")}
+                />
+              </section>
+            )}
+          </div>
+        }
+        riel={
+          <div className="space-y-4">
+            {/* ⏰ La subsanación abierta manda: su reloj y SU acción primaria. */}
+            {subAbierta && subsanacion && (
+              <Panel className="space-y-2 p-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+                  Subsanación en curso
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded px-2 py-1 font-mono text-[12.5px] font-semibold ${urgenciaChip(nivelUrgencia(diasSub))}`}>
+                    {textoDias(diasSub)}
+                  </span>
+                  <span className="text-[12px] text-muted">
+                    vence {subsanacion.fecha_limite.slice(8, 10)}/{subsanacion.fecha_limite.slice(5, 7)}{" "}
+                    {subsanacion.fecha_limite.slice(11, 16)}
+                  </span>
+                </div>
+                {pedidos.length === 0 ? (
+                  <p className="rounded bg-warn-soft px-2 py-1.5 text-[12px] text-warn">
+                    Aún no marcaste qué pidieron —{" "}
+                    <button type="button" onClick={() => irA("requisitos")} className="font-medium underline">
+                      márcalo con «Subsanar»
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-[12px] text-ink-soft">
+                    {pedidos.length} documento{pedidos.length === 1 ? "" : "s"} pedido
+                    {pedidos.length === 1 ? "" : "s"}
+                    {pedidosBloqueantes > 0 && (
+                      <span className="font-medium text-danger"> · {pedidosBloqueantes} sin archivo</span>
+                    )}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => generarPaquete(fmtPrincipal, false, subsanacion.id)}
+                  disabled={pendiente || pasoTexto !== null || pedidos.length === 0 || pedidosBloqueantes > 0}
+                  className={btnPrimary("w-full !py-1.5 !text-[12.5px]")}
+                >
+                  <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                  Generar subsanación{pdfListo ? " PDF" : ""}
+                </button>
                 <button
                   type="button"
                   onClick={() => irA("subsanacion")}
-                  className={`flex items-center gap-1 rounded px-2 py-1 font-mono text-[11.5px] font-semibold ${urgenciaChip(nivelUrgencia(diasSub))}`}
-                  title="La entidad pidió una subsanación — el reloj manda. Clic para verla."
+                  className="text-[12px] font-medium text-primary hover:underline"
                 >
-                  <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  subsana {textoDias(diasSub)}
+                  Ver el detalle y el correo
                 </button>
-              )}
-              {reusado && (
-                <button
-                  type="button"
-                  onClick={() => irA("paquete")}
-                  className="flex items-center gap-1 rounded bg-ok-soft px-2 py-1 text-[11.5px] font-medium text-ok"
-                  title="Nada cambió: se descargó el paquete ya generado. Detalle en la sección Paquete."
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  sin cambios
-                </button>
-              )}
-              {criticosBloqueantes > 0 ? (
+              </Panel>
+            )}
+
+            {/* El expediente, siempre a la vista: gate, total, validación
+                y lo ya generado. */}
+            <Panel className="space-y-2.5 p-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+                Expediente
+              </p>
+
+              {criticosPendientes > 0 ? (
                 <button
                   type="button"
                   onClick={() => irA("requisitos")}
-                  className="flex items-center gap-1 rounded bg-danger-soft px-2 py-1 text-[11.5px] font-medium text-danger"
-                  title="Requisitos NO subsanables pendientes — resuélvelos para poder generar"
+                  className="flex w-full items-center gap-1.5 rounded bg-danger-soft px-2 py-1.5 text-left text-[12.5px] font-medium text-danger"
+                  title="Resuélvelos en Requisitos — el paquete no puede salir así"
                 >
-                  <ShieldAlert className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  {criticosBloqueantes} crítico{criticosBloqueantes === 1 ? "" : "s"}
+                  <ShieldAlert className="h-3.5 w-3.5 flex-none" strokeWidth={2} aria-hidden />
+                  {criticosPendientes} NO subsanable{criticosPendientes === 1 ? "" : "s"} pendiente
+                  {criticosPendientes === 1 ? "" : "s"}
                 </button>
               ) : (
-                <span className="hidden items-center gap-1 rounded bg-ok-soft px-2 py-1 text-[11.5px] font-medium text-ok sm:flex">
-                  <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                  listo
-                </span>
+                <p className="flex items-center gap-1.5 rounded bg-ok-soft px-2 py-1.5 text-[12.5px] font-medium text-ok">
+                  <CheckCircle2 className="h-3.5 w-3.5 flex-none" strokeWidth={2} aria-hidden />
+                  Sin críticos pendientes
+                </p>
               )}
+
+              {sinCotizar > 0 && (
+                <button
+                  type="button"
+                  onClick={() => irA("items")}
+                  className="flex w-full items-center gap-1.5 rounded bg-warn-soft px-2 py-1.5 text-left text-[12px] font-medium text-warn"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 flex-none" strokeWidth={2} aria-hidden />
+                  {sinCotizar} ítem{sinCotizar === 1 ? "" : "s"} sin cotizar
+                </button>
+              )}
+
+              {totales.total > 0 && (
+                <table className="w-full font-mono text-[12px]">
+                  <tbody>
+                    <tr>
+                      <td className="py-0.5 text-muted">Subtotal</td>
+                      <td className="text-right text-ink">{formatRD(totales.subtotal)}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 text-muted">ITBIS ({params.itbisPct}%)</td>
+                      <td className="text-right text-ink">{formatRD(totales.itbis)}</td>
+                    </tr>
+                    <tr className="text-[13px] font-semibold">
+                      <td className="pt-1 text-ink">Total oferta</td>
+                      <td className="pt-1 text-right text-ink">{formatRD(totales.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+
               <button
                 type="button"
-                onClick={() => generarPaquete(pdfListo ? "pdf" : "docx")}
-                disabled={pendiente || criticosBloqueantes > 0}
-                title={
-                  criticosBloqueantes > 0
-                    ? "Bloqueado: hay requisitos NO subsanables pendientes"
-                    : pdfListo
-                      ? "Arma el expediente completo por sobres EN PDF, listo para presentar"
-                      : "Arma el expediente completo por sobres y descarga el ZIP"
-                }
-                className={btnPrimary("!px-3 !py-1.5 !text-[12.5px]")}
+                onClick={validar}
+                disabled={pendiente}
+                className={btnGhost("w-full !py-1.5 !text-[12.5px]")}
               >
-                <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                Generar paquete{pdfListo ? " PDF" : ""}
+                <ClipboardCheck className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                {pendiente ? "Validando…" : "Validar expediente"}
               </button>
-              <button
-                type="button"
-                onClick={() => generarPaquete(pdfListo ? "docx" : "pdf")}
-                disabled={pendiente || criticosBloqueantes > 0}
-                title={
-                  pdfListo
-                    ? "Los mismos documentos en Word, por si hay que retocar algo a mano"
-                    : "Los mismos documentos, convertidos a PDF"
-                }
-                className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
-              >
-                {pdfListo ? "Word" : "PDF"}
-              </button>
-            </>
-          )}
-        </span>
-      </nav>
 
-      <Seccion
-        id="proceso"
-        titulo={ESTACIONES[0].label}
-        hint={ESTACIONES[0].hint}
-        alerta={ESTACIONES[0].alerta}
-        colapsada={colapsadas.has("proceso")}
-        onToggle={() => toggleSeccion("proceso")}
-      >
-        <DatosProceso proceso={proceso} instituciones={instituciones} />
-      </Seccion>
+              {validacion === "ok" && (
+                <p className="flex items-center gap-1.5 rounded bg-ok-soft px-2 py-1.5 text-[12px] text-ok">
+                  <CheckCircle2 className="h-3.5 w-3.5 flex-none" strokeWidth={2} aria-hidden />
+                  Expediente completo — listo para generar.
+                </p>
+              )}
+              {Array.isArray(validacion) && (
+                <div className="rounded bg-danger-soft px-2.5 py-2 text-[12px] text-danger">
+                  <p className="font-medium">Al expediente le falta:</p>
+                  <ul className="ml-4 list-disc">
+                    {validacion.map((e, i) => (
+                      <li key={i} className="font-mono text-[11px]">{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-      <Seccion
-        id="requisitos"
-        titulo={ESTACIONES[1].label}
-        hint={ESTACIONES[1].hint}
-        alerta={ESTACIONES[1].alerta}
-        colapsada={colapsadas.has("requisitos")}
-        onToggle={() => toggleSeccion("requisitos")}
-      >
-        <RequisitosPanel
-          procesoId={proceso.id}
-          requisitos={requisitos}
-          plantillasOrg={plantillasOrg}
-          subsanacionId={subsanacion?.estado === "abierta" ? subsanacion.id : null}
-        />
-      </Seccion>
+              {reusado && (
+                <p className="rounded bg-ok-soft px-2.5 py-1.5 text-[12px] text-ok">
+                  Nada cambió: se descargó el paquete ya generado al instante.{" "}
+                  <button
+                    type="button"
+                    onClick={() => generarPaquete(reusado, true)}
+                    className="font-medium underline"
+                    title="Vuelve a armarlo desde cero (por ejemplo, para refrescar la fecha de las cartas)"
+                  >
+                    Generar de nuevo
+                  </button>
+                </p>
+              )}
 
-      <Seccion
-        id="items"
-        titulo={ESTACIONES[2].label}
-        hint={ESTACIONES[2].hint}
-        alerta={ESTACIONES[2].alerta}
-        colapsada={colapsadas.has("items")}
-        onToggle={() => toggleSeccion("items")}
-      >
-        <CotizadorItems proceso={proceso} items={items} params={params} />
-      </Seccion>
+              {paquetes.length > 0 && (
+                <div>
+                  <p className="mb-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+                    Generados — descarga directa
+                  </p>
+                  <ul className="max-h-56 divide-y divide-line overflow-y-auto">
+                    {paquetes.map((p) => (
+                      <FilaPaquete key={p.version} p={p} />
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </Panel>
 
-      <Seccion
-        id="paquete"
-        titulo={ESTACIONES[3].label}
-        hint={ESTACIONES[3].hint}
-        alerta={ESTACIONES[3].alerta}
-        colapsada={colapsadas.has("paquete")}
-        onToggle={() => toggleSeccion("paquete")}
-      >
-        <Panel className="space-y-3 p-4">
-          {/* El gate: los no-subsanables mandan. */}
-          <div className="flex flex-wrap items-center gap-2">
-            {criticosPendientes > 0 ? (
-              <span className="flex items-center gap-1.5 rounded bg-danger-soft px-2 py-1 text-[12.5px] font-medium text-danger">
-                <ShieldAlert className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                {criticosPendientes} requisito{criticosPendientes === 1 ? "" : "s"} NO
-                subsanable{criticosPendientes === 1 ? "" : "s"} pendiente
-                {criticosPendientes === 1 ? "" : "s"} — el paquete no puede salir así
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 rounded bg-ok-soft px-2 py-1 text-[12.5px] font-medium text-ok">
-                <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                Sin críticos pendientes
-              </span>
-            )}
-            {totales.total > 0 && (
-              <span className="rounded bg-surface-2 px-2 py-1 font-mono text-[12.5px] text-ink">
-                Oferta: {formatRD(totales.subtotal)} + ITBIS {formatRD(totales.itbis)} ={" "}
-                <strong>{formatRD(totales.total)}</strong>
-              </span>
+            {(!tienePerfil || !tieneFirmantes) && (
+              <Panel className="p-3">
+                <p className="flex items-start gap-1.5 text-[12px] text-warn">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden />
+                  <span>
+                    {!tienePerfil ? "Faltan los datos de la empresa" : "Faltan los firmantes"} —
+                    complétalos en{" "}
+                    <Link href="/configuracion/empresa" className="font-medium underline">
+                      Configuración → Empresa
+                    </Link>{" "}
+                    para poder generar.
+                  </span>
+                </p>
+              </Panel>
             )}
           </div>
-
-          {/* La generación vive en la barra sticky de arriba (la acción
-              evidente nunca al fondo); aquí queda el detalle. */}
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={validar}
-              disabled={pendiente}
-              className={btnGhost()}
-            >
-              <ClipboardCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
-              {pendiente ? "Validando…" : "Validar expediente"}
-            </button>
-          </div>
-
-          {/* Lo YA generado: descarga directa del respaldo — no regenera. */}
-          {paquetes.length > 0 && (
-            <div className="rounded-md border border-line px-3 py-2">
-              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
-                Paquetes generados — descarga directa
-              </p>
-              <ul className="divide-y divide-line">
-                {paquetes.map((p) => (
-                  <FilaPaquete key={p.version} p={p} />
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {pasoTexto && (
-            <div className="flex items-center gap-2 rounded bg-surface-2 px-3 py-2 text-[12.5px] text-ink-soft">
-              <Loader2 className="h-4 w-4 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
-              <span className="font-medium">{pasoTexto}</span>
-              <span className="text-muted">
-                Puede tardar medio minuto — no cierres la página, el ZIP baja solo.
-              </span>
-            </div>
-          )}
-
-          {reusado && (
-            <p className="flex flex-wrap items-center gap-1.5 rounded bg-ok-soft px-3 py-2 text-[12.5px] text-ok">
-              <CheckCircle2 className="h-3.5 w-3.5 flex-none" strokeWidth={2} aria-hidden />
-              Nada cambió desde la última generación: se descargó el mismo paquete al
-              instante.
-              <button
-                type="button"
-                onClick={() => generarPaquete(reusado, true)}
-                className="font-medium underline"
-                title="Vuelve a armarlo desde cero (por ejemplo, para refrescar la fecha de las cartas)"
-              >
-                Generar de nuevo de todos modos
-              </button>
-            </p>
-          )}
-
-          {validacion === "ok" && (
-            <p className="flex items-center gap-1.5 rounded bg-ok-soft px-2 py-1.5 text-[12.5px] text-ok">
-              <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              Expediente completo: el JSON canónico valida. Listo para el motor
-              documental (Fase 4).
-            </p>
-          )}
-          {Array.isArray(validacion) && (
-            <div className="rounded bg-danger-soft px-3 py-2 text-[12.5px] text-danger">
-              <p className="font-medium">Al expediente le falta:</p>
-              <ul className="ml-4 list-disc">
-                {validacion.map((e, i) => (
-                  <li key={i} className="font-mono text-[11.5px]">{e}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </Panel>
-      </Seccion>
-
-      <Seccion
-        id="subsanacion"
-        titulo={ESTACIONES[4].label}
-        hint={ESTACIONES[4].hint}
-        alerta={ESTACIONES[4].alerta}
-        colapsada={colapsadas.has("subsanacion")}
-        onToggle={() => toggleSeccion("subsanacion")}
-      >
-        <SubsanacionPanel
-          procesoId={proceso.id}
-          subsanacion={subsanacion}
-          pedidos={pedidos}
-          bloqueantes={pedidosBloqueantes}
-          generando={pendiente || pasoTexto !== null}
-          errores={erroresSub}
-          pdfListo={pdfListo}
-          onGenerar={(formato) =>
-            subsanacion && generarPaquete(formato, false, subsanacion.id)
-          }
-          onIrARequisitos={() => irA("requisitos")}
-        />
-      </Seccion>
+        }
+      />
     </Hoja>
   );
 }

@@ -236,9 +236,23 @@ function ChecklistPicker({
   }
 
   const disponibles = REQUISITOS_ESTANDAR.filter((r) => !yaEstan.has(r.codigo));
+  const hayQueAgregar =
+    disponibles.length > 0 || plantillasOrg.some((p) => !yaEstan.has(p.codigo));
 
   return (
     <div className="border-b border-line bg-surface-2/50 p-3">
+      {/* La acción arriba (regla 1): con la lista larga, el botón no puede
+          vivir solo al fondo del scroll. */}
+      {hayQueAgregar && (
+        <button
+          type="button"
+          disabled={pendiente || marcados.size === 0}
+          onClick={() => onAgregar([...marcados])}
+          className={btnPrimary("mb-2 !px-3 !py-1.5 !text-[12.5px]")}
+        >
+          Agregar {marcados.size} requisito{marcados.size === 1 ? "" : "s"}
+        </button>
+      )}
       {ORDEN_GRUPOS.filter((g) => g !== "otros").map((g) => {
         const items = disponibles.filter((r) => r.grupo === g);
         if (items.length === 0) return null;
@@ -432,10 +446,10 @@ function FilaRequisito({
             <button
               type="button"
               onClick={() => onPatch({ subsanable: !r.subsanable })}
-              className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide transition-colors ${
+              className={`rounded border px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide transition-colors ${
                 critico
-                  ? "bg-danger-soft text-danger"
-                  : "bg-surface-2 text-muted hover:text-ink"
+                  ? "border-danger/30 bg-danger-soft text-danger"
+                  : "border-line bg-surface-2 text-muted hover:text-ink"
               }`}
               title="Cambiar subsanable / no subsanable"
             >
@@ -563,7 +577,7 @@ function FilaRequisito({
           type="button"
           onClick={onEliminar}
           disabled={pendiente}
-          className="rounded p-1 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+          className="ml-2 rounded p-1 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
           aria-label="Eliminar requisito"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />

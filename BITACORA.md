@@ -8,6 +8,33 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — Bid Room rediseñada: ficha con riel (auditoría UI/UX de 12 fallos)
+
+**Hecho:** Pablo: «una sola columna, no aprovecha espacios, múltiples fallos». Un
+agente auditor levantó 12 fallos (F1-F12) — el central: la Bid Room estaba declarada
+como "ficha con riel" en docs/sistema-ui.md pero renderizaba UNA columna de 1200px,
+con el estado del expediente (gate, total, paquetes) enterrado al fondo. Rediseño:
+
+- **CabeceraPagina** (volver, código como título, entidad·modalidad·objeto·cierre)
+  con las ACCIONES arriba: chip de días + Generar paquete PDF + Word. LineaTiempo
+  en su propio panel debajo.
+- **DisposicionFicha**: principal = Proceso → Requisitos → Ítems (→ Subsanación);
+  **riel sticky** = tarjeta Subsanación en curso (solo abierta — su reloj y SU botón
+  primario; el paquete completo baja a ghost mientras tanto), tarjeta Expediente
+  (gate clicable, ítems sin cotizar, mini-tabla de totales, Validar, resultado,
+  reusado, paquetes generados con descarga) y aviso de empresa/firmantes.
+- **Eliminados**: la barra sticky de píldoras (chocaba con las de LineaTiempo que
+  SÍ mutan estado — slip de Norman), el plegado por secciones con localStorage
+  global (F11), el scroll-spy, y la doble cabecera de las 5 secciones (~150px).
+- **Subsanación bajo demanda** (F6): la sección solo se monta con subsanación
+  registrada o proceso sometido.
+- **DatosProceso** con anchos por contenido (F8): objeto/entidad flexibles; cierre,
+  modalidad, plazo, tasa y margen a su medida.
+- Remates (F9-F10): vacío del cotizador con CTA «Primera línea», «Agregar N» del
+  checklist también arriba, borde de botón al toggle subsanable, papelera separada.
+
+---
+
 ## 2026-07-19 — El ZIP responde ya (archivo en 2.º plano) + descargas directas
 
 **Hecho:** tras paralelizar, la generación seguía en ~100 s. El culpable real:

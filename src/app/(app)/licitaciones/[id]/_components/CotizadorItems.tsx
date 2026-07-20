@@ -153,9 +153,20 @@ export default function CotizadorItems({
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
-                  Agrega las líneas del pliego con «Línea». La descripción se
-                  pega TAL CUAL aparece en el pliego.
+                <td colSpan={8} className="px-4 py-8 text-center">
+                  <p className="mb-3 text-sm text-muted">
+                    Agrega las líneas del pliego — la descripción se pega TAL
+                    CUAL aparece en el pliego.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={pendiente}
+                    onClick={() => correr(() => crearItemAction(proceso.id))}
+                    className={btnPrimary()}
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                    Primera línea
+                  </button>
                 </td>
               </tr>
             )}

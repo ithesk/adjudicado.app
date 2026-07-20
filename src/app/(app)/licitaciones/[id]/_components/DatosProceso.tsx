@@ -56,8 +56,10 @@ export default function DatosProceso({
         Datos del proceso
       </SectionTitle>
 
-      <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
-        <label className="text-[12.5px] text-muted sm:col-span-2">
+      {/* Anchos SEGÚN CONTENIDO (regla 3 del sistema): el objeto y la
+          entidad son flexibles; fechas y números, a su medida. */}
+      <div className="space-y-3 p-4">
+        <label className="block text-[12.5px] text-muted">
           Objeto de la contratación
           <input
             defaultValue={proceso.objeto ?? ""}
@@ -69,7 +71,8 @@ export default function DatosProceso({
           />
         </label>
 
-        <label className="text-[12.5px] text-muted">
+        <div className="flex flex-wrap gap-3">
+        <label className="min-w-56 flex-1 text-[12.5px] text-muted">
           Entidad convocante
           <select
             defaultValue={proceso.institucion_id ?? ""}
@@ -85,7 +88,7 @@ export default function DatosProceso({
           </select>
         </label>
 
-        <label className="text-[12.5px] text-muted">
+        <label className="w-48 text-[12.5px] text-muted">
           Cierre (fecha y hora)
           <input
             type="datetime-local"
@@ -98,7 +101,7 @@ export default function DatosProceso({
           />
         </label>
 
-        <label className="text-[12.5px] text-muted">
+        <label className="w-52 text-[12.5px] text-muted">
           Modalidad
           <select
             defaultValue={proceso.modalidad}
@@ -112,8 +115,10 @@ export default function DatosProceso({
             ))}
           </select>
         </label>
+        </div>
 
-        <label className="text-[12.5px] text-muted">
+        <div className="flex flex-wrap gap-3">
+        <label className="w-36 text-[12.5px] text-muted">
           Adjudicación
           <select
             defaultValue={proceso.adjudicacion}
@@ -128,7 +133,7 @@ export default function DatosProceso({
           </select>
         </label>
 
-        <label className="text-[12.5px] text-muted">
+        <label className="w-40 text-[12.5px] text-muted">
           Criterio
           <select
             defaultValue={proceso.criterio}
@@ -143,8 +148,8 @@ export default function DatosProceso({
           </select>
         </label>
 
-        <label className="text-[12.5px] text-muted">
-          Plazo de pago (días)
+        <label className="w-28 text-[12.5px] text-muted">
+          Plazo pago (días)
           <input
             type="number"
             min={0}
@@ -157,8 +162,8 @@ export default function DatosProceso({
           />
         </label>
 
-        <label className="text-[12.5px] text-muted">
-          Tasa USD→DOP de ESTE proceso
+        <label className="w-32 text-[12.5px] text-muted">
+          Tasa USD→DOP
           <input
             type="number"
             step="0.01"
@@ -172,8 +177,8 @@ export default function DatosProceso({
           />
         </label>
 
-        <label className="text-[12.5px] text-muted">
-          Margen % de ESTE proceso
+        <label className="w-28 text-[12.5px] text-muted">
+          Margen %
           <input
             type="number"
             step="0.1"
@@ -186,8 +191,9 @@ export default function DatosProceso({
             className={`${inputBase} mt-1 text-right font-mono`}
           />
         </label>
+        </div>
 
-        <label className="text-[12.5px] text-muted sm:col-span-2 xl:col-span-3">
+        <label className="block text-[12.5px] text-muted">
           Notas
           <textarea
             rows={2}
