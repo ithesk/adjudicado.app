@@ -46,9 +46,17 @@ const SOBRE: Record<string, string> = {
   otros: "Sobre A",
 };
 
-// Nombre apto para archivo dentro del ZIP.
+// Nombre apto para archivo dentro del ZIP: ASCII PURO — sin espacios, sin
+// acentos, sin símbolos (los portales de las entidades rechazan subirlos).
+// Solo letras, números, guion y guion bajo.
 function limpio(texto: string): string {
-  return texto.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 70);
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // acentos y diéresis fuera (ñ → n)
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
 }
 
 export const runtime = "nodejs";
@@ -233,7 +241,8 @@ export async function GET(
       JSON.stringify({
         // Versión del MOTOR de render: subirla invalida los ZIP reusados
         // cuando cambia cómo se imprimen los documentos (no solo qué datos).
-        motor: 2,
+        // v3: nombres de archivo ASCII puro dentro del ZIP.
+        motor: 3,
         formato,
         // El paquete de subsanación es OTRO paquete: misma maquinaria,
         // huella propia (acotada a lo pedido).
@@ -452,7 +461,7 @@ export async function GET(
     if (buffer) {
       n += 1;
       const nn = String(n).padStart(2, "0");
-      const entrada = `${sobre ? `${sobre}/` : ""}${nn} ${limpio(q.codigo)} — ${limpio(q.nombre)}${ext}`;
+      const entrada = `${sobre ? `${limpio(sobre)}/` : ""}${nn}_${limpio(q.codigo)}_${limpio(q.nombre)}${ext}`;
       zip.file(entrada, buffer);
       indice.push(`  ${nn} ${q.codigo} — ${q.nombre} (${origenNota})`);
     } else if (requisitoEstandar(q.codigo)?.via === "linea") {
@@ -465,7 +474,7 @@ export async function GET(
   if (sinArchivo.length > 0) {
     indice.push("", "Pendientes de completar antes de presentar:", ...sinArchivo.map((s) => `  - ${s}`));
   }
-  zip.file("00 INDICE.txt", indice.join("\n") + "\n");
+  zip.file("00_INDICE.txt", indice.join("\n") + "\n");
 
   const zipFinal: Buffer = zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
   let zipNombre = `${subsanacion ? "subsanacion" : "paquete"}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;

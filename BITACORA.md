@@ -8,6 +8,18 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-20 — Nombres de archivo ASCII puro en el paquete (los portales los rechazan)
+
+**Hecho:** Pablo no podía subir los archivos generados: los nombres dentro del ZIP
+llevaban espacios, acentos y el guion largo («Sobre A/01 SNCC.F.033 — Oferta
+Económica.pdf»). `limpio()` ahora normaliza a ASCII puro — NFD sin diacríticos
+(ñ→n), todo lo que no sea [A-Za-z0-9_-] pasa a "_", colapsado y recortado:
+`Sobre_A/01_SNCC_F_033_Oferta_Economica.pdf`, `00_INDICE.txt`. Los documentos
+sueltos ya salían limpios. Motor de render → v3 (invalida ZIP reusados con los
+nombres viejos). Probado con casos reales (Declaración jurada, ñ, ¡!, &).
+
+---
+
 ## 2026-07-20 — El F.033 imprime LO OFERTADO (marca + modelo — descripción)
 
 **Hecho:** pregunta de Pablo: si pego la spec del pliego y abajo pongo mi Tablet
