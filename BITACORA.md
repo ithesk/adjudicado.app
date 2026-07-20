@@ -8,6 +8,21 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-20 — La Bid Room resuelve plantillas con la MISMA cascada que el generador
+
+**Hecho:** Pablo agregó COMPROMISO-ETICO al proceso de la SIE y «no se generaba».
+Diagnóstico con la base: existen DOS plantillas con ese código — la variante de
+MITUR (lista ✓) y la genérica (borrador, sin taggear). Para la SIE la cascada no
+tiene nada usable → «¡FALTA!» en el índice. Pero la Bid Room mostraba «Se genera
+aquí» porque miraba las plantillas listas de TODA la org sin cascada por entidad
+(el gate del cliente y el del servidor divergían). Arreglo: `[id]/page.tsx` aplica
+`resolverPlantillas(listas, institucion_id del proceso)` antes de pasar
+plantillasOrg — la pantalla y el generador ahora dicen lo mismo. Para su caso:
+publicar la genérica de COMPROMISO-ETICO (o quitar el requisito duplicado — el
+COMP-ETICO del sistema ya se genera).
+
+---
+
 ## 2026-07-20 — «1 PDF por sobre»: el paquete unido para subir 2-3 archivos, no 15
 
 **Hecho:** Pablo: «¿hay forma de que me des los PDF unidos, una opción por sobre?».
