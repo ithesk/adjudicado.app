@@ -8,6 +8,23 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — El ZIP responde ya (archivo en 2.º plano) + descargas directas
+
+**Hecho:** tras paralelizar, la generación seguía en ~100 s. El culpable real:
+**el ZIP pesa 20 MB** y se subía a storage ANTES de responder — con el ancho de
+subida de Pablo, ahí se iban los minutos (bandwidth, no latencia). Dos piezas:
+
+- **`after()` de next/server**: el ZIP baja al navegador de inmediato; el
+  respaldo (ZIP + documentos sueltos + fila de lic_paquete) se sube en segundo
+  plano. La fila entra al FINAL: si el respaldo falla, la próxima generación no
+  encuentra la huella y simplemente regenera (nunca reusa un ZIP fantasma).
+- **«Paquetes generados — descarga directa»** en la sección Paquete: las últimas
+  5 versiones (v, PDF/Word, fecha) con botón Descargar vía URL firmada — la
+  respuesta a «¿tengo que volver a generar para descargar?»: NO. Y aunque le den
+  a Generar de nuevo sin cambios, la huella devuelve el ZIP guardado al instante.
+
+---
+
 ## 2026-07-19 — Generación 10× más rápida y el PDF como botón principal
 
 **Hecho:** Pablo depuró su proceso CEIZTUR: «no la hizo en PDF sino en Word y duró

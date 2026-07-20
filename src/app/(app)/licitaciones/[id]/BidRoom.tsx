@@ -15,10 +15,12 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
+  Download,
   Loader2,
   PackageOpen,
   ShieldAlert,
 } from "lucide-react";
+import { urlFirmada } from "@/lib/actions/storage";
 import { Hoja, Panel, btnGhost, btnPrimary } from "@/components/ui";
 import { diasRestantes, formatRD, nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, textoDias } from "@/lib/ui";
@@ -72,6 +74,61 @@ const PASOS_PDF = [
   "Anexando lo subido y lo de Empresa…",
   "Armando los sobres y el índice…",
 ];
+
+export interface PaqueteGenerado {
+  version: number;
+  storage_path: string;
+  generado_at: string;
+}
+
+// Descarga DIRECTA de un paquete ya generado (del respaldo en storage) —
+// sin volver a generar nada. Definido FUERA del padre (regla de la casa).
+function FilaPaquete({ p }: { p: PaqueteGenerado }) {
+  const [bajando, setBajando] = useState(false);
+  const nombre = p.storage_path.split("/").pop() ?? "paquete.zip";
+  const esPdf = /_pdf\.zip$/.test(nombre);
+  return (
+    <li className="flex items-center gap-2 py-1">
+      <span className="font-mono text-[11.5px] text-muted">v{p.version}</span>
+      <span
+        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${esPdf ? "bg-primary/10 text-primary" : "bg-surface-2 text-muted"}`}
+      >
+        {esPdf ? "PDF" : "Word"}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[12px] text-ink-soft">{nombre}</span>
+      <span className="font-mono text-[11px] text-muted">
+        {p.generado_at.slice(8, 10)}/{p.generado_at.slice(5, 7)} {p.generado_at.slice(11, 16)}
+      </span>
+      <button
+        type="button"
+        disabled={bajando}
+        onClick={async () => {
+          setBajando(true);
+          try {
+            const url = await urlFirmada("documentos", p.storage_path);
+            if (url) {
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = nombre;
+              a.click();
+            }
+          } finally {
+            setBajando(false);
+          }
+        }}
+        className="flex items-center gap-1 text-[12px] font-medium text-primary transition-colors hover:underline"
+        title="Baja el ZIP tal cual se generó — no regenera nada"
+      >
+        {bajando ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} aria-hidden />
+        ) : (
+          <Download className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        )}
+        Descargar
+      </button>
+    </li>
+  );
+}
 
 // Cada sección se pliega/expande. Definido FUERA del padre (regla de la
 // casa: un componente inline se remonta en cada render y pierde el foco).
@@ -131,6 +188,7 @@ export default function BidRoom({
   tieneFirmantes,
   tienePerfil,
   pdfListo = false,
+  paquetes = [],
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
@@ -145,6 +203,8 @@ export default function BidRoom({
   // Con el convertidor configurado, EL PDF ES LO PRINCIPAL — es lo que se
   // presenta; el Word queda como secundario editable.
   pdfListo?: boolean;
+  // Lo ya generado, para descargar directo sin regenerar.
+  paquetes?: PaqueteGenerado[];
 }) {
   const router = useRouter();
   const { proceso, items, requisitos, institucion, subsanacion } = detalle;
@@ -587,6 +647,20 @@ export default function BidRoom({
               {pendiente ? "Validando…" : "Validar expediente"}
             </button>
           </div>
+
+          {/* Lo YA generado: descarga directa del respaldo — no regenera. */}
+          {paquetes.length > 0 && (
+            <div className="rounded-md border border-line px-3 py-2">
+              <p className="mb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted">
+                Paquetes generados — descarga directa
+              </p>
+              <ul className="divide-y divide-line">
+                {paquetes.map((p) => (
+                  <FilaPaquete key={p.version} p={p} />
+                ))}
+              </ul>
+            </div>
+          )}
 
           {pasoTexto && (
             <div className="flex items-center gap-2 rounded bg-surface-2 px-3 py-2 text-[12.5px] text-ink-soft">

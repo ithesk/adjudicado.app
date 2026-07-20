@@ -123,6 +123,26 @@ export async function listarProcesos(): Promise<LicProceso[]> {
   return (data as LicProceso[] | null) ?? [];
 }
 
+// Los paquetes YA generados de un proceso — para descargarlos directo del
+// respaldo sin volver a generar nada.
+export async function listarPaquetes(
+  procesoId: string,
+): Promise<{ version: number; storage_path: string; generado_at: string }[]> {
+  if (isDemo()) return [];
+  const orgId = await orgActivaLigera();
+  if (!orgId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lic_paquete")
+    .select("version, storage_path, generado_at")
+    .eq("proceso_id", procesoId)
+    .eq("org_id", orgId)
+    .not("storage_path", "is", null)
+    .order("version", { ascending: false })
+    .limit(5);
+  return (data ?? []) as { version: number; storage_path: string; generado_at: string }[];
+}
+
 // Para la lista: qué procesos tienen una subsanación ABIERTA y su límite —
 // ese reloj manda sobre el del cierre.
 export async function subsanacionesAbiertas(): Promise<Record<string, string>> {

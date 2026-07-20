@@ -14,7 +14,7 @@
 // storage, y los requisitos generados quedan con su archivo y en "listo".
 
 import { createHash } from "node:crypto";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getMiembro, getUser } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { createClient } from "@/lib/supabase/server";
@@ -470,43 +470,52 @@ export async function GET(
   const user = await getUser();
 
   const base = `${miembro.org_id}/licitaciones/${id}/v${canonico.meta.version}`;
-  // El ZIP y cada documento suben en PARALELO (en serie eran los segundos
-  // más caros de toda la generación).
-  await Promise.all([
-    supabase.storage
-      .from("documentos")
-      .upload(`${base}/${zipNombre}`, zipFinal, {
-        contentType: "application/zip",
-        upsert: true,
-      }),
-    ...archivos.map(async (doc) => {
-      const rutaDoc = `${base}/${doc.archivo}`;
-      const { error: errSubida } = await supabase.storage
-        .from("documentos")
-        .upload(rutaDoc, doc.buffer, {
-          contentType: doc.contentType,
-          upsert: true,
-        });
-      if (!errSubida) {
-        // El requisito generado queda con su archivo, listo y auditado.
-        await supabase
-          .from("lic_requisito")
-          .update({ storage_path: rutaDoc, estado: "listo", origen: "generado" })
-          .eq("proceso_id", id)
-          .eq("org_id", miembro.org_id)
-          .eq("codigo", doc.codigo);
-      }
-    }),
-  ]);
-
-  await supabase.from("lic_paquete").insert({
-    org_id: miembro.org_id,
-    proceso_id: id,
-    version: canonico.meta.version,
-    payload: canonico,
-    payload_hash: huella,
-    storage_path: `${base}/${zipNombre}`,
-    generado_por: user?.id ?? null,
+  // ARCHIVAR DESPUÉS DE RESPONDER: el ZIP pesa decenas de MB y subirlo a
+  // storage tomaba más tiempo que generarlo (la queja de los "3 minutos").
+  // El usuario recibe su descarga ya; el respaldo (ZIP + documentos sueltos
+  // + lic_paquete para la idempotencia) se sube en segundo plano.
+  after(async () => {
+    try {
+      await Promise.all([
+        supabase.storage
+          .from("documentos")
+          .upload(`${base}/${zipNombre}`, zipFinal, {
+            contentType: "application/zip",
+            upsert: true,
+          }),
+        ...archivos.map(async (doc) => {
+          const rutaDoc = `${base}/${doc.archivo}`;
+          const { error: errSubida } = await supabase.storage
+            .from("documentos")
+            .upload(rutaDoc, doc.buffer, {
+              contentType: doc.contentType,
+              upsert: true,
+            });
+          if (!errSubida) {
+            // El requisito generado queda con su archivo, listo y auditado.
+            await supabase
+              .from("lic_requisito")
+              .update({ storage_path: rutaDoc, estado: "listo", origen: "generado" })
+              .eq("proceso_id", id)
+              .eq("org_id", miembro.org_id)
+              .eq("codigo", doc.codigo);
+          }
+        }),
+      ]);
+      // La fila de lic_paquete entra al final: si el respaldo falló, la
+      // próxima generación no encuentra huella y simplemente regenera.
+      await supabase.from("lic_paquete").insert({
+        org_id: miembro.org_id,
+        proceso_id: id,
+        version: canonico.meta.version,
+        payload: canonico,
+        payload_hash: huella,
+        storage_path: `${base}/${zipNombre}`,
+        generado_por: user?.id ?? null,
+      });
+    } catch (e) {
+      console.error("No se pudo archivar el paquete:", e);
+    }
   });
 
   // 8) El ZIP baja directo al navegador.
