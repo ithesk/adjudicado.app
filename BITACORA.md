@@ -8,6 +8,24 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-20 — Lista de licitaciones como tabla inteligente
+
+**Hecho:** Pablo: «eso debe tener una tabla dinámica con buscador y todas las
+funciones inteligentes». ProcesosLista rehecha (patrón del catálogo de entidades):
+
+- **Buscador tolerante** (`coincideTexto`) sobre código, objeto, ENTIDAD (nombre y
+  siglas — el page ahora pasa el mapa institucion_id→entidad), modalidad y estado,
+  con contador n/total.
+- **Filtros por etapa con conteos**: Todas · En trabajo · Sometidas · Adjudicadas ·
+  Perdidas y descartadas (los vacíos no se muestran).
+- **Orden por columna** (Cierre/Proceso/Estado, asc/desc con flecha): el cierre
+  ordena por el reloj VIVO — la subsanación abierta manda; sin fecha, al final.
+- La entidad ahora se VE en cada fila (siglas · objeto). Estado vacío por filtro.
+  Cabecera ordenable definida fuera del padre (la regla de la casa me la recordó
+  el propio eslint).
+
+---
+
 ## 2026-07-20 — Estados de licitación con distinción visual (mapa único)
 
 **Hecho:** Pablo: «no hay distinción en cualquier estado de la licitación». La lista
