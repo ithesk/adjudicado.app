@@ -36,3 +36,30 @@ export async function docxAPdf(nombre: string, docx: Buffer): Promise<Buffer> {
   }
   return Buffer.from(await res.arrayBuffer());
 }
+
+// Une varios PDF en UNO, en el orden recibido (Gotenberg une alfabéticamente
+// por nombre de archivo — por eso el índice numérico con relleno).
+export async function unirPdfs(pdfs: Buffer[]): Promise<Buffer> {
+  if (!URL_GOTENBERG || !TOKEN) {
+    throw new Error("El convertidor PDF no está configurado (GOTENBERG_URL/TOKEN).");
+  }
+  if (pdfs.length === 1) return pdfs[0];
+  const form = new FormData();
+  pdfs.forEach((b, i) => {
+    form.append(
+      "files",
+      new Blob([new Uint8Array(b)], { type: "application/pdf" }),
+      `${String(i + 1).padStart(3, "0")}.pdf`,
+    );
+  });
+  const res = await fetch(`${URL_GOTENBERG}/forms/pdfengines/merge`, {
+    method: "POST",
+    headers: { "X-Api-Key": TOKEN },
+    body: form,
+    signal: AbortSignal.timeout(55_000),
+  });
+  if (!res.ok) {
+    throw new Error(`No se pudieron unir los PDF (${res.status}): ${await res.text().then((t) => t.slice(0, 200))}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}

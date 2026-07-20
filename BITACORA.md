@@ -8,6 +8,25 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-20 — «1 PDF por sobre»: el paquete unido para subir 2-3 archivos, no 15
+
+**Hecho:** Pablo: «¿hay forma de que me des los PDF unidos, una opción por sobre?».
+Casilla **«1 PDF por sobre»** junto a Generar (marcada por defecto, solo con
+Gotenberg configurado): el ZIP trae `Sobre_A.pdf` y `Sobre_B.pdf` con TODOS los
+documentos unidos en el orden del índice (la subsanación, un solo
+`Subsanacion_<código>.pdf`). Piezas:
+
+- `unirPdfs()` en pdf.ts vía **Gotenberg `/forms/pdfengines/merge`** (el VPS ya
+  estaba; cero dependencias nuevas). El orden se garantiza con nombres 001.pdf….
+- Al unir, las **imágenes adjuntas también se convierten** a PDF (LibreOffice las
+  pagina); si algo no se puede convertir/unir viaja suelto y el índice lo declara
+  («suelto: …», «no se pudieron unir — van sueltos»). La unión fallida degrada a
+  sueltos: nunca se pierde un documento.
+- Huella con `unir` + zip `_pdf_unido.zip` (el listado de descargas lo etiqueta
+  «PDF unido»). Los documentos sueltos de cada requisito se siguen subiendo igual.
+
+---
+
 ## 2026-07-20 — Nombres de archivo ASCII puro en el paquete (los portales los rechazan)
 
 **Hecho:** Pablo no podía subir los archivos generados: los nombres dentro del ZIP
