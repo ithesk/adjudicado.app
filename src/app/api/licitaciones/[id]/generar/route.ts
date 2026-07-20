@@ -231,6 +231,9 @@ export async function GET(
   const huella = createHash("sha256")
     .update(
       JSON.stringify({
+        // Versión del MOTOR de render: subirla invalida los ZIP reusados
+        // cuando cambia cómo se imprimen los documentos (no solo qué datos).
+        motor: 2,
         formato,
         // El paquete de subsanación es OTRO paquete: misma maquinaria,
         // huella propia (acotada a lo pedido).

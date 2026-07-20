@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ProcesoCanonico } from "./contrato";
+import { construirDatos } from "./generador";
 
 // Caso realista, calcado de un proceso del tipo que la empresa trabaja
 // (equipos de red para una OGTIC): dos ítems, uno cotizado desde el catálogo
@@ -178,5 +179,27 @@ describe("ProcesoCanonico", () => {
     if (r.success) {
       expect(r.data.lotes[0].items[0].spec_cruda).toContain("PoE   (VER");
     }
+  });
+});
+
+// La línea de la oferta económica imprime LO OFERTADO (marca + modelo —
+// descripción); solo sin producto completo cae a la spec del pliego.
+describe("construirDatos — descripción de la línea económica", () => {
+  it("con producto completo sale lo ofertado, no el pliego", () => {
+    const datos = construirDatos(ProcesoCanonico.parse(procesoValido())) as {
+      lineas: { descripcion: string }[];
+    };
+    expect(datos.lineas[0].descripcion).toBe(
+      "Fluke Networks LinkIQ — El equipo verifica cableado hasta 10G BASE-T e incluye prueba PoE clase 0-8.",
+    );
+  });
+
+  it("sin producto completo cae a la spec del pliego tal cual", () => {
+    const crudo = procesoValido();
+    delete (crudo.lotes[0].items[0] as { producto?: object }).producto;
+    const datos = construirDatos(ProcesoCanonico.parse(crudo)) as {
+      lineas: { descripcion: string }[];
+    };
+    expect(datos.lineas[0].descripcion).toContain("Verificador de cableado");
   });
 });

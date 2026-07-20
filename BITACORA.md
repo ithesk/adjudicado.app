@@ -8,6 +8,23 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-20 — El F.033 imprime LO OFERTADO (marca + modelo — descripción)
+
+**Hecho:** pregunta de Pablo: si pego la spec del pliego y abajo pongo mi Tablet
+Samsung, ¿cuál sale en el formulario? Salía SOLO el campo descripción (sin marca ni
+modelo), y con producto incompleto caía a la spec del pliego sin avisar. Dos cambios:
+
+- `construirDatos`: la línea económica imprime **«Marca Modelo — Descripción»**
+  cuando el producto está completo; la spec del pliego sigue de respaldo. 2 tests
+  de regresión sobre el expediente realista del contrato.
+- **Aviso en el cotizador**: chip «saldrá la spec del pliego» en la línea mientras
+  falte marca, modelo o descripción — antes te enterabas viendo el PDF.
+- **`motor: 2` en la huella**: subir la versión del motor de render invalida los
+  ZIP reusados cuando cambia CÓMO se imprime (no solo qué datos) — antes un cambio
+  así seguía sirviendo el paquete viejo hasta que el contenido cambiara.
+
+---
+
 ## 2026-07-19 — Bid Room rediseñada: ficha con riel (auditoría UI/UX de 12 fallos)
 
 **Hecho:** Pablo: «una sola columna, no aprovecha espacios, múltiples fallos». Un

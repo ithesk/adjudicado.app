@@ -199,6 +199,12 @@ export default function CotizadorItems({
   );
 }
 
+// ¿El F.033 imprimirá LO OFERTADO o caerá a la spec del pliego? Solo con
+// marca + modelo + descripción completos sale lo tuyo.
+function productoIncompleto(item: LicItem): boolean {
+  return !(item.marca && item.modelo && item.descripcion);
+}
+
 function Linea({
   item,
   params,
@@ -369,6 +375,14 @@ function Linea({
                   onBlur={(e) => onPatch({ descripcion: e.target.value || null })}
                   className={`${celda} min-w-52 flex-1`}
                 />
+                {productoIncompleto(item) && (
+                  <span
+                    className="whitespace-nowrap rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-medium text-warn"
+                    title="El F.033 imprime marca + modelo + descripción de lo ofertado. Mientras falte alguno de los tres, esta línea saldrá con la descripción del pliego tal cual."
+                  >
+                    saldrá la spec del pliego
+                  </span>
+                )}
                 {item.sku && (
                   <span className="whitespace-nowrap font-mono text-[10.5px] text-muted">
                     {item.sku} · {fmtUSD(item.costo_usd)} × {item.tasa} ·{" "}
