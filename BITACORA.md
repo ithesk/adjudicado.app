@@ -8,6 +8,25 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — Generación 10× más rápida y el PDF como botón principal
+
+**Hecho:** Pablo depuró su proceso CEIZTUR: «no la hizo en PDF sino en Word y duró
+más de 3 minutos». Dos causas, dos arreglos:
+
+- **Salió Word porque el botón primario generaba Word.** Ahora, con Gotenberg
+  configurado (`pdfDisponible()` → prop `pdfListo`), el primario es **«Generar
+  paquete PDF»** (lo que se presenta) y «Word» queda de secundario editable —
+  igual en la subsanación.
+- **112 s de app-code para 11 requisitos**: TODO el storage iba EN SERIE
+  (3 imágenes + plantillas + ~10 adjuntos + subidas, a segundos por viaje).
+  Paralelizado con Promise.all en 4 frentes: imágenes, descarga de plantillas
+  de la org (paso 5, ahora con try/catch), prefetch de adjuntos + conversión
+  PDF (mapa `adjuntoPorRequisito`; el ensamblado del ZIP queda puro CPU y
+  conserva el orden), y subidas (ZIP + documentos + updates). Además esos 112 s
+  habrían REVENTADO en Vercel (maxDuration=60) — esto también lo tapa.
+
+---
+
 ## 2026-07-19 — Cotizador: modo de ITBIS por línea (estilo Odoo)
 
 **Hecho:** Pablo: «el precio debe tener opciones: ITBIS incluido, más ITBIS, sin

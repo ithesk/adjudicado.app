@@ -201,6 +201,8 @@ export async function GET(
   }
 
   // 4) Firma, sello y logo (imágenes de Configuración → Empresa, si existen).
+  //    En PARALELO — cada viaje a storage cuesta segundos y aquí nada depende
+  //    de nada (la lentitud en serie era la queja: 11 requisitos ≈ 2 minutos).
   const imagenes: ImagenesFirma = {};
   const { data: docsImagen } = await supabase
     .from("documento_empresa")
@@ -208,14 +210,16 @@ export async function GET(
     .eq("org_id", miembro.org_id)
     .in("tipo", ["firma", "sello", "logo"])
     .order("created_at", { ascending: false });
-  for (const tipo of ["firma", "sello", "logo"] as const) {
-    const doc = (docsImagen ?? []).find((d) => d.tipo === tipo);
-    if (!doc) continue;
-    const { data: archivo } = await supabase.storage
-      .from("documentos")
-      .download(doc.archivo_url);
-    if (archivo) imagenes[tipo] = Buffer.from(await archivo.arrayBuffer());
-  }
+  await Promise.all(
+    (["firma", "sello", "logo"] as const).map(async (tipo) => {
+      const doc = (docsImagen ?? []).find((d) => d.tipo === tipo);
+      if (!doc) return;
+      const { data: archivo } = await supabase.storage
+        .from("documentos")
+        .download(doc.archivo_url);
+      if (archivo) imagenes[tipo] = Buffer.from(await archivo.arrayBuffer());
+    }),
+  );
 
   // 4b) ¿Este paquete ya existe? La huella cubre todo lo que cambia el
   //     resultado: el expediente (sin meta — la versión sube sola), los
@@ -285,40 +289,42 @@ export async function GET(
   // 5) Generar. La CASCADA completa: la plantilla resuelta (variante de la
   //    entidad o genérica de la org) GANA sobre el formulario del sistema —
   //    si MITUR exige su propia versión del F.033, sale la de MITUR.
-  const documentos: DocGenerado[] = [];
-  for (const codigo of codigos) {
-    const plantilla = plantillaPorCodigo.get(codigo);
-    if (!plantilla) {
-      documentos.push(generarDocumento(codigo, canonico, imagenes));
-      continue;
-    }
-    const { data: tpl } = await supabase.storage
-      .from("documentos")
-      .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
-    if (!tpl) {
-      return NextResponse.json(
-        { error: `No se pudo leer la plantilla ${plantilla.nombre} (${codigo}).` },
-        { status: 500 },
-      );
-    }
-    // Datos: los del expediente + valores fijos de la plantilla + los
-    // capturados en el requisito de ESTE proceso.
-    const requisito = enPaquete.find((q) => q.codigo === codigo);
-    const fijos = Object.fromEntries(
-      (plantilla.variables_personalizadas ?? [])
-        .filter((v) => v.valor)
-        .map((v) => [v.clave, v.valor]),
+  //    Las plantillas de la org se DESCARGAN en paralelo.
+  let documentos: DocGenerado[];
+  try {
+    documentos = await Promise.all(
+      codigos.map(async (codigo) => {
+        const plantilla = plantillaPorCodigo.get(codigo);
+        if (!plantilla) return generarDocumento(codigo, canonico, imagenes);
+        const { data: tpl } = await supabase.storage
+          .from("documentos")
+          .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
+        if (!tpl) {
+          throw new Error(`No se pudo leer la plantilla ${plantilla.nombre} (${codigo}).`);
+        }
+        // Datos: los del expediente + valores fijos de la plantilla + los
+        // capturados en el requisito de ESTE proceso.
+        const requisito = enPaquete.find((q) => q.codigo === codigo);
+        const fijos = Object.fromEntries(
+          (plantilla.variables_personalizadas ?? [])
+            .filter((v) => v.valor)
+            .map((v) => [v.clave, v.valor]),
+        );
+        const capturados = (requisito?.datos ?? {}) as Record<string, string>;
+        return generarDesdeBuffer(
+          codigo,
+          plantilla.nombre,
+          Buffer.from(await tpl.arrayBuffer()),
+          canonico,
+          imagenes,
+          { ...fijos, ...capturados },
+        );
+      }),
     );
-    const capturados = (requisito?.datos ?? {}) as Record<string, string>;
-    documentos.push(
-      generarDesdeBuffer(
-        codigo,
-        plantilla.nombre,
-        Buffer.from(await tpl.arrayBuffer()),
-        canonico,
-        imagenes,
-        { ...fijos, ...capturados },
-      ),
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "No se pudo generar." },
+      { status: 500 },
     );
   }
   // 6) Los generados, convertidos si se pidió PDF (estos también se suben
@@ -363,6 +369,39 @@ export async function GET(
     return (a.orden_indice ?? 0) - (b.orden_indice ?? 0);
   });
 
+  // Los adjuntos se BAJAN (y convierten a PDF si toca) en PARALELO; el
+  // ensamblado del ZIP después es puro CPU y conserva el orden de sobres.
+  const adjuntoPorRequisito = new Map<
+    string,
+    { buffer: Buffer; ext: string; origenNota: string }
+  >();
+  await Promise.all(
+    ordenados.map(async (q) => {
+      if (generadoPorCodigo.has(q.codigo)) return;
+      const ruta =
+        q.storage_path ??
+        (q.documento_empresa_id
+          ? docEmpresaPorId.get(q.documento_empresa_id)?.archivo_url ?? null
+          : null);
+      if (!ruta) return;
+      const { data: adj } = await supabase.storage.from("documentos").download(ruta);
+      if (!adj) return;
+      let buffer: Buffer = Buffer.from(await adj.arrayBuffer());
+      let ext = ruta.match(/\.[a-z0-9]+$/i)?.[0]?.toLowerCase() ?? "";
+      // En el paquete PDF, los adjuntos Word también se convierten;
+      // el resto (pdf, imágenes) viaja tal cual.
+      if (formato === "pdf" && (ext === ".docx" || ext === ".doc")) {
+        buffer = await docxAPdf(`adj${ext}`, buffer);
+        ext = ".pdf";
+      }
+      adjuntoPorRequisito.set(q.id, {
+        buffer,
+        ext,
+        origenNota: q.storage_path ? "subido" : "de Empresa",
+      });
+    }),
+  );
+
   const zip = new PizZipLib();
   const indice: string[] = subsanacion
     ? [
@@ -386,7 +425,7 @@ export async function GET(
     const sobre = subsanacion ? "" : SOBRE[grupoDeRequisito(q.codigo)] ?? "Sobre A";
     const gen = generadoPorCodigo.get(q.codigo);
 
-    // De dónde sale el archivo de este requisito.
+    // De dónde sale el archivo de este requisito (ya descargado arriba).
     let buffer: Buffer | null = null;
     let ext = "";
     let origenNota = "";
@@ -395,24 +434,11 @@ export async function GET(
       ext = formato === "pdf" ? ".pdf" : ".docx";
       origenNota = "generado";
     } else {
-      const ruta =
-        q.storage_path ??
-        (q.documento_empresa_id
-          ? docEmpresaPorId.get(q.documento_empresa_id)?.archivo_url ?? null
-          : null);
-      if (ruta) {
-        const { data: adj } = await supabase.storage.from("documentos").download(ruta);
-        if (adj) {
-          buffer = Buffer.from(await adj.arrayBuffer());
-          ext = ruta.match(/\.[a-z0-9]+$/i)?.[0]?.toLowerCase() ?? "";
-          origenNota = q.storage_path ? "subido" : "de Empresa";
-          // En el paquete PDF, los adjuntos Word también se convierten;
-          // el resto (pdf, imágenes) viaja tal cual.
-          if (formato === "pdf" && (ext === ".docx" || ext === ".doc")) {
-            buffer = await docxAPdf(`adj${ext}`, buffer);
-            ext = ".pdf";
-          }
-        }
+      const adj = adjuntoPorRequisito.get(q.id);
+      if (adj) {
+        buffer = adj.buffer;
+        ext = adj.ext;
+        origenNota = adj.origenNota;
       }
     }
 
@@ -444,31 +470,34 @@ export async function GET(
   const user = await getUser();
 
   const base = `${miembro.org_id}/licitaciones/${id}/v${canonico.meta.version}`;
-  await supabase.storage
-    .from("documentos")
-    .upload(`${base}/${zipNombre}`, zipFinal, {
-      contentType: "application/zip",
-      upsert: true,
-    });
-
-  for (const doc of archivos) {
-    const rutaDoc = `${base}/${doc.archivo}`;
-    const { error: errSubida } = await supabase.storage
+  // El ZIP y cada documento suben en PARALELO (en serie eran los segundos
+  // más caros de toda la generación).
+  await Promise.all([
+    supabase.storage
       .from("documentos")
-      .upload(rutaDoc, doc.buffer, {
-        contentType: doc.contentType,
+      .upload(`${base}/${zipNombre}`, zipFinal, {
+        contentType: "application/zip",
         upsert: true,
-      });
-    if (!errSubida) {
-      // El requisito generado queda con su archivo, listo y auditado.
-      await supabase
-        .from("lic_requisito")
-        .update({ storage_path: rutaDoc, estado: "listo", origen: "generado" })
-        .eq("proceso_id", id)
-        .eq("org_id", miembro.org_id)
-        .eq("codigo", doc.codigo);
-    }
-  }
+      }),
+    ...archivos.map(async (doc) => {
+      const rutaDoc = `${base}/${doc.archivo}`;
+      const { error: errSubida } = await supabase.storage
+        .from("documentos")
+        .upload(rutaDoc, doc.buffer, {
+          contentType: doc.contentType,
+          upsert: true,
+        });
+      if (!errSubida) {
+        // El requisito generado queda con su archivo, listo y auditado.
+        await supabase
+          .from("lic_requisito")
+          .update({ storage_path: rutaDoc, estado: "listo", origen: "generado" })
+          .eq("proceso_id", id)
+          .eq("org_id", miembro.org_id)
+          .eq("codigo", doc.codigo);
+      }
+    }),
+  ]);
 
   await supabase.from("lic_paquete").insert({
     org_id: miembro.org_id,

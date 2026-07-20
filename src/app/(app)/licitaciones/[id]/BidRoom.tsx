@@ -130,6 +130,7 @@ export default function BidRoom({
   params,
   tieneFirmantes,
   tienePerfil,
+  pdfListo = false,
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
@@ -141,6 +142,9 @@ export default function BidRoom({
   params: ParamsCotizacion;
   tieneFirmantes: boolean;
   tienePerfil: boolean;
+  // Con el convertidor configurado, EL PDF ES LO PRINCIPAL — es lo que se
+  // presenta; el Word queda como secundario editable.
+  pdfListo?: boolean;
 }) {
   const router = useRouter();
   const { proceso, items, requisitos, institucion, subsanacion } = detalle;
@@ -468,26 +472,32 @@ export default function BidRoom({
               )}
               <button
                 type="button"
-                onClick={() => generarPaquete("docx")}
+                onClick={() => generarPaquete(pdfListo ? "pdf" : "docx")}
                 disabled={pendiente || criticosBloqueantes > 0}
                 title={
                   criticosBloqueantes > 0
                     ? "Bloqueado: hay requisitos NO subsanables pendientes"
-                    : "Arma el expediente completo por sobres y descarga el ZIP"
+                    : pdfListo
+                      ? "Arma el expediente completo por sobres EN PDF, listo para presentar"
+                      : "Arma el expediente completo por sobres y descarga el ZIP"
                 }
                 className={btnPrimary("!px-3 !py-1.5 !text-[12.5px]")}
               >
                 <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                Generar paquete
+                Generar paquete{pdfListo ? " PDF" : ""}
               </button>
               <button
                 type="button"
-                onClick={() => generarPaquete("pdf")}
+                onClick={() => generarPaquete(pdfListo ? "docx" : "pdf")}
                 disabled={pendiente || criticosBloqueantes > 0}
-                title="Los mismos documentos, convertidos a PDF"
+                title={
+                  pdfListo
+                    ? "Los mismos documentos en Word, por si hay que retocar algo a mano"
+                    : "Los mismos documentos, convertidos a PDF"
+                }
                 className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
               >
-                PDF
+                {pdfListo ? "Word" : "PDF"}
               </button>
             </>
           )}
@@ -639,6 +649,7 @@ export default function BidRoom({
           bloqueantes={pedidosBloqueantes}
           generando={pendiente || pasoTexto !== null}
           errores={erroresSub}
+          pdfListo={pdfListo}
           onGenerar={(formato) =>
             subsanacion && generarPaquete(formato, false, subsanacion.id)
           }

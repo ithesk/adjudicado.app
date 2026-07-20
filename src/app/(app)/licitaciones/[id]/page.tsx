@@ -7,6 +7,7 @@ import {
 import { listarInstituciones } from "@/lib/queries";
 import { listarPlantillas } from "@/lib/licitaciones/queries-plantillas";
 import { paramsCotizacion } from "@/lib/licitaciones/cotizador";
+import { pdfDisponible } from "@/lib/licitaciones/pdf";
 import BidRoom from "./BidRoom";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export default async function ProcesoPage({
       params={paramsCotizacion(detalle.proceso, perfil)}
       tieneFirmantes={firmantes.length > 0}
       tienePerfil={!!perfil}
+      pdfListo={pdfDisponible()}
     />
   );
 }

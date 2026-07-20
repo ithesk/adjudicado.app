@@ -40,6 +40,7 @@ export default function SubsanacionPanel({
   bloqueantes,
   generando,
   errores = null,
+  pdfListo = false,
   onGenerar,
   onIrARequisitos,
 }: {
@@ -52,6 +53,8 @@ export default function SubsanacionPanel({
   generando: boolean;
   // Lo que la generación devolvió como faltante/bloqueado.
   errores?: string[] | null;
+  // Con convertidor: el PDF es lo principal (es lo que se envía).
+  pdfListo?: boolean;
   onGenerar: (formato: "docx" | "pdf") => void;
   onIrARequisitos: () => void;
 }) {
@@ -199,22 +202,30 @@ export default function SubsanacionPanel({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => onGenerar("docx")}
+            onClick={() => onGenerar(pdfListo ? "pdf" : "docx")}
             disabled={generando || pendiente || pedidos.length === 0 || bloqueantes > 0}
-            title="Arma el ZIP solo con lo pedido, con su índice"
+            title={
+              pdfListo
+                ? "Arma el ZIP solo con lo pedido, EN PDF listo para enviar"
+                : "Arma el ZIP solo con lo pedido, con su índice"
+            }
             className={btnPrimary("!px-3 !py-1.5 !text-[12.5px]")}
           >
             <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            Generar subsanación
+            Generar subsanación{pdfListo ? " PDF" : ""}
           </button>
           <button
             type="button"
-            onClick={() => onGenerar("pdf")}
+            onClick={() => onGenerar(pdfListo ? "docx" : "pdf")}
             disabled={generando || pendiente || pedidos.length === 0 || bloqueantes > 0}
-            title="Los mismos documentos, convertidos a PDF"
+            title={
+              pdfListo
+                ? "Los mismos documentos en Word, por si hay que retocar algo"
+                : "Los mismos documentos, convertidos a PDF"
+            }
             className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
           >
-            PDF
+            {pdfListo ? "Word" : "PDF"}
           </button>
           {abierta && (
             <button
