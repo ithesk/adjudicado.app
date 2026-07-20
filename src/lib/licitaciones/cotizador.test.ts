@@ -3,6 +3,7 @@ import {
   factorMargen,
   paramsCotizacion,
   precioVentaUnitario,
+  precioBaseUnitario,
   totalesItem,
   totalesProceso,
 } from "./cotizador";
@@ -39,7 +40,7 @@ describe("cotizador", () => {
     const unitario = precioVentaUnitario(1195, params)!;
     expect(unitario).toBe(95_540.25);
     const t = totalesItem(
-      { precio_unitario: unitario, cantidad: 2, itbis_aplica: true },
+      { precio_unitario: unitario, cantidad: 2, itbis_modo: "mas" as const },
       18,
     )!;
     expect(t.subtotal).toBe(191_080.5);
@@ -49,7 +50,7 @@ describe("cotizador", () => {
 
   it("un ítem exento no lleva ITBIS", () => {
     const t = totalesItem(
-      { precio_unitario: 100, cantidad: 1, itbis_aplica: false },
+      { precio_unitario: 100, cantidad: 1, itbis_modo: "exento" as const },
       18,
     )!;
     expect(t.itbis).toBe(0);
@@ -59,9 +60,9 @@ describe("cotizador", () => {
   it("los totales del proceso ignoran ítems descartados y sin precio", () => {
     const t = totalesProceso(
       [
-        { precio_unitario: 100, cantidad: 2, itbis_aplica: true, ofertamos: true },
-        { precio_unitario: 999, cantidad: 1, itbis_aplica: true, ofertamos: false }, // descartado
-        { precio_unitario: null, cantidad: 1, itbis_aplica: true, ofertamos: true }, // sin cotizar
+        { precio_unitario: 100, cantidad: 2, itbis_modo: "mas" as const, ofertamos: true },
+        { precio_unitario: 999, cantidad: 1, itbis_modo: "mas" as const, ofertamos: false }, // descartado
+        { precio_unitario: null, cantidad: 1, itbis_modo: "mas" as const, ofertamos: true }, // sin cotizar
       ],
       18,
     );
@@ -89,5 +90,43 @@ describe("cotizador", () => {
       null,
     );
     expect(q).toEqual({ tasa: null, margenPct: 30, margenModo: "markup", itbisPct: 18 });
+  });
+});
+
+// El modo de ITBIS por línea, estilo Odoo: base + ITBIS, incluido o exento.
+describe("precioBaseUnitario y modos de ITBIS", () => {
+  it("'incluido': despeja la base (118 con ITBIS → 100 de base)", () => {
+    expect(precioBaseUnitario(118, "incluido", 18)).toBe(100);
+    expect(precioBaseUnitario(100, "mas", 18)).toBe(100);
+    expect(precioBaseUnitario(100, "exento", 18)).toBe(100);
+  });
+
+  it("totalesItem con 'incluido': el total vuelve al precio tecleado", () => {
+    const t = totalesItem(
+      { precio_unitario: 118, cantidad: 1, itbis_modo: "incluido" },
+      18,
+    );
+    expect(t).toEqual({ subtotal: 100, itbis: 18, total: 118 });
+  });
+
+  it("totalesItem 'exento': cero ITBIS aunque haya pct", () => {
+    const t = totalesItem(
+      { precio_unitario: 500, cantidad: 2, itbis_modo: "exento" },
+      18,
+    );
+    expect(t).toEqual({ subtotal: 1000, itbis: 0, total: 1000 });
+  });
+
+  it("los tres modos conviven en un mismo proceso", () => {
+    const t = totalesProceso(
+      [
+        { precio_unitario: 100, cantidad: 1, itbis_modo: "mas", ofertamos: true },
+        { precio_unitario: 118, cantidad: 1, itbis_modo: "incluido", ofertamos: true },
+        { precio_unitario: 50, cantidad: 1, itbis_modo: "exento", ofertamos: true },
+      ],
+      18,
+    );
+    // bases: 100 + 100 + 50 = 250 · ITBIS: 18 + 18 + 0 = 36
+    expect(t).toEqual({ subtotal: 250, itbis: 36, total: 286 });
   });
 });

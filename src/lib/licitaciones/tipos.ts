@@ -146,7 +146,11 @@ export interface LicItem {
   margen_pct: number | null;
   margen_modo: "markup" | "margen" | null;
   precio_unitario: number | null;
+  // Derivada de itbis_modo (modo !== 'exento') — los payloads viejos la usan.
   itbis_aplica: boolean;
+  // Cómo viene el ITBIS en el precio: 'mas' (base + ITBIS), 'incluido'
+  // (el precio ya lo trae; la base se despeja) o 'exento'.
+  itbis_modo: "mas" | "incluido" | "exento";
   orden_indice: number;
 }
 

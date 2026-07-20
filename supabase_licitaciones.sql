@@ -428,3 +428,16 @@ alter table lic_requisito add column if not exists subsanacion_id uuid reference
 alter table institucion_evento drop constraint if exists institucion_evento_tipo;
 alter table institucion_evento add constraint institucion_evento_tipo check (tipo in
   ('perfil','logo','contacto','asignacion','nota','plantilla','subsanacion'));
+
+-- ============================================================
+--  MIGRACIÓN: modo de ITBIS por línea (estilo Odoo)
+--  'mas'      → el precio tecleado es la base; el ITBIS se suma
+--  'incluido' → el precio tecleado YA trae el ITBIS; la base se
+--               despeja (precio ÷ 1.18) para el F.033 y totales
+--  'exento'   → sin ITBIS (licencias, intangibles — Decreto 293-11)
+--  itbis_aplica queda como columna derivada (modo <> 'exento')
+--  para no romper los payloads históricos de lic_paquete.
+-- ============================================================
+alter table lic_item add column if not exists itbis_modo text not null default 'mas'
+  constraint lic_item_itbis_modo_valido check (itbis_modo in ('mas','incluido','exento'));
+update lic_item set itbis_modo = 'exento' where itbis_aplica = false and itbis_modo = 'mas';

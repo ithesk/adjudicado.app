@@ -70,13 +70,31 @@ export interface Totales {
   total: number;
 }
 
+// Cómo viene el ITBIS en el precio tecleado (estilo Odoo):
+//   'mas'      → el precio es la BASE; el ITBIS se suma encima (default)
+//   'incluido' → el precio YA trae el ITBIS; la base se despeja (÷ 1.18)
+//   'exento'   → la línea no lleva ITBIS (licencias/intangibles, Dec. 293-11)
+export type ItbisModo = "mas" | "incluido" | "exento";
+
+// La BASE unitaria (sin ITBIS) — lo que imprime el F.033 y suma el subtotal.
+export function precioBaseUnitario(
+  precio: number,
+  modo: ItbisModo,
+  itbisPct: number,
+): number {
+  if (modo === "incluido") return redondear2(precio / (1 + itbisPct / 100));
+  return precio;
+}
+
 export function totalesItem(
-  item: Pick<LicItem, "precio_unitario" | "cantidad" | "itbis_aplica">,
+  item: Pick<LicItem, "precio_unitario" | "cantidad" | "itbis_modo">,
   itbisPct: number,
 ): Totales | null {
   if (item.precio_unitario === null) return null;
-  const subtotal = redondear2(item.precio_unitario * item.cantidad);
-  const itbis = item.itbis_aplica ? redondear2((subtotal * itbisPct) / 100) : 0;
+  const base = precioBaseUnitario(item.precio_unitario, item.itbis_modo, itbisPct);
+  const subtotal = redondear2(base * item.cantidad);
+  const itbis =
+    item.itbis_modo === "exento" ? 0 : redondear2((subtotal * itbisPct) / 100);
   return { subtotal, itbis, total: redondear2(subtotal + itbis) };
 }
 
@@ -84,7 +102,7 @@ export function totalesItem(
 export function totalesProceso(
   items: Pick<
     LicItem,
-    "precio_unitario" | "cantidad" | "itbis_aplica" | "ofertamos"
+    "precio_unitario" | "cantidad" | "itbis_modo" | "ofertamos"
   >[],
   itbisPct: number,
 ): Totales {

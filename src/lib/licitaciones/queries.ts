@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { ProcesoCanonico, traducirIssue } from "./contrato";
-import { paramsCotizacion, precioVentaUnitario } from "./cotizador";
+import { paramsCotizacion, precioBaseUnitario, precioVentaUnitario } from "./cotizador";
 import { requisitoEstandar } from "./requisitos-estandar";
 import {
   estadoDocumentacion,
@@ -335,7 +335,7 @@ export async function actualizarItem(
       | "ofertamos"
       | "motivo_descarte"
       | "precio_unitario"
-      | "itbis_aplica"
+      | "itbis_modo"
     >
   >,
 ): Promise<string | null> {
@@ -343,11 +343,17 @@ export async function actualizarItem(
   const miembro = await getMiembro();
   if (!miembro) return "No autorizado.";
   const supabase = await createClient();
+  // itbis_aplica es derivada del modo — se mantiene en sync para que los
+  // payloads históricos y el contrato sigan siendo válidos.
+  const conModo =
+    "itbis_modo" in patch && patch.itbis_modo
+      ? { ...patch, itbis_aplica: patch.itbis_modo !== "exento" }
+      : patch;
   // Un precio tecleado a mano invalida el snapshot del catálogo.
   const conLimpieza =
-    "precio_unitario" in patch
-      ? { ...patch, suplidor_id: null, sku: null, costo_usd: null, tasa: null, margen_pct: null, margen_modo: null }
-      : patch;
+    "precio_unitario" in conModo
+      ? { ...conModo, suplidor_id: null, sku: null, costo_usd: null, tasa: null, margen_pct: null, margen_modo: null }
+      : conModo;
   const { error } = await supabase
     .from("lic_item")
     .update(conLimpieza)
@@ -786,8 +792,14 @@ export async function construirCanonico(procesoId: string): Promise<ResultadoCan
       tasa: i.tasa ?? undefined,
       margen_pct: i.margen_pct ?? undefined,
       margen_modo: i.margen_modo ?? undefined,
-      precio_unitario: i.precio_unitario as number,
-      itbis_aplica: i.itbis_aplica,
+      // El contrato exige la BASE sin ITBIS: si el precio se tecleó con el
+      // ITBIS incluido, aquí se despeja — el F.033 y las letras no cambian.
+      precio_unitario: precioBaseUnitario(
+        i.precio_unitario as number,
+        i.itbis_modo,
+        params.itbisPct,
+      ),
+      itbis_aplica: i.itbis_modo !== "exento",
     }));
 
   const supabase = await createClient();

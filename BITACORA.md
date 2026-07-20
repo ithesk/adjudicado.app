@@ -8,6 +8,25 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — Cotizador: modo de ITBIS por línea (estilo Odoo)
+
+**Hecho:** Pablo: «el precio debe tener opciones: ITBIS incluido, más ITBIS, sin
+ITBIS». Nueva columna `lic_item.itbis_modo` (migración en prod):
+
+- **+ ITBIS** (default): el precio tecleado es la base; el impuesto se suma.
+- **incluido**: el precio YA trae el ITBIS → la base se despeja (÷ 1.18) y se
+  muestra bajo el subtotal («base X/u»); el total vuelve al precio tecleado.
+- **exento**: sin ITBIS (licencias/intangibles, Decreto 293-11).
+
+El checkbox del cotizador pasó a ser un select de 3 modos. **Clave de diseño**: el
+contrato canónico exige `precio_unitario` = base SIN ITBIS, así que el modo se
+resuelve en `construirCanonico` (despeja la base con `precioBaseUnitario`) y el
+F.033, las letras y el generador NO cambian. `itbis_aplica` queda como columna
+derivada (modo ≠ exento), sincronizada en cada patch, para que los payloads
+históricos de lic_paquete sigan válidos. 77 tests (4 nuevos de modos).
+
+---
+
 ## 2026-07-19 — Selector de entidad con búsqueda tolerante en Nuevo proceso
 
 **Hecho:** Pablo buscaba el «Comité Ejecutor de Infraestructura de Zonas Turísticas» al
