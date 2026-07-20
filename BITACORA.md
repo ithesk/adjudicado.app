@@ -8,6 +8,20 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — Selector de entidad con búsqueda tolerante en Nuevo proceso
+
+**Hecho:** Pablo buscaba el «Comité Ejecutor de Infraestructura de Zonas Turísticas» al
+crear un proceso y no aparecía. Diagnóstico: la entidad NO existe en su catálogo (23
+entidades, cero coincidencias en la base) — el catálogo se construye con lo que la org
+registra, no viene precargado con las instituciones del Estado. Pero el `<select>` plano
+no dejaba ni buscar ni entender eso. Nuevo `src/components/SelectorEntidad.tsx`
+(combobox con `coincideTexto`: filtra al escribir, tolera mayúsculas/acentos/faltas) y
+si no hay coincidencia lo dice claro: «No está en tu catálogo — se creará “X” al
+guardar» (mismo flujo institucion_nueva de siempre). Adoptado en Nuevo proceso; el
+selector de DatosProceso (Bid Room) queda como candidato a adoptarlo después.
+
+---
+
 ## 2026-07-19 — «Reemplazar Word»: subir el archivo de la entidad sobre una plantilla
 
 **Hecho:** Pablo creó la variante MITUR pero solo podía *modificar* la copia — no
