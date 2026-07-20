@@ -54,8 +54,9 @@ export const GENERABLES: Record<string, { plantilla: string; carpeta: string; no
   },
 };
 
-// Imagen de firma y sello de la empresa. Si no están cargadas, el tag no
-// pinta nada: el documento sale igual, firmable a mano.
+// Imágenes de la empresa: firma, sello y logo (el membrete de las cartas
+// timbradas). Si no están cargadas, el tag no pinta nada: el documento sale
+// igual, firmable a mano.
 //
 // OJO con el contrato del módulo: el VALOR del tag debe ser un string clave
 // (no el Buffer — un objeto lo confunde con su modo asíncrono y revienta);
@@ -63,14 +64,54 @@ export const GENERABLES: Record<string, { plantilla: string; carpeta: string; no
 export interface ImagenesFirma {
   firma?: Buffer | null;
   sello?: Buffer | null;
+  logo?: Buffer | null;
+}
+
+// Ancho×alto reales de un PNG (IHDR) o JPEG (marcador SOF). Los logos
+// vienen en cualquier proporción — estirarlos a una caja fija los deforma.
+function dimensionesImagen(buf: Buffer): { ancho: number; alto: number } | null {
+  if (buf.length > 24 && buf[0] === 0x89 && buf[1] === 0x50) {
+    return { ancho: buf.readUInt32BE(16), alto: buf.readUInt32BE(20) };
+  }
+  if (buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < buf.length) {
+      if (buf[i] !== 0xff) return null;
+      const marcador = buf[i + 1];
+      if (marcador >= 0xc0 && marcador <= 0xcf && marcador !== 0xc4 && marcador !== 0xc8 && marcador !== 0xcc) {
+        return { ancho: buf.readUInt16BE(i + 7), alto: buf.readUInt16BE(i + 5) };
+      }
+      i += 2 + buf.readUInt16BE(i + 2);
+    }
+  }
+  return null;
+}
+
+// El logo se escala a la caja del membrete conservando su proporción.
+function tamanoLogo(buf: Buffer): [number, number] {
+  const MAX_ANCHO = 190;
+  const MAX_ALTO = 60;
+  const dim = dimensionesImagen(buf);
+  if (!dim || dim.ancho <= 0 || dim.alto <= 0) return [160, 55];
+  const escala = Math.min(MAX_ANCHO / dim.ancho, MAX_ALTO / dim.alto);
+  return [Math.round(dim.ancho * escala), Math.round(dim.alto * escala)];
 }
 
 function moduloImagenes(imagenes: ImagenesFirma) {
   return new ImageModule({
     centered: false,
     getImage: (clave) =>
-      (clave === "sello" ? imagenes.sello : imagenes.firma) as Buffer,
-    getSize: (_img, clave) => (clave === "sello" ? [110, 110] : [170, 60]),
+      (clave === "sello"
+        ? imagenes.sello
+        : clave === "logo"
+          ? imagenes.logo
+          : imagenes.firma) as Buffer,
+    getSize: (img, clave) =>
+      clave === "sello"
+        ? [110, 110]
+        : clave === "logo"
+          ? tamanoLogo(img as Buffer)
+          : [170, 60],
   });
 }
 
@@ -213,6 +254,7 @@ export function rellenarPlantilla(
     ...datos,
     firma: imagenes.firma ? "firma" : "",
     sello: imagenes.sello ? "sello" : "",
+    logo: imagenes.logo ? "logo" : "",
   });
   return doc.toBuffer();
 }

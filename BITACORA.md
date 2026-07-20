@@ -8,6 +8,229 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-19 — Bid Room rediseñada: ficha con riel (auditoría UI/UX de 12 fallos)
+
+**Hecho:** Pablo: «una sola columna, no aprovecha espacios, múltiples fallos». Un
+agente auditor levantó 12 fallos (F1-F12) — el central: la Bid Room estaba declarada
+como "ficha con riel" en docs/sistema-ui.md pero renderizaba UNA columna de 1200px,
+con el estado del expediente (gate, total, paquetes) enterrado al fondo. Rediseño:
+
+- **CabeceraPagina** (volver, código como título, entidad·modalidad·objeto·cierre)
+  con las ACCIONES arriba: chip de días + Generar paquete PDF + Word. LineaTiempo
+  en su propio panel debajo.
+- **DisposicionFicha**: principal = Proceso → Requisitos → Ítems (→ Subsanación);
+  **riel sticky** = tarjeta Subsanación en curso (solo abierta — su reloj y SU botón
+  primario; el paquete completo baja a ghost mientras tanto), tarjeta Expediente
+  (gate clicable, ítems sin cotizar, mini-tabla de totales, Validar, resultado,
+  reusado, paquetes generados con descarga) y aviso de empresa/firmantes.
+- **Eliminados**: la barra sticky de píldoras (chocaba con las de LineaTiempo que
+  SÍ mutan estado — slip de Norman), el plegado por secciones con localStorage
+  global (F11), el scroll-spy, y la doble cabecera de las 5 secciones (~150px).
+- **Subsanación bajo demanda** (F6): la sección solo se monta con subsanación
+  registrada o proceso sometido.
+- **DatosProceso** con anchos por contenido (F8): objeto/entidad flexibles; cierre,
+  modalidad, plazo, tasa y margen a su medida.
+- Remates (F9-F10): vacío del cotizador con CTA «Primera línea», «Agregar N» del
+  checklist también arriba, borde de botón al toggle subsanable, papelera separada.
+
+---
+
+## 2026-07-19 — El ZIP responde ya (archivo en 2.º plano) + descargas directas
+
+**Hecho:** tras paralelizar, la generación seguía en ~100 s. El culpable real:
+**el ZIP pesa 20 MB** y se subía a storage ANTES de responder — con el ancho de
+subida de Pablo, ahí se iban los minutos (bandwidth, no latencia). Dos piezas:
+
+- **`after()` de next/server**: el ZIP baja al navegador de inmediato; el
+  respaldo (ZIP + documentos sueltos + fila de lic_paquete) se sube en segundo
+  plano. La fila entra al FINAL: si el respaldo falla, la próxima generación no
+  encuentra la huella y simplemente regenera (nunca reusa un ZIP fantasma).
+- **«Paquetes generados — descarga directa»** en la sección Paquete: las últimas
+  5 versiones (v, PDF/Word, fecha) con botón Descargar vía URL firmada — la
+  respuesta a «¿tengo que volver a generar para descargar?»: NO. Y aunque le den
+  a Generar de nuevo sin cambios, la huella devuelve el ZIP guardado al instante.
+
+---
+
+## 2026-07-19 — Generación 10× más rápida y el PDF como botón principal
+
+**Hecho:** Pablo depuró su proceso CEIZTUR: «no la hizo en PDF sino en Word y duró
+más de 3 minutos». Dos causas, dos arreglos:
+
+- **Salió Word porque el botón primario generaba Word.** Ahora, con Gotenberg
+  configurado (`pdfDisponible()` → prop `pdfListo`), el primario es **«Generar
+  paquete PDF»** (lo que se presenta) y «Word» queda de secundario editable —
+  igual en la subsanación.
+- **112 s de app-code para 11 requisitos**: TODO el storage iba EN SERIE
+  (3 imágenes + plantillas + ~10 adjuntos + subidas, a segundos por viaje).
+  Paralelizado con Promise.all en 4 frentes: imágenes, descarga de plantillas
+  de la org (paso 5, ahora con try/catch), prefetch de adjuntos + conversión
+  PDF (mapa `adjuntoPorRequisito`; el ensamblado del ZIP queda puro CPU y
+  conserva el orden), y subidas (ZIP + documentos + updates). Además esos 112 s
+  habrían REVENTADO en Vercel (maxDuration=60) — esto también lo tapa.
+
+---
+
+## 2026-07-19 — Cotizador: modo de ITBIS por línea (estilo Odoo)
+
+**Hecho:** Pablo: «el precio debe tener opciones: ITBIS incluido, más ITBIS, sin
+ITBIS». Nueva columna `lic_item.itbis_modo` (migración en prod):
+
+- **+ ITBIS** (default): el precio tecleado es la base; el impuesto se suma.
+- **incluido**: el precio YA trae el ITBIS → la base se despeja (÷ 1.18) y se
+  muestra bajo el subtotal («base X/u»); el total vuelve al precio tecleado.
+- **exento**: sin ITBIS (licencias/intangibles, Decreto 293-11).
+
+El checkbox del cotizador pasó a ser un select de 3 modos. **Clave de diseño**: el
+contrato canónico exige `precio_unitario` = base SIN ITBIS, así que el modo se
+resuelve en `construirCanonico` (despeja la base con `precioBaseUnitario`) y el
+F.033, las letras y el generador NO cambian. `itbis_aplica` queda como columna
+derivada (modo ≠ exento), sincronizada en cada patch, para que los payloads
+históricos de lic_paquete sigan válidos. 77 tests (4 nuevos de modos).
+
+---
+
+## 2026-07-19 — Selector de entidad con búsqueda tolerante en Nuevo proceso
+
+**Hecho:** Pablo buscaba el «Comité Ejecutor de Infraestructura de Zonas Turísticas» al
+crear un proceso y no aparecía. Diagnóstico: la entidad NO existe en su catálogo (23
+entidades, cero coincidencias en la base) — el catálogo se construye con lo que la org
+registra, no viene precargado con las instituciones del Estado. Pero el `<select>` plano
+no dejaba ni buscar ni entender eso. Nuevo `src/components/SelectorEntidad.tsx`
+(combobox con `coincideTexto`: filtra al escribir, tolera mayúsculas/acentos/faltas) y
+si no hay coincidencia lo dice claro: «No está en tu catálogo — se creará “X” al
+guardar» (mismo flujo institucion_nueva de siempre). Adoptado en Nuevo proceso; el
+selector de DatosProceso (Bid Room) queda como candidato a adoptarlo después.
+
+---
+
+## 2026-07-19 — «Reemplazar Word»: subir el archivo de la entidad sobre una plantilla
+
+**Hecho:** Pablo creó la variante MITUR pero solo podía *modificar* la copia — no
+subirle el Word que la entidad envió. Nueva acción **Reemplazar Word** en dos sitios:
+el botón «Word» en cada fila de la lista de plantillas y «Reemplazar Word» en el
+editor. Sube el .docx nuevo, limpia las asignaciones (los huecos del documento nuevo
+son otros), la plantilla vuelve a borrador y te deja en el editor para arrastrar las
+variables. Borra los archivos viejos de storage y lo registra en la bitácora de la
+entidad si es variante. Con confirm() antes — se pierde el taggeo anterior a propósito.
+
+---
+
+## 2026-07-19 — SUBSANACIÓN: registrar → marcar → generar el paquete chico
+
+**Hecho:** el flujo completo de subsanación (la entidad pide por correo documentos
+faltantes/corregidos tras presentar, con fecha límite corta). Piezas:
+
+- **`lic_subsanacion`** (proceso, fecha_limite, texto del correo, estado
+  abierta→enviada→cerrada) + **`lic_requisito.subsanacion_id`** (qué pidieron) +
+  tipo `subsanacion` en la bitácora de la entidad. Migración en prod (201).
+  Una sola subsanación viva por proceso.
+- **Bid Room**: sección nueva «Subsanación» — registrar (datetime-local + correo
+  pegado tal cual), lista de lo pedido con su semáforo, generar (docx/PDF),
+  «Marcar enviada» (fecha registrada) y «Cerrar». El chip del reloj
+  («subsana 2d») vive en la barra sticky con la urgencia de siempre. En
+  2 · Requisitos cada fila gana el botón **«Subsanar»** (marcar lo devuelve a
+  pendiente; los errores de generación caen en la sección de subsanación).
+- **`/generar?subsanacion=id`**: paquete CHICO solo con lo pedido, SIN sobres,
+  índice «SUBSANACIÓN — vence …», zip `subsanacion_*.zip`, huella propia
+  (misma idempotencia). Gate distinto: en una subsanación TODO lo pedido es
+  obligatorio (no existe "subsanable después" — esto ES el después). Puede ser
+  puros adjuntos re-subidos (sin generables) y sale igual.
+- **Lista de licitaciones**: si hay subsanación abierta, su reloj MANDA sobre el
+  del cierre (chip + etiqueta «subsana»).
+
+**Decisión no obvia:** lo pedido se modela marcando los requisitos existentes
+(subsanacion_id), no con una tabla de items aparte — reusa checklist, subida,
+plantillas (incl. variantes MITUR) y generación sin duplicar nada.
+
+---
+
+## 2026-07-19 — Variantes también de los formularios del SISTEMA (caso MITUR)
+
+**Hecho:** Pablo tiene formularios que MITUR envió para una subsanación, pero en
+Plantillas solo salían los códigos propios de la org — no los 7 del sistema. Dos arreglos:
+
+- **Configuración → Plantillas ahora tiene el bloque «Formularios del sistema»** (desde
+  GENERABLES): cada uno con su botón «Variante» — eliges la entidad y subes el Word TAL
+  CUAL lo envió esa entidad (nace como borrador con el código del sistema, p. ej.
+  SNCC.F.033 + institucion_id, y se taggea en el constructor). Sus variantes cuelgan
+  debajo; los códigos del sistema ya no se mezclan con el bloque de la organización.
+- **La cascada ahora es completa en la generación**: antes `GENERABLES[codigo]` ganaba
+  SIEMPRE — una variante del F.033 jamás habría salido. Ahora la plantilla resuelta
+  (variante de la entidad → genérica de la org) gana sobre el formulario del sistema,
+  que queda como último recurso. La huella ya lo cubría (incluye la plantilla usada).
+
+**Pendiente de diseño:** flujo de SUBSANACIÓN (la entidad pide por correo documentos
+faltantes/corregidos tras presentar). Análisis entregado a Pablo: nueva `lic_subsanacion`
+con fecha límite + selección de requisitos afectados + mini-paquete solo con eso.
+Sin código todavía — esperando su OK.
+
+---
+
+## 2026-07-18 — Variantes de plantilla por entidad (cascada entidad → org → sistema)
+
+**Hecho:** Pablo: «a veces las entidades tienen su propia versión con pequeños cambios
+de los formularios». Solución tipo ERP: una plantilla puede ser **genérica** de la org
+o **variante de una entidad** (`lic_plantilla.institucion_id`, unicidad partida en dos
+índices parciales — migración aplicada a prod, 201). Piezas:
+
+- **Cascada al generar** (`resolverPlantillas`, pura, 5 tests): para cada código gana
+  la variante de la entidad del proceso; si no hay, la genérica; si no, el sistema.
+  El usuario no configura nada por proceso.
+- **«Variante para una entidad…»** en Configuración → Plantillas: duplica la plantilla
+  YA construida (archivos en storage + asignaciones + variables) asignada a la entidad
+  — solo se edita lo que esa entidad cambió. Las variantes cuelgan agrupadas bajo su
+  genérica con la etiqueta de la entidad; el editor muestra el badge «Variante · X».
+- **Ficha de la entidad**: riel «Formularios propios (n)» + eventos tipo `plantilla`
+  en su bitácora (crear/eliminar variante quedan escritos).
+- **La huella del paquete ahora incluye qué plantilla exacta respondió cada código**
+  (id + updated_at). Esto además tapa un hueco previo: editar/republicar una plantilla
+  no invalidaba el ZIP reusado. Efecto: una regeneración única tras el deploy.
+
+**Decisión no obvia:** la variante comparte el `codigo` del requisito — el checklist no
+cambia; solo cambia *cuál archivo* responde. Si solo existe la variante (sin genérica),
+responde únicamente a su entidad. 73 tests.
+
+**Pendiente:** PR a main sigue abierto (con las env de Gotenberg en Vercel antes).
+
+---
+
+## 2026-07-17 — Búsqueda tolerante en toda la app (regla permanente)
+
+**Hecho:** Pablo buscó «instituto» y no encontró «Instituto…» (en uno de los buscadores
+viejos, sin normalizar). Su regla, ahora permanente: *el usuario no sabe cómo está creado
+el nombre* — mayúsculas, acentos y faltas ortográficas no pueden romper una búsqueda.
+Nuevo `src/lib/buscar-texto.ts` (`coincideTexto`): pliega mayúsculas/acentos, tolera 1-2
+letras de error según el largo (Levenshtein con banda) y acepta prefijos a medio teclear.
+Aplicado a los 5 buscadores en memoria (entidades, bandeja, actividad, documentos,
+bitácora de orden); el Cmd+K global ya usaba unaccent en SQL. «insituto» → Instituto ✓.
+68 tests. También: buscador nuevo en /entidades (tabla filtrable con contador).
+
+---
+
+## 2026-07-17 — Cartas timbradas: el logo de la empresa encabeza las cartas
+
+**Hecho:** Pablo pidió que la empresa suba su logo para cartas timbradas. Piezas:
+
+- Tipo **"logo"** en Configuración → Empresa (catálogo TIPOS_DOC_EMPRESA; PNG/JPG, no
+  vence) — se sube igual que firma y sello.
+- **Membrete** en las 3 cartas propias (CARTA-COND, DJ-ART38, DJ-COLUSION), regeneradas
+  con `scripts/generar-cartas-base.py`: logo centrado + «{empresa} · RNC …» + línea de
+  contacto en gris pequeño + filete. Sin logo cargado, la carta sale igual (el tag no
+  pinta nada) y el timbrado textual queda.
+- Motor: `ImagenesFirma.logo`; el logo se escala **proporcional a su tamaño real**
+  (parser de dimensiones PNG/JPEG propio — la caja fija deformaba) con tope 190×60 px.
+- `/generar` carga firma+sello+logo; la huella de idempotencia ya lo cubre (cambiar el
+  logo regenera). Vista previa del constructor lo simula, y **el constructor gana la
+  variable "Logo de la empresa"** arrastrable a cualquier plantilla propia.
+- Tests: 63 en verde (membrete proporcional 300×120→150×60, carta sin logo intacta) +
+  validación externa con textutil.
+
+**Pendiente de verificación de Pablo:** subir el logo real en Configuración → Empresa →
+regenerar el paquete → las cartas salen timbradas.
+
+---
+
 ## 2026-07-17 — Sistema de página desktop-first (estilo ERP/Odoo)
 
 **Hecho:** Pablo: «parece una app móvil alargada viéndose en desktop» — la acción

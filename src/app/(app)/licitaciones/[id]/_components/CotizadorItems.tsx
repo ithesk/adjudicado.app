@@ -21,6 +21,7 @@ import {
 } from "@/lib/actions/licitaciones";
 import type { LicItem, LicProceso } from "@/lib/licitaciones/tipos";
 import {
+  precioBaseUnitario,
   totalesItem,
   totalesProceso,
   type ParamsCotizacion,
@@ -109,7 +110,7 @@ export default function CotizadorItems({
             <col className="w-16" />
             <col className="w-14" />
             <col className="w-28" />
-            <col className="w-11" />
+            <col className="w-24" />
             <col className="w-28" />
             <col className="w-9" />
           </colgroup>
@@ -121,8 +122,8 @@ export default function CotizadorItems({
               <th className="px-2 py-1.5 font-medium">UD</th>
               <th className="px-2 py-1.5 text-right font-medium">Precio unit.</th>
               <th
-                className="px-2 py-1.5 text-center font-medium"
-                title="¿Esta línea lleva el 18% de ITBIS? Ojo: las licencias de software y derechos intangibles están EXENTOS (Decreto 293-11, art. 4) — desmárcalo en esas líneas."
+                className="px-2 py-1.5 font-medium"
+                title="Cómo viene el ITBIS en el precio tecleado: «+ ITBIS» (el precio es la base y el impuesto se suma), «incluido» (el precio ya lo trae; la base se despeja sola) o «exento» (licencias de software y derechos intangibles — Decreto 293-11, art. 4)."
               >
                 ITBIS
               </th>
@@ -152,9 +153,20 @@ export default function CotizadorItems({
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted">
-                  Agrega las líneas del pliego con «Línea». La descripción se
-                  pega TAL CUAL aparece en el pliego.
+                <td colSpan={8} className="px-4 py-8 text-center">
+                  <p className="mb-3 text-sm text-muted">
+                    Agrega las líneas del pliego — la descripción se pega TAL
+                    CUAL aparece en el pliego.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={pendiente}
+                    onClick={() => correr(() => crearItemAction(proceso.id))}
+                    className={btnPrimary()}
+                  >
+                    <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                    Primera línea
+                  </button>
                 </td>
               </tr>
             )}
@@ -279,17 +291,29 @@ function Linea({
             className={`${celda} text-right font-mono`}
           />
         </td>
-        <td className="px-1 py-1 text-center align-top">
-          <input
-            type="checkbox"
-            defaultChecked={item.itbis_aplica}
+        <td className="px-1 py-1 align-top">
+          <select
+            value={item.itbis_modo}
             disabled={descartado}
-            onChange={(e) => onPatch({ itbis_aplica: e.target.checked })}
-            title="Marcado: la línea suma 18% de ITBIS al total. Desmarcado: exenta (licencias de software y derechos intangibles suelen estarlo — Decreto 293-11)."
-          />
+            onChange={(e) => onPatch({ itbis_modo: e.target.value as LicItem["itbis_modo"] })}
+            title="«+ ITBIS»: el precio es la base y el impuesto se suma. «incluido»: el precio ya trae el ITBIS — la base se despeja sola para el F.033. «exento»: sin ITBIS (licencias e intangibles, Decreto 293-11)."
+            className={`${celda} cursor-pointer`}
+          >
+            <option value="mas">+ ITBIS</option>
+            <option value="incluido">incluido</option>
+            <option value="exento">exento</option>
+          </select>
         </td>
         <td className="px-2 py-1.5 text-right align-top font-mono text-[12.5px] text-ink">
           {descartado ? "—" : t ? formatRD(t.subtotal) : "—"}
+          {!descartado && t && item.itbis_modo === "incluido" && item.precio_unitario !== null && (
+            <span
+              className="block text-[10px] font-normal text-muted"
+              title="La base sin ITBIS que imprime la oferta económica"
+            >
+              base {formatRD(precioBaseUnitario(item.precio_unitario, item.itbis_modo, params.itbisPct))}/u
+            </span>
+          )}
         </td>
         <td className="px-1 py-1 text-right align-top">
           <button

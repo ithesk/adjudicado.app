@@ -52,6 +52,7 @@ export const VARIABLES_PLANTILLA: VariablePlantilla[] = [
   { clave: "total_oferta", etiqueta: "Total de la oferta (RD$)", ejemplo: "329,376.00", grupo: "economico" },
   { clave: "total_letras", etiqueta: "Total en letras", ejemplo: "TRESCIENTOS VEINTINUEVE MIL…", grupo: "economico" },
   // Imágenes
+  { clave: "logo", etiqueta: "Logo de la empresa (imagen)", ejemplo: "🏢", grupo: "imagenes", imagen: true },
   { clave: "firma", etiqueta: "Firma (imagen)", ejemplo: "✍️", grupo: "imagenes", imagen: true },
   { clave: "sello", etiqueta: "Sello (imagen)", ejemplo: "🔵", grupo: "imagenes", imagen: true },
 ];

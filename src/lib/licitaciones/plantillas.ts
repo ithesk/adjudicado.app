@@ -294,3 +294,24 @@ export function aplicarAsignaciones(
   }
   return zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
 }
+
+// ============================================================
+// CASCADA de plantillas por entidad. Para cada código gana la
+// variante de la entidad del proceso; si no hay, la genérica de
+// la organización (institucion_id null). Pura — se prueba sola.
+// ============================================================
+export function resolverPlantillas<
+  P extends { codigo: string; institucion_id?: string | null },
+>(plantillas: P[], institucionId: string | null): Map<string, P> {
+  const porCodigo = new Map<string, P>();
+  for (const p of plantillas) {
+    if (p.institucion_id ?? null) continue; // primero las genéricas
+    porCodigo.set(p.codigo, p);
+  }
+  if (institucionId) {
+    for (const p of plantillas) {
+      if (p.institucion_id === institucionId) porCodigo.set(p.codigo, p);
+    }
+  }
+  return porCodigo;
+}

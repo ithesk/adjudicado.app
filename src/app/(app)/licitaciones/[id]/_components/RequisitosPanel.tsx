@@ -23,6 +23,7 @@ import {
   crearRequisitosLoteAction,
   eliminarRequisitoAction,
   subirArchivoRequisitoAction,
+  toggleRequisitoSubsanacionAction,
 } from "@/lib/actions/licitaciones";
 import {
   ROL_FIRMANTE_LABEL,
@@ -57,6 +58,7 @@ export default function RequisitosPanel({
   procesoId,
   requisitos,
   plantillasOrg = [],
+  subsanacionId = null,
 }: {
   procesoId: string;
   requisitos: LicRequisito[];
@@ -65,6 +67,8 @@ export default function RequisitosPanel({
     nombre: string;
     preguntas: { clave: string; etiqueta: string }[];
   }[];
+  // Con una subsanación ABIERTA, cada fila puede marcarse como "pedido".
+  subsanacionId?: string | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -162,6 +166,12 @@ export default function RequisitosPanel({
                 r={r}
                 preguntas={plantillasOrg.find((p) => p.codigo === r.codigo)?.preguntas ?? []}
                 pendiente={pendiente}
+                subsanacionId={subsanacionId}
+                onToggleSub={(marcar) =>
+                  correr(() =>
+                    toggleRequisitoSubsanacionAction(r.id, marcar ? subsanacionId : null),
+                  )
+                }
                 onPatch={(patch) => correr(() => actualizarRequisitoAction(r.id, patch))}
                 onSubir={(fd) => correr(() => subirArchivoRequisitoAction(r.id, fd))}
                 onEliminar={() => {
@@ -226,9 +236,23 @@ function ChecklistPicker({
   }
 
   const disponibles = REQUISITOS_ESTANDAR.filter((r) => !yaEstan.has(r.codigo));
+  const hayQueAgregar =
+    disponibles.length > 0 || plantillasOrg.some((p) => !yaEstan.has(p.codigo));
 
   return (
     <div className="border-b border-line bg-surface-2/50 p-3">
+      {/* La acción arriba (regla 1): con la lista larga, el botón no puede
+          vivir solo al fondo del scroll. */}
+      {hayQueAgregar && (
+        <button
+          type="button"
+          disabled={pendiente || marcados.size === 0}
+          onClick={() => onAgregar([...marcados])}
+          className={btnPrimary("mb-2 !px-3 !py-1.5 !text-[12.5px]")}
+        >
+          Agregar {marcados.size} requisito{marcados.size === 1 ? "" : "s"}
+        </button>
+      )}
       {ORDEN_GRUPOS.filter((g) => g !== "otros").map((g) => {
         const items = disponibles.filter((r) => r.grupo === g);
         if (items.length === 0) return null;
@@ -379,6 +403,8 @@ function FilaRequisito({
   r,
   preguntas,
   pendiente,
+  subsanacionId,
+  onToggleSub,
   onPatch,
   onSubir,
   onEliminar,
@@ -388,6 +414,8 @@ function FilaRequisito({
   // este requisito — cada proceso captura sus valores aquí.
   preguntas: { clave: string; etiqueta: string }[];
   pendiente: boolean;
+  subsanacionId: string | null;
+  onToggleSub: (marcar: boolean) => void;
   onPatch: (patch: Parameters<typeof actualizarRequisitoAction>[1]) => void;
   onSubir: (fd: FormData) => void;
   onEliminar: () => void;
@@ -418,10 +446,10 @@ function FilaRequisito({
             <button
               type="button"
               onClick={() => onPatch({ subsanable: !r.subsanable })}
-              className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide transition-colors ${
+              className={`rounded border px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide transition-colors ${
                 critico
-                  ? "bg-danger-soft text-danger"
-                  : "bg-surface-2 text-muted hover:text-ink"
+                  ? "border-danger/30 bg-danger-soft text-danger"
+                  : "border-line bg-surface-2 text-muted hover:text-ink"
               }`}
               title="Cambiar subsanable / no subsanable"
             >
@@ -470,6 +498,28 @@ function FilaRequisito({
               Falta en Empresa
             </a>
           ))}
+
+        {/* Con subsanación abierta: marcar este requisito como PEDIDO lo
+            devuelve a pendiente y lo mete al paquete de subsanación. */}
+        {subsanacionId && (
+          <button
+            type="button"
+            onClick={() => onToggleSub(r.subsanacion_id !== subsanacionId)}
+            disabled={pendiente}
+            className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold transition-colors ${
+              r.subsanacion_id === subsanacionId
+                ? "bg-warn-soft text-warn"
+                : "bg-surface-2 text-muted hover:text-ink"
+            }`}
+            title={
+              r.subsanacion_id === subsanacionId
+                ? "La entidad lo pidió en la subsanación — clic para quitarlo"
+                : "La entidad pidió este documento en la subsanación"
+            }
+          >
+            {r.subsanacion_id === subsanacionId ? "Pedido ✓" : "Subsanar"}
+          </button>
+        )}
 
         {r.storage_path && (
           <VisorDocumento
@@ -527,7 +577,7 @@ function FilaRequisito({
           type="button"
           onClick={onEliminar}
           disabled={pendiente}
-          className="rounded p-1 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+          className="ml-2 rounded p-1 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
           aria-label="Eliminar requisito"
         >
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />

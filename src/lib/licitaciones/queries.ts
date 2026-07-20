@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { ProcesoCanonico, traducirIssue } from "./contrato";
-import { paramsCotizacion, precioVentaUnitario } from "./cotizador";
+import { paramsCotizacion, precioBaseUnitario, precioVentaUnitario } from "./cotizador";
 import { requisitoEstandar } from "./requisitos-estandar";
 import {
   estadoDocumentacion,
@@ -123,6 +123,43 @@ export async function listarProcesos(): Promise<LicProceso[]> {
   return (data as LicProceso[] | null) ?? [];
 }
 
+// Los paquetes YA generados de un proceso — para descargarlos directo del
+// respaldo sin volver a generar nada.
+export async function listarPaquetes(
+  procesoId: string,
+): Promise<{ version: number; storage_path: string; generado_at: string }[]> {
+  if (isDemo()) return [];
+  const orgId = await orgActivaLigera();
+  if (!orgId) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lic_paquete")
+    .select("version, storage_path, generado_at")
+    .eq("proceso_id", procesoId)
+    .eq("org_id", orgId)
+    .not("storage_path", "is", null)
+    .order("version", { ascending: false })
+    .limit(5);
+  return (data ?? []) as { version: number; storage_path: string; generado_at: string }[];
+}
+
+// Para la lista: qué procesos tienen una subsanación ABIERTA y su límite —
+// ese reloj manda sobre el del cierre.
+export async function subsanacionesAbiertas(): Promise<Record<string, string>> {
+  if (isDemo()) return {};
+  const orgId = await orgActivaLigera();
+  if (!orgId) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lic_subsanacion")
+    .select("proceso_id, fecha_limite")
+    .eq("org_id", orgId)
+    .eq("estado", "abierta");
+  return Object.fromEntries(
+    (data ?? []).map((s) => [s.proceso_id, s.fecha_limite]),
+  );
+}
+
 export async function obtenerProceso(id: string): Promise<ProcesoDetalle | null> {
   if (isDemo()) return null;
   const orgId = await orgActivaLigera();
@@ -137,7 +174,7 @@ export async function obtenerProceso(id: string): Promise<ProcesoDetalle | null>
     .maybeSingle();
   if (!proceso) return null;
 
-  const [lotes, items, requisitos, institucion] = await Promise.all([
+  const [lotes, items, requisitos, institucion, subsanacion] = await Promise.all([
     supabase.from("lic_lote").select("*").eq("proceso_id", id).order("numero"),
     supabase
       .from("lic_item")
@@ -158,6 +195,14 @@ export async function obtenerProceso(id: string): Promise<ProcesoDetalle | null>
           .eq("id", proceso.institucion_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase
+      .from("lic_subsanacion")
+      .select("id, proceso_id, fecha_limite, texto, estado, enviada_at, created_at")
+      .eq("proceso_id", id)
+      .neq("estado", "cerrada")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   return {
@@ -166,6 +211,7 @@ export async function obtenerProceso(id: string): Promise<ProcesoDetalle | null>
     items: (items.data ?? []) as LicItem[],
     requisitos: (requisitos.data ?? []) as LicRequisito[],
     institucion: (institucion.data ?? null) as ProcesoDetalle["institucion"],
+    subsanacion: (subsanacion.data ?? null) as ProcesoDetalle["subsanacion"],
   };
 }
 
@@ -309,7 +355,7 @@ export async function actualizarItem(
       | "ofertamos"
       | "motivo_descarte"
       | "precio_unitario"
-      | "itbis_aplica"
+      | "itbis_modo"
     >
   >,
 ): Promise<string | null> {
@@ -317,11 +363,17 @@ export async function actualizarItem(
   const miembro = await getMiembro();
   if (!miembro) return "No autorizado.";
   const supabase = await createClient();
+  // itbis_aplica es derivada del modo — se mantiene en sync para que los
+  // payloads históricos y el contrato sigan siendo válidos.
+  const conModo =
+    "itbis_modo" in patch && patch.itbis_modo
+      ? { ...patch, itbis_aplica: patch.itbis_modo !== "exento" }
+      : patch;
   // Un precio tecleado a mano invalida el snapshot del catálogo.
   const conLimpieza =
-    "precio_unitario" in patch
-      ? { ...patch, suplidor_id: null, sku: null, costo_usd: null, tasa: null, margen_pct: null, margen_modo: null }
-      : patch;
+    "precio_unitario" in conModo
+      ? { ...conModo, suplidor_id: null, sku: null, costo_usd: null, tasa: null, margen_pct: null, margen_modo: null }
+      : conModo;
   const { error } = await supabase
     .from("lic_item")
     .update(conLimpieza)
@@ -461,6 +513,123 @@ export async function eliminarRequisito(id: string): Promise<string | null> {
     .eq("id", id)
     .eq("org_id", miembro.org_id);
   return error ? `No se pudo eliminar: ${error.message}` : null;
+}
+
+// ===== Subsanación =====
+// La entidad pide por correo documentos faltantes/corregidos con fecha
+// límite. Se registra, se marcan los requisitos pedidos y el paquete de
+// subsanación sale solo con eso. El movimiento queda en la bitácora de la
+// entidad del proceso.
+
+async function eventoEntidadDelProceso(
+  procesoId: string,
+  orgId: string,
+  texto: string,
+) {
+  const supabase = await createClient();
+  const { data: proc } = await supabase
+    .from("lic_proceso")
+    .select("institucion_id, codigo")
+    .eq("id", procesoId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (!proc?.institucion_id) return;
+  const user = await getUser();
+  await supabase.from("institucion_evento").insert({
+    org_id: orgId,
+    institucion_id: proc.institucion_id,
+    autor_id: user?.id ?? null,
+    tipo: "subsanacion",
+    texto: `${texto} (${proc.codigo})`,
+  });
+}
+
+export async function crearSubsanacion(
+  procesoId: string,
+  fechaLimite: string, // "YYYY-MM-DDTHH:mm" del datetime-local
+  texto: string,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  if (!fechaLimite) return "La fecha límite es obligatoria — es lo que manda aquí.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  // Una sola viva por proceso: si hay una abierta/enviada, no se apila otra.
+  const { data: viva } = await supabase
+    .from("lic_subsanacion")
+    .select("id")
+    .eq("proceso_id", procesoId)
+    .eq("org_id", miembro.org_id)
+    .neq("estado", "cerrada")
+    .limit(1)
+    .maybeSingle();
+  if (viva) return "Ya hay una subsanación en curso — ciérrala antes de registrar otra.";
+  const { error } = await supabase.from("lic_subsanacion").insert({
+    org_id: miembro.org_id,
+    proceso_id: procesoId,
+    fecha_limite: fechaLimite,
+    texto: texto.trim() || null,
+  });
+  if (error) return `No se pudo registrar: ${error.message}`;
+  await eventoEntidadDelProceso(
+    procesoId,
+    miembro.org_id,
+    `Pidió una subsanación con límite ${fechaLimite.slice(8, 10)}/${fechaLimite.slice(5, 7)}`,
+  );
+  return null;
+}
+
+export async function cambiarEstadoSubsanacion(
+  id: string,
+  estado: "enviada" | "cerrada",
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { data: fila, error } = await supabase
+    .from("lic_subsanacion")
+    .update({
+      estado,
+      ...(estado === "enviada" ? { enviada_at: new Date().toISOString() } : {}),
+    })
+    .eq("id", id)
+    .eq("org_id", miembro.org_id)
+    .select("proceso_id")
+    .maybeSingle();
+  if (error) return `No se pudo actualizar: ${error.message}`;
+  if (fila) {
+    await eventoEntidadDelProceso(
+      fila.proceso_id,
+      miembro.org_id,
+      estado === "enviada"
+        ? "Se le envió la subsanación"
+        : "Se cerró la subsanación",
+    );
+  }
+  return null;
+}
+
+// Marcar un requisito como pedido lo devuelve a "pendiente" (hay que
+// rehacerlo o volverlo a subir); desmarcarlo solo quita la marca.
+export async function toggleRequisitoSubsanacion(
+  requisitoId: string,
+  subsanacionId: string | null,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_requisito")
+    .update(
+      subsanacionId
+        ? { subsanacion_id: subsanacionId, estado: "pendiente" }
+        : { subsanacion_id: null },
+    )
+    .eq("id", requisitoId)
+    .eq("org_id", miembro.org_id);
+  return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
 // Agrega de un golpe los requisitos marcados del checklist estándar.
@@ -643,8 +812,14 @@ export async function construirCanonico(procesoId: string): Promise<ResultadoCan
       tasa: i.tasa ?? undefined,
       margen_pct: i.margen_pct ?? undefined,
       margen_modo: i.margen_modo ?? undefined,
-      precio_unitario: i.precio_unitario as number,
-      itbis_aplica: i.itbis_aplica,
+      // El contrato exige la BASE sin ITBIS: si el precio se tecleó con el
+      // ITBIS incluido, aquí se despeja — el F.033 y las letras no cambian.
+      precio_unitario: precioBaseUnitario(
+        i.precio_unitario as number,
+        i.itbis_modo,
+        params.itbisPct,
+      ),
+      itbis_aplica: i.itbis_modo !== "exento",
     }));
 
   const supabase = await createClient();

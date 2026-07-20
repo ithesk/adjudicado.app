@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2 } from "lucide-react";
 import { Panel, SectionTitle, btnPrimary, btnGhost, inputBase } from "@/components/ui";
+import SelectorEntidad from "@/components/SelectorEntidad";
 import { crearProcesoAction } from "@/lib/actions/licitaciones";
 import { MODALIDAD_LABEL } from "@/lib/licitaciones/tipos";
 
@@ -15,6 +16,7 @@ export default function NuevoProcesoForm({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [institucionId, setInstitucionId] = useState("");
+  const [nombreEntidad, setNombreEntidad] = useState("");
   const [pendiente, startTransition] = useTransition();
 
   function crear(fd: FormData) {
@@ -26,9 +28,7 @@ export default function NuevoProcesoForm({
         modalidad: String(fd.get("modalidad") || "OTRO"),
         cierre: String(fd.get("cierre") || "") || null,
         institucion_id: institucionId || null,
-        institucion_nueva: institucionId
-          ? null
-          : String(fd.get("institucion_nueva") || "") || null,
+        institucion_nueva: institucionId ? null : nombreEntidad.trim() || null,
         adjudicacion: (String(fd.get("adjudicacion")) || "total") as
           | "item"
           | "lote"
@@ -72,31 +72,29 @@ export default function NuevoProcesoForm({
           />
         </label>
 
-        <label className="text-[12.5px] text-muted">
+        <div className="text-[12.5px] text-muted sm:col-span-2">
           Entidad convocante
-          <select
-            value={institucionId}
-            onChange={(e) => setInstitucionId(e.target.value)}
-            className={`${inputBase} mt-1`}
-          >
-            <option value="">— Nueva / escribir abajo —</option>
-            {instituciones.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.nombre}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="text-[12.5px] text-muted">
-          {institucionId ? " " : "Nombre de la entidad nueva"}
-          <input
-            name="institucion_nueva"
-            disabled={!!institucionId}
-            placeholder="Ministerio de…"
-            className={`${inputBase} mt-1 disabled:opacity-40`}
-          />
-        </label>
+          <div className="mt-1">
+            <SelectorEntidad
+              entidades={instituciones}
+              valorId={institucionId}
+              texto={nombreEntidad}
+              permitirNueva
+              onElegir={(id, nombre) => {
+                setInstitucionId(id);
+                setNombreEntidad(nombre);
+              }}
+              onTexto={(t) => {
+                setInstitucionId("");
+                setNombreEntidad(t);
+              }}
+            />
+          </div>
+          <span className="mt-1 block text-[11px]">
+            Escribe para buscar — mayúsculas, acentos y faltas leves dan igual.
+            Si no está, se crea con ese nombre.
+          </span>
+        </div>
 
         <label className="text-[12.5px] text-muted">
           Cierre (fecha y hora) *

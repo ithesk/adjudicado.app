@@ -1,5 +1,6 @@
 "use client";
 
+import { coincideTexto } from "@/lib/buscar-texto";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -50,14 +51,17 @@ export default function DocumentosBuscador({
   );
 
   const resultados = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = query.trim();
     return docs.filter((d) => {
       if (tipo !== "todos" && d.tipo !== tipo) return false;
       if (institucion !== "todas" && d.institucion !== institucion) return false;
       if (!q) return true;
-      return [d.nombre, d.numeroOc, d.institucion, meta(d.tipo).label]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q));
+      return coincideTexto(
+        [d.nombre, d.numeroOc, d.institucion, meta(d.tipo).label]
+          .filter(Boolean)
+          .join(" "),
+        q,
+      );
     });
   }, [docs, query, tipo, institucion]);
 

@@ -25,7 +25,14 @@ const VIVO: Record<string, boolean> = {
   subsanacion: true,
 };
 
-export default function ProcesosLista({ procesos }: { procesos: LicProceso[] }) {
+export default function ProcesosLista({
+  procesos,
+  subsanaciones = {},
+}: {
+  procesos: LicProceso[];
+  // proceso_id → fecha límite de su subsanación ABIERTA: ese reloj manda.
+  subsanaciones?: Record<string, string>;
+}) {
   if (procesos.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-line px-4 py-10 text-center text-sm text-muted">
@@ -48,16 +55,29 @@ export default function ProcesosLista({ procesos }: { procesos: LicProceso[] }) 
         </thead>
         <tbody>
           {procesos.map((p) => {
-            const dias = VIVO[p.estado] ? diasAlCierre(p.cierre) : null;
+            const sub = subsanaciones[p.id] ?? null;
+            const dias = sub
+              ? diasAlCierre(sub)
+              : VIVO[p.estado]
+                ? diasAlCierre(p.cierre)
+                : null;
             const nivel = nivelUrgencia(dias);
             return (
               <tr key={p.id} className="border-b border-line transition-colors last:border-0 hover:bg-surface-2">
                 <td className="px-3 py-2.5">
                   <span className="flex items-center gap-1.5">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${urgenciaDot(nivel)}`} aria-hidden />
-                    <span className={`rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(nivel)}`}>
-                      {VIVO[p.estado] ? textoDias(dias) : "—"}
+                    <span
+                      className={`rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(nivel)}`}
+                      title={sub ? "Fecha límite de la subsanación abierta" : undefined}
+                    >
+                      {sub || VIVO[p.estado] ? textoDias(dias) : "—"}
                     </span>
+                    {sub && (
+                      <span className="rounded bg-warn-soft px-1 py-0.5 text-[9.5px] font-semibold uppercase text-warn">
+                        subsana
+                      </span>
+                    )}
                   </span>
                 </td>
                 <td className="px-3 py-2.5">

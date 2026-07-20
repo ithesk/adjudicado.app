@@ -1,5 +1,6 @@
 "use client";
 
+import { coincideTexto } from "@/lib/buscar-texto";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Phone,
@@ -507,11 +508,10 @@ export default function BitacoraPanel({
         if (filtro !== "todo" && b.tipo !== filtro) return false;
         if (!q) return true;
         const enComentarios = (b.comentarios ?? []).some((c) =>
-          c.texto.toLowerCase().includes(q),
+          coincideTexto(c.texto, q),
         );
         return (
-          b.texto.toLowerCase().includes(q) ||
-          (b.autor?.nombre ?? "").toLowerCase().includes(q) ||
+          coincideTexto(`${b.texto} ${b.autor?.nombre ?? ""}`, q) ||
           enComentarios
         );
       })

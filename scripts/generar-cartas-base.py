@@ -89,7 +89,35 @@ FIRMA = [
     parrafo("{rep_nombre}\n{rep_cargo}\n{empresa_nombre}"),
 ]
 
+# El MEMBRETE (carta timbrada): logo si la empresa lo subió (el tag vacío no
+# pinta nada), los datos de la empresa en letra pequeña gris, y un filete.
+def _parrafo_membrete(texto, tamano=16):
+    runs = ""
+    for linea in texto.split("\n"):
+        if runs:
+            runs += "<w:br/>"
+        runs += f'<w:t xml:space="preserve">{linea}</w:t>'
+    return (
+        '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="40"/></w:pPr>'
+        f'<w:r><w:rPr><w:sz w:val="{tamano}"/><w:color w:val="595959"/></w:rPr>{runs}</w:r></w:p>'
+    )
+
+
+FILETE = (
+    '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="595959"/></w:pBdr>'
+    '<w:spacing w:after="300"/></w:pPr></w:p>'
+)
+
+MEMBRETE = [
+    '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="60"/></w:pPr>'
+    '<w:r><w:t xml:space="preserve">{%logo}</w:t></w:r></w:p>',
+    _parrafo_membrete("{empresa_nombre} · RNC {rnc}", tamano=18),
+    _parrafo_membrete("{empresa_direccion} · Tel. {empresa_telefono} · {empresa_email}"),
+    FILETE,
+]
+
 ENCABEZADO = [
+    *MEMBRETE,
     parrafo("Santo Domingo, República Dominicana, {fecha}", derecha=True, espacio_despues=400),
     parrafo("Señores\n{entidad_nombre}", espacio_despues=200),
     parrafo("Referencia: Procedimiento núm. {expediente}", negrita=True, espacio_despues=400),

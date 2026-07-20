@@ -1,11 +1,16 @@
 import { listarPlantillas } from "@/lib/licitaciones/queries-plantillas";
+import { GENERABLES } from "@/lib/licitaciones/generador";
+import { listarEntidadesLigero } from "@/lib/entidades/queries";
 import PlantillasLista from "./PlantillasLista";
 import { Hoja } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlantillasPage() {
-  const plantillas = await listarPlantillas();
+  const [plantillas, entidades] = await Promise.all([
+    listarPlantillas(),
+    listarEntidadesLigero(),
+  ]);
 
   return (
     <Hoja ancho="lista" className="space-y-4">
@@ -18,7 +23,14 @@ export default async function PlantillasPage() {
           ya vienen incluidos.
         </p>
       </div>
-      <PlantillasLista plantillas={plantillas} />
+      <PlantillasLista
+        plantillas={plantillas}
+        entidades={entidades}
+        sistema={Object.entries(GENERABLES).map(([codigo, d]) => ({
+          codigo,
+          nombre: d.nombre,
+        }))}
+      />
     </Hoja>
   );
 }

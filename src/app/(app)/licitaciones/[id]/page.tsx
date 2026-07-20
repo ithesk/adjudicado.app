@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import {
   listarFirmantes,
+  listarPaquetes,
   obtenerProceso,
   perfilEmpresa,
 } from "@/lib/licitaciones/queries";
 import { listarInstituciones } from "@/lib/queries";
 import { listarPlantillas } from "@/lib/licitaciones/queries-plantillas";
 import { paramsCotizacion } from "@/lib/licitaciones/cotizador";
+import { pdfDisponible } from "@/lib/licitaciones/pdf";
 import BidRoom from "./BidRoom";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +19,13 @@ export default async function ProcesoPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [detalle, perfil, firmantes, instituciones, plantillas] = await Promise.all([
+  const [detalle, perfil, firmantes, instituciones, plantillas, paquetes] = await Promise.all([
     obtenerProceso(id),
     perfilEmpresa(),
     listarFirmantes(),
     listarInstituciones(),
     listarPlantillas(),
+    listarPaquetes(id),
   ]);
   if (!detalle) notFound();
 
@@ -40,6 +43,8 @@ export default async function ProcesoPage({
       params={paramsCotizacion(detalle.proceso, perfil)}
       tieneFirmantes={firmantes.length > 0}
       tienePerfil={!!perfil}
+      pdfListo={pdfDisponible()}
+      paquetes={paquetes}
     />
   );
 }

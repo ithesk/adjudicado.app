@@ -8,18 +8,21 @@ import {
   actualizarItem,
   actualizarProceso,
   actualizarRequisito,
+  cambiarEstadoSubsanacion,
   cotizarItemCatalogo,
   construirCanonico,
   crearItem,
   crearProceso,
   crearRequisito,
   crearRequisitosLote,
+  crearSubsanacion,
   eliminarItem,
   eliminarProceso,
   eliminarRequisito,
   guardarFirmante,
   guardarPerfil,
   subirArchivoRequisito,
+  toggleRequisitoSubsanacion,
   type NuevoProceso,
   type ResultadoCanonico,
 } from "@/lib/licitaciones/queries";
@@ -145,4 +148,40 @@ export async function validarCanonicoAction(
   procesoId: string,
 ): Promise<ResultadoCanonico> {
   return construirCanonico(procesoId);
+}
+
+// ===== Subsanación =====
+
+export async function crearSubsanacionAction(
+  procesoId: string,
+  fechaLimite: string,
+  texto: string,
+): Promise<string | null> {
+  const error = await crearSubsanacion(procesoId, fechaLimite, texto);
+  if (!error) {
+    refrescar();
+    revalidatePath("/entidades", "layout");
+  }
+  return error;
+}
+
+export async function cambiarEstadoSubsanacionAction(
+  id: string,
+  estado: "enviada" | "cerrada",
+): Promise<string | null> {
+  const error = await cambiarEstadoSubsanacion(id, estado);
+  if (!error) {
+    refrescar();
+    revalidatePath("/entidades", "layout");
+  }
+  return error;
+}
+
+export async function toggleRequisitoSubsanacionAction(
+  requisitoId: string,
+  subsanacionId: string | null,
+): Promise<string | null> {
+  const error = await toggleRequisitoSubsanacion(requisitoId, subsanacionId);
+  if (!error) refrescar();
+  return error;
 }
