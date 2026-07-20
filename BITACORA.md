@@ -8,6 +8,18 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-20 — Estados de licitación con distinción visual (mapa único)
+
+**Hecho:** Pablo: «no hay distinción en cualquier estado de la licitación». La lista
+pintaba los 10 estados con un mismo chip gris; LineaTiempo sí distinguía pero con
+clases hardcodeadas. Nuevo `ESTADO_LIC_CHIP` en tipos.ts (única fuente, tonos -soft
+de la casa): trabajo activo neutro con punto gris (captura/calificación/costeo/
+armado) · **listo** primary · **sometido** primary con punto HUECO (en manos de la
+entidad, esperando) · **subsanación** warn · **adjudicado** ok · **perdido** danger ·
+**descartado** apagado. ProcesosLista usa chip+punto; LineaTiempo lee del mismo mapa.
+
+---
+
 ## 2026-07-20 — La Bid Room resuelve plantillas con la MISMA cascada que el generador
 
 **Hecho:** Pablo agregó COMPROMISO-ETICO al proceso de la SIE y «no se generaba».

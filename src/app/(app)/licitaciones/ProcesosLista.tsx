@@ -5,6 +5,7 @@ import { diasRestantes } from "@/lib/types";
 import { nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, urgenciaDot, textoDias } from "@/lib/ui";
 import {
+  ESTADO_LIC_CHIP,
   ESTADO_LIC_LABEL,
   MODALIDAD_LABEL,
   type LicProceso,
@@ -92,7 +93,13 @@ export default function ProcesosLista({
                   {MODALIDAD_LABEL[p.modalidad] ?? p.modalidad}
                 </td>
                 <td className="px-3 py-2.5">
-                  <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-ink">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs font-medium ${ESTADO_LIC_CHIP[p.estado].chip}`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${ESTADO_LIC_CHIP[p.estado].dot}`}
+                      aria-hidden
+                    />
                     {ESTADO_LIC_LABEL[p.estado]}
                   </span>
                 </td>
