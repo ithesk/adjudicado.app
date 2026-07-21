@@ -382,6 +382,33 @@ export async function actualizarItem(
   return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
+// Reordena las líneas ARRASTRADAS: recibe los ids en el orden final de la
+// pantalla y reescribe orden_indice secuencial (normaliza duplicados
+// heredados). El orden en pantalla es el orden del F.033; el número del
+// pliego no cambia (es identidad del pliego, no posición).
+export async function reordenarItems(
+  procesoId: string,
+  ids: string[],
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const errores = await Promise.all(
+    ids.map(async (itemId, i) => {
+      const { error } = await supabase
+        .from("lic_item")
+        .update({ orden_indice: i })
+        .eq("id", itemId)
+        .eq("proceso_id", procesoId)
+        .eq("org_id", miembro.org_id);
+      return error;
+    }),
+  );
+  const err = errores.find(Boolean);
+  return err ? `No se pudo reordenar: ${err.message}` : null;
+}
+
 export async function eliminarItem(id: string): Promise<string | null> {
   if (isDemo()) return "En modo demo no se borra.";
   const miembro = await getMiembro();

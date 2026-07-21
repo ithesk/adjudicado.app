@@ -8,6 +8,129 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-21 — Cotizador: reordenar ARRASTRANDO (las flechas duraron una tarde)
+
+**Hecho:** Pablo: «el sistema que quiero tiene que ser arrastrado». Las flechas ▲▼
+se reemplazan por **drag & drop nativo** (HTML5, sin librerías): asa ⋮⋮ junto al
+número (aparece al pasar el mouse), la fila viaja como imagen de arrastre, el
+destino se resalta y al soltar el orden queda al instante (optimista) mientras
+`reordenarItems` persiste orden_indice secuencial — un drop puede saltar varias
+posiciones, por eso la mutación recibe la lista completa de ids. Las dos sub-filas
+de cada línea aceptan el drop. Sigue: orden en pantalla = orden del F.033; el #
+del pliego no cambia. moverItem (flechas) eliminado.
+
+---
+
+## 2026-07-21 — Cotizador: reordenar líneas y «Agregar línea» al pie
+
+**Hecho:** quejas concretas de Pablo: no se puede mover una línea de posición, y
+para agregar otra hay que subir al «+» de la cabecera. Dos arreglos estilo Odoo:
+
+- **Flechas ▲▼ por fila** (aparecen al pasar el mouse, junto al #): `moverItem`
+  reescribe `orden_indice` SECUENCIAL para todo el proceso (normaliza duplicados
+  heredados) — el orden en pantalla ES el orden del F.033. El # del pliego no
+  cambia (es identidad del pliego, no posición). Bordes deshabilitados.
+- **«+ Agregar línea» al pie de la tabla**, donde termina el ojo — el botón de
+  la cabecera se queda.
+
+Ojo operativo: la laptop anda con ~17 GB libres y load ~5 — eslint/vitest
+tardaron minutos (Turbopack compactó 66 s su caché). Sugerido liberar disco.
+
+---
+
+## 2026-07-20 — Lista de licitaciones como tabla inteligente
+
+**Hecho:** Pablo: «eso debe tener una tabla dinámica con buscador y todas las
+funciones inteligentes». ProcesosLista rehecha (patrón del catálogo de entidades):
+
+- **Buscador tolerante** (`coincideTexto`) sobre código, objeto, ENTIDAD (nombre y
+  siglas — el page ahora pasa el mapa institucion_id→entidad), modalidad y estado,
+  con contador n/total.
+- **Filtros por etapa con conteos**: Todas · En trabajo · Sometidas · Adjudicadas ·
+  Perdidas y descartadas (los vacíos no se muestran).
+- **Orden por columna** (Cierre/Proceso/Estado, asc/desc con flecha): el cierre
+  ordena por el reloj VIVO — la subsanación abierta manda; sin fecha, al final.
+- La entidad ahora se VE en cada fila (siglas · objeto). Estado vacío por filtro.
+  Cabecera ordenable definida fuera del padre (la regla de la casa me la recordó
+  el propio eslint).
+
+---
+
+## 2026-07-20 — Estados de licitación con distinción visual (mapa único)
+
+**Hecho:** Pablo: «no hay distinción en cualquier estado de la licitación». La lista
+pintaba los 10 estados con un mismo chip gris; LineaTiempo sí distinguía pero con
+clases hardcodeadas. Nuevo `ESTADO_LIC_CHIP` en tipos.ts (única fuente, tonos -soft
+de la casa): trabajo activo neutro con punto gris (captura/calificación/costeo/
+armado) · **listo** primary · **sometido** primary con punto HUECO (en manos de la
+entidad, esperando) · **subsanación** warn · **adjudicado** ok · **perdido** danger ·
+**descartado** apagado. ProcesosLista usa chip+punto; LineaTiempo lee del mismo mapa.
+
+---
+
+## 2026-07-20 — La Bid Room resuelve plantillas con la MISMA cascada que el generador
+
+**Hecho:** Pablo agregó COMPROMISO-ETICO al proceso de la SIE y «no se generaba».
+Diagnóstico con la base: existen DOS plantillas con ese código — la variante de
+MITUR (lista ✓) y la genérica (borrador, sin taggear). Para la SIE la cascada no
+tiene nada usable → «¡FALTA!» en el índice. Pero la Bid Room mostraba «Se genera
+aquí» porque miraba las plantillas listas de TODA la org sin cascada por entidad
+(el gate del cliente y el del servidor divergían). Arreglo: `[id]/page.tsx` aplica
+`resolverPlantillas(listas, institucion_id del proceso)` antes de pasar
+plantillasOrg — la pantalla y el generador ahora dicen lo mismo. Para su caso:
+publicar la genérica de COMPROMISO-ETICO (o quitar el requisito duplicado — el
+COMP-ETICO del sistema ya se genera).
+
+---
+
+## 2026-07-20 — «1 PDF por sobre»: el paquete unido para subir 2-3 archivos, no 15
+
+**Hecho:** Pablo: «¿hay forma de que me des los PDF unidos, una opción por sobre?».
+Casilla **«1 PDF por sobre»** junto a Generar (marcada por defecto, solo con
+Gotenberg configurado): el ZIP trae `Sobre_A.pdf` y `Sobre_B.pdf` con TODOS los
+documentos unidos en el orden del índice (la subsanación, un solo
+`Subsanacion_<código>.pdf`). Piezas:
+
+- `unirPdfs()` en pdf.ts vía **Gotenberg `/forms/pdfengines/merge`** (el VPS ya
+  estaba; cero dependencias nuevas). El orden se garantiza con nombres 001.pdf….
+- Al unir, las **imágenes adjuntas también se convierten** a PDF (LibreOffice las
+  pagina); si algo no se puede convertir/unir viaja suelto y el índice lo declara
+  («suelto: …», «no se pudieron unir — van sueltos»). La unión fallida degrada a
+  sueltos: nunca se pierde un documento.
+- Huella con `unir` + zip `_pdf_unido.zip` (el listado de descargas lo etiqueta
+  «PDF unido»). Los documentos sueltos de cada requisito se siguen subiendo igual.
+
+---
+
+## 2026-07-20 — Nombres de archivo ASCII puro en el paquete (los portales los rechazan)
+
+**Hecho:** Pablo no podía subir los archivos generados: los nombres dentro del ZIP
+llevaban espacios, acentos y el guion largo («Sobre A/01 SNCC.F.033 — Oferta
+Económica.pdf»). `limpio()` ahora normaliza a ASCII puro — NFD sin diacríticos
+(ñ→n), todo lo que no sea [A-Za-z0-9_-] pasa a "_", colapsado y recortado:
+`Sobre_A/01_SNCC_F_033_Oferta_Economica.pdf`, `00_INDICE.txt`. Los documentos
+sueltos ya salían limpios. Motor de render → v3 (invalida ZIP reusados con los
+nombres viejos). Probado con casos reales (Declaración jurada, ñ, ¡!, &).
+
+---
+
+## 2026-07-20 — El F.033 imprime LO OFERTADO (marca + modelo — descripción)
+
+**Hecho:** pregunta de Pablo: si pego la spec del pliego y abajo pongo mi Tablet
+Samsung, ¿cuál sale en el formulario? Salía SOLO el campo descripción (sin marca ni
+modelo), y con producto incompleto caía a la spec del pliego sin avisar. Dos cambios:
+
+- `construirDatos`: la línea económica imprime **«Marca Modelo — Descripción»**
+  cuando el producto está completo; la spec del pliego sigue de respaldo. 2 tests
+  de regresión sobre el expediente realista del contrato.
+- **Aviso en el cotizador**: chip «saldrá la spec del pliego» en la línea mientras
+  falte marca, modelo o descripción — antes te enterabas viendo el PDF.
+- **`motor: 2` en la huella**: subir la versión del motor de render invalida los
+  ZIP reusados cuando cambia CÓMO se imprime (no solo qué datos) — antes un cambio
+  así seguía sirviendo el paquete viejo hasta que el contenido cambiara.
+
+---
+
 ## 2026-07-19 — Bid Room rediseñada: ficha con riel (auditoría UI/UX de 12 fallos)
 
 **Hecho:** Pablo: «una sola columna, no aprovecha espacios, múltiples fallos». Un

@@ -8,6 +8,7 @@
 import { ArrowRight, Check } from "lucide-react";
 import { btnPrimary } from "@/components/ui";
 import {
+  ESTADO_LIC_CHIP,
   ESTADO_LIC_DESCRIPCION,
   ESTADO_LIC_LABEL,
   type EstadoLicitacion,
@@ -23,11 +24,8 @@ const LINEA: EstadoLicitacion[] = [
   "sometido",
 ];
 
-const TERMINALES: { estado: EstadoLicitacion; clase: string }[] = [
-  { estado: "adjudicado", clase: "bg-ok-soft text-ok" },
-  { estado: "perdido", clase: "bg-danger-soft text-danger" },
-  { estado: "descartado", clase: "bg-surface-2 text-muted" },
-];
+// La presentación sale de ESTADO_LIC_CHIP (misma fuente que la lista).
+const TERMINALES: EstadoLicitacion[] = ["adjudicado", "perdido", "descartado"];
 
 export default function LineaTiempo({
   estado,
@@ -43,7 +41,7 @@ export default function LineaTiempo({
   const posicion = idx >= 0 ? idx : LINEA.length;
   const siguiente = idx >= 0 && idx < LINEA.length - 1 ? LINEA[idx + 1] : null;
   const enSubsanacion = estado === "subsanacion";
-  const terminal = TERMINALES.find((t) => t.estado === estado);
+  const terminal = TERMINALES.find((t) => t === estado);
 
   return (
     <div className="flex flex-wrap items-center gap-x-1 gap-y-2">
@@ -92,13 +90,13 @@ export default function LineaTiempo({
 
       {/* Subsanación: desvío posible tras someter. */}
       {enSubsanacion && (
-        <span className="rounded-full bg-warn-soft px-2 py-1 text-[11.5px] font-medium text-warn">
+        <span className={`rounded-full px-2 py-1 text-[11.5px] font-medium ${ESTADO_LIC_CHIP.subsanacion.chip}`}>
           En subsanación
         </span>
       )}
       {terminal && (
-        <span className={`rounded-full px-2 py-1 text-[11.5px] font-semibold ${terminal.clase}`}>
-          {ESTADO_LIC_LABEL[terminal.estado]}
+        <span className={`rounded-full px-2 py-1 text-[11.5px] font-semibold ${ESTADO_LIC_CHIP[terminal].chip}`}>
+          {ESTADO_LIC_LABEL[terminal]}
         </span>
       )}
 

@@ -6,9 +6,9 @@
 // celda edita en línea y guarda al salir. El precio sale del catálogo de
 // Precios (snapshot congelado) o se teclea (manual).
 
-import { useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, Plus, Search, Trash2, X } from "lucide-react";
+import { Calculator, GripVertical, Plus, Search, Trash2, X } from "lucide-react";
 import { Panel, SectionTitle, btnPrimary } from "@/components/ui";
 import { formatRD } from "@/lib/types";
 import { fmtUSD } from "@/lib/precios/tipos";
@@ -18,6 +18,7 @@ import {
   cotizarItemAction,
   crearItemAction,
   eliminarItemAction,
+  reordenarItemsAction,
 } from "@/lib/actions/licitaciones";
 import type { LicItem, LicProceso } from "@/lib/licitaciones/tipos";
 import {
@@ -43,6 +44,37 @@ export default function CotizadorItems({
   const [error, setError] = useState<string | null>(null);
   const [buscandoEn, setBuscandoEn] = useState<string | null>(null);
   const [pendiente, startTransition] = useTransition();
+
+  // ARRASTRAR PARA REORDENAR: el orden local manda al instante (optimista)
+  // mientras el servidor persiste; el orden en pantalla es el del F.033.
+  const [ordenLocal, setOrdenLocal] = useState<string[] | null>(null);
+  const [arrastrando, setArrastrando] = useState<string | null>(null);
+  const [sobre, setSobre] = useState<string | null>(null);
+
+  const mostrados = useMemo(() => {
+    if (!ordenLocal) return items;
+    const porId = new Map(items.map((i) => [i.id, i]));
+    const enOrden = ordenLocal
+      .map((id) => porId.get(id))
+      .filter(Boolean) as LicItem[];
+    const nuevos = items.filter((i) => !ordenLocal.includes(i.id));
+    return [...enOrden, ...nuevos];
+  }, [items, ordenLocal]);
+
+  function soltarSobre(targetId: string) {
+    const origen = arrastrando;
+    setArrastrando(null);
+    setSobre(null);
+    if (!origen || origen === targetId) return;
+    const ids = mostrados.map((i) => i.id);
+    const from = ids.indexOf(origen);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, origen); // subir = antes del destino; bajar = después
+    setOrdenLocal(ids);
+    correr(() => reordenarItemsAction(proceso.id, ids));
+  }
 
   const totales = totalesProceso(items, params.itbisPct);
   const sinCotizar = items.filter(
@@ -105,7 +137,7 @@ export default function CotizadorItems({
             columnas chicas y la unidad termina más ancha que la descripción). */}
         <table className="w-full min-w-[760px] table-fixed text-sm">
           <colgroup>
-            <col className="w-8" />
+            <col className="w-14" />
             <col />
             <col className="w-16" />
             <col className="w-14" />
@@ -132,15 +164,25 @@ export default function CotizadorItems({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {mostrados.map((item) => (
               <Linea
                 key={item.id}
                 item={item}
                 params={params}
                 pendiente={pendiente}
+                enDrag={arrastrando === item.id}
+                esDestino={sobre === item.id && arrastrando !== null && arrastrando !== item.id}
+                hayArrastre={arrastrando !== null}
                 buscando={buscandoEn === item.id}
                 setBuscando={(v) => setBuscandoEn(v ? item.id : null)}
                 onPatch={(p) => patch(item.id, p)}
+                onArrastrar={() => setArrastrando(item.id)}
+                onSobre={() => setSobre(item.id)}
+                onSoltar={() => soltarSobre(item.id)}
+                onFinArrastre={() => {
+                  setArrastrando(null);
+                  setSobre(null);
+                }}
                 onCotizar={(o) => {
                   setBuscandoEn(null);
                   correr(() => cotizarItemAction(item.id, o));
@@ -151,6 +193,22 @@ export default function CotizadorItems({
                 }}
               />
             ))}
+            {/* Agregar donde termina el ojo (patrón Odoo), no solo arriba. */}
+            {items.length > 0 && (
+              <tr>
+                <td colSpan={8} className="px-2 py-1">
+                  <button
+                    type="button"
+                    disabled={pendiente}
+                    onClick={() => correr(() => crearItemAction(proceso.id))}
+                    className="flex w-full items-center gap-1.5 rounded px-1.5 py-1.5 text-left text-[12.5px] font-medium text-primary transition-colors hover:bg-surface-2"
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+                    Agregar línea
+                  </button>
+                </td>
+              </tr>
+            )}
             {items.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center">
@@ -199,33 +257,92 @@ export default function CotizadorItems({
   );
 }
 
+// ¿El F.033 imprimirá LO OFERTADO o caerá a la spec del pliego? Solo con
+// marca + modelo + descripción completos sale lo tuyo.
+function productoIncompleto(item: LicItem): boolean {
+  return !(item.marca && item.modelo && item.descripcion);
+}
+
 function Linea({
   item,
   params,
   pendiente,
+  enDrag,
+  esDestino,
+  hayArrastre,
   buscando,
   setBuscando,
   onPatch,
+  onArrastrar,
+  onSobre,
+  onSoltar,
+  onFinArrastre,
   onCotizar,
   onEliminar,
 }: {
   item: LicItem;
   params: ParamsCotizacion;
   pendiente: boolean;
+  enDrag: boolean;
+  esDestino: boolean;
+  hayArrastre: boolean;
   buscando: boolean;
   setBuscando: (v: boolean) => void;
   onPatch: (p: Parameters<typeof actualizarItemAction>[1]) => void;
+  onArrastrar: () => void;
+  onSobre: () => void;
+  onSoltar: () => void;
+  onFinArrastre: () => void;
   onCotizar: (o: { suplidor_id: string; sku: string; costo_usd: number }) => void;
   onEliminar: () => void;
 }) {
+  const filaRef = useRef<HTMLTableRowElement>(null);
   const t = totalesItem(item, params.itbisPct);
   const descartado = !item.ofertamos;
 
+  // El drop cae sobre cualquiera de las dos sub-filas de la línea.
+  const propsDestino = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!hayArrastre) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      onSobre();
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      onSoltar();
+    },
+  };
+  const claseDrag = enDrag ? "opacity-40" : esDestino ? "bg-primary/10" : "";
+
   return (
     <>
-      <tr className={`border-b border-line ${descartado ? "opacity-50" : ""}`}>
-        <td className="px-2 py-1 align-top font-mono text-xs font-semibold text-muted">
-          {item.numero}
+      <tr
+        ref={filaRef}
+        className={`group border-b border-line ${descartado ? "opacity-50" : ""} ${claseDrag}`}
+        {...propsDestino}
+      >
+        <td className="px-1 py-1 align-top">
+          <span className="flex items-center gap-1">
+            {/* ARRASTRA el asa para reordenar: este orden es el del F.033.
+                El # del pliego no cambia (identidad, no posición). */}
+            <span
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", item.id);
+                e.dataTransfer.effectAllowed = "move";
+                if (filaRef.current) e.dataTransfer.setDragImage(filaRef.current, 16, 16);
+                onArrastrar();
+              }}
+              onDragEnd={onFinArrastre}
+              className="cursor-grab touch-none rounded text-muted opacity-0 transition-opacity hover:text-ink active:cursor-grabbing group-hover:opacity-100"
+              title="Arrastra para cambiar el orden (es el orden del F.033)"
+              aria-label={`Arrastrar la línea ${item.numero}`}
+            >
+              <GripVertical className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            </span>
+            <span className="font-mono text-xs font-semibold text-muted">{item.numero}</span>
+          </span>
         </td>
         <td className="px-1 py-1 align-top">
           {/* Crece sola con el contenido (auto-resize al montar y al teclear). */}
@@ -330,7 +447,10 @@ function Linea({
 
       {/* Segunda línea: lo que ofertamos + la vía del precio (como la
           descripción extendida de una línea en Odoo). */}
-      <tr className={`border-b border-line ${descartado ? "opacity-60" : ""}`}>
+      <tr
+        className={`border-b border-line ${descartado ? "opacity-60" : ""} ${claseDrag}`}
+        {...propsDestino}
+      >
         <td />
         <td colSpan={7} className="px-1 pb-2 pt-0">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -369,6 +489,14 @@ function Linea({
                   onBlur={(e) => onPatch({ descripcion: e.target.value || null })}
                   className={`${celda} min-w-52 flex-1`}
                 />
+                {productoIncompleto(item) && (
+                  <span
+                    className="whitespace-nowrap rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-medium text-warn"
+                    title="El F.033 imprime marca + modelo + descripción de lo ofertado. Mientras falte alguno de los tres, esta línea saldrá con la descripción del pliego tal cual."
+                  >
+                    saldrá la spec del pliego
+                  </span>
+                )}
                 {item.sku && (
                   <span className="whitespace-nowrap font-mono text-[10.5px] text-muted">
                     {item.sku} · {fmtUSD(item.costo_usd)} × {item.tasa} ·{" "}

@@ -90,14 +90,15 @@ export interface PaqueteGenerado {
 function FilaPaquete({ p }: { p: PaqueteGenerado }) {
   const [bajando, setBajando] = useState(false);
   const nombre = p.storage_path.split("/").pop() ?? "paquete.zip";
-  const esPdf = /_pdf\.zip$/.test(nombre);
+  const esPdf = /_pdf(_unido)?\.zip$/.test(nombre);
+  const esUnido = /_unido\.zip$/.test(nombre);
   return (
     <li className="flex items-center gap-2 py-1.5">
       <span className="font-mono text-[11.5px] text-muted">v{p.version}</span>
       <span
         className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${esPdf ? "bg-primary/10 text-primary" : "bg-surface-2 text-muted"}`}
       >
-        {esPdf ? "PDF" : "Word"}
+        {esUnido ? "PDF unido" : esPdf ? "PDF" : "Word"}
       </span>
       <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
         {p.generado_at.slice(8, 10)}/{p.generado_at.slice(5, 7)} {p.generado_at.slice(11, 16)}
@@ -166,6 +167,8 @@ export default function BidRoom({
   const [erroresSub, setErroresSub] = useState<string[] | null>(null);
   const [pasoTexto, setPasoTexto] = useState<string | null>(null);
   const [reusado, setReusado] = useState<"docx" | "pdf" | null>(null);
+  // Un solo PDF por sobre (los portales piden subir 2-3 archivos, no 15).
+  const [unir, setUnir] = useState(true);
   const [pendiente, startTransition] = useTransition();
 
   const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
@@ -225,7 +228,7 @@ export default function BidRoom({
     startTransition(async () => {
       try {
         const res = await fetch(
-          `/api/licitaciones/${proceso.id}/generar?formato=${formato}${forzar ? "&regenerar=1" : ""}${subsanacionId ? `&subsanacion=${subsanacionId}` : ""}`,
+          `/api/licitaciones/${proceso.id}/generar?formato=${formato}${formato === "pdf" && unir ? "&unir=1" : ""}${forzar ? "&regenerar=1" : ""}${subsanacionId ? `&subsanacion=${subsanacionId}` : ""}`,
         );
         if (!res.ok) {
           const j = await res.json().catch(() => null);
@@ -303,6 +306,19 @@ export default function BidRoom({
               </span>
             ) : (
               <>
+                {pdfListo && (
+                  <label
+                    className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-muted transition-colors hover:text-ink"
+                    title="Une todos los PDF de cada sobre en UN solo archivo: subes Sobre_A.pdf y Sobre_B.pdf, no 15 archivos. Lo que no sea unible viaja suelto y el índice lo declara."
+                  >
+                    <input
+                      type="checkbox"
+                      checked={unir}
+                      onChange={(e) => setUnir(e.target.checked)}
+                    />
+                    1 PDF por sobre
+                  </label>
+                )}
                 <button
                   type="button"
                   onClick={() => generarPaquete(fmtPrincipal)}

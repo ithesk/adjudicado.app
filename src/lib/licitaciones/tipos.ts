@@ -39,6 +39,24 @@ export const ESTADO_LIC_LABEL: Record<EstadoLicitacion, string> = {
   descartado: "Descartado",
 };
 
+// La presentación de cada estado — ÚNICA fuente de verdad para la lista y
+// la línea de tiempo. Lógica ERP con los tonos -soft de la casa: neutro =
+// trabajando; primary = hito/en juego; warn = urgente (hay plazo); ok /
+// danger / apagado = resultado. El punto de "sometido" va HUECO (anillo):
+// está en manos de la entidad, esperando.
+export const ESTADO_LIC_CHIP: Record<EstadoLicitacion, { chip: string; dot: string }> = {
+  captura: { chip: "bg-surface-2 text-ink", dot: "bg-muted" },
+  calificacion: { chip: "bg-surface-2 text-ink", dot: "bg-muted" },
+  costeo: { chip: "bg-surface-2 text-ink", dot: "bg-muted" },
+  armado: { chip: "bg-surface-2 text-ink", dot: "bg-muted" },
+  listo: { chip: "bg-primary/10 text-primary", dot: "bg-primary" },
+  sometido: { chip: "bg-primary/10 text-primary", dot: "border border-primary" },
+  subsanacion: { chip: "bg-warn-soft text-warn", dot: "bg-warn" },
+  adjudicado: { chip: "bg-ok-soft text-ok", dot: "bg-ok" },
+  perdido: { chip: "bg-danger-soft text-danger", dot: "bg-danger" },
+  descartado: { chip: "bg-surface-2 text-muted", dot: "bg-line" },
+};
+
 // Qué se hace en cada etapa, en cristiano (tooltips de la línea de tiempo).
 export const ESTADO_LIC_DESCRIPCION: Record<EstadoLicitacion, string> = {
   captura: "Cargar el pliego: los datos del proceso, los requisitos y los ítems",

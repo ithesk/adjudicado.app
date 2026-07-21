@@ -1,17 +1,22 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { listarProcesos, perfilEmpresa, subsanacionesAbiertas } from "@/lib/licitaciones/queries";
+import { listarEntidadesLigero } from "@/lib/entidades/queries";
 import { CabeceraPagina, Hoja, btnPrimary } from "@/components/ui";
 import ProcesosLista from "./ProcesosLista";
 
 export const dynamic = "force-dynamic";
 
 export default async function LicitacionesPage() {
-  const [procesos, perfil, subsanaciones] = await Promise.all([
+  const [procesos, perfil, subsanaciones, entidades] = await Promise.all([
     listarProcesos(),
     perfilEmpresa(),
     subsanacionesAbiertas(),
+    listarEntidadesLigero(),
   ]);
+  const entidadPorId = Object.fromEntries(
+    entidades.map((e) => [e.id, { nombre: e.nombre, siglas: e.siglas }]),
+  );
 
   return (
     <Hoja ancho="ficha" className="space-y-4">
@@ -38,7 +43,11 @@ export default async function LicitacionesPage() {
         </p>
       )}
 
-      <ProcesosLista procesos={procesos} subsanaciones={subsanaciones} />
+      <ProcesosLista
+        procesos={procesos}
+        subsanaciones={subsanaciones}
+        entidades={entidadPorId}
+      />
     </Hoja>
   );
 }

@@ -29,7 +29,7 @@ import {
 import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
 import { resolverPlantillas } from "@/lib/licitaciones/plantillas";
 import PizZipLib from "pizzip";
-import { docxAPdf, pdfDisponible } from "@/lib/licitaciones/pdf";
+import { docxAPdf, pdfDisponible, unirPdfs } from "@/lib/licitaciones/pdf";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
 import {
   grupoDeRequisito,
@@ -46,9 +46,17 @@ const SOBRE: Record<string, string> = {
   otros: "Sobre A",
 };
 
-// Nombre apto para archivo dentro del ZIP.
+// Nombre apto para archivo dentro del ZIP: ASCII PURO — sin espacios, sin
+// acentos, sin símbolos (los portales de las entidades rechazan subirlos).
+// Solo letras, números, guion y guion bajo.
 function limpio(texto: string): string {
-  return texto.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 70);
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // acentos y diéresis fuera (ñ → n)
+    .replace(/[^A-Za-z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
 }
 
 export const runtime = "nodejs";
@@ -62,6 +70,9 @@ export async function GET(
   // Con ?subsanacion=<id> el paquete es CHICO: solo los requisitos que la
   // entidad pidió en esa subsanación, todos obligatorios, sin sobres.
   const subsanacionId = new URL(req.url).searchParams.get("subsanacion");
+  // Con ?unir=1 (solo PDF): UN solo PDF por sobre — los portales piden subir
+  // 2-3 archivos, no 15. Lo que no se pueda unir viaja suelto y declarado.
+  const unir = formato === "pdf" && new URL(req.url).searchParams.get("unir") === "1";
   if (formato === "pdf" && !pdfDisponible()) {
     return NextResponse.json(
       { error: "El convertidor PDF no está configurado todavía (ver infra/gotenberg)." },
@@ -231,7 +242,12 @@ export async function GET(
   const huella = createHash("sha256")
     .update(
       JSON.stringify({
+        // Versión del MOTOR de render: subirla invalida los ZIP reusados
+        // cuando cambia cómo se imprimen los documentos (no solo qué datos).
+        // v3: nombres de archivo ASCII puro dentro del ZIP.
+        motor: 3,
         formato,
+        unir,
         // El paquete de subsanación es OTRO paquete: misma maquinaria,
         // huella propia (acotada a lo pedido).
         subsanacion: subsanacion?.id ?? null,
@@ -388,11 +404,20 @@ export async function GET(
       if (!adj) return;
       let buffer: Buffer = Buffer.from(await adj.arrayBuffer());
       let ext = ruta.match(/\.[a-z0-9]+$/i)?.[0]?.toLowerCase() ?? "";
-      // En el paquete PDF, los adjuntos Word también se convierten;
-      // el resto (pdf, imágenes) viaja tal cual.
-      if (formato === "pdf" && (ext === ".docx" || ext === ".doc")) {
-        buffer = await docxAPdf(`adj${ext}`, buffer);
-        ext = ".pdf";
+      // En el paquete PDF, los adjuntos Word también se convierten; al UNIR,
+      // también las imágenes (LibreOffice las pagina) para que entren al
+      // PDF del sobre. Si una conversión falla, viaja tal cual (suelta).
+      const convertible =
+        ext === ".docx" ||
+        ext === ".doc" ||
+        (unir && [".png", ".jpg", ".jpeg", ".webp"].includes(ext));
+      if (formato === "pdf" && convertible) {
+        try {
+          buffer = await docxAPdf(`adj${ext}`, buffer);
+          ext = ".pdf";
+        } catch {
+          // sin conversión: se anexa en su formato original
+        }
       }
       adjuntoPorRequisito.set(q.id, {
         buffer,
@@ -418,6 +443,14 @@ export async function GET(
         "",
       ];
   const sinArchivo: string[] = [];
+  const piezas: {
+    sobre: string;
+    nn: string;
+    codigo: string;
+    nombre: string;
+    buffer: Buffer;
+    ext: string;
+  }[] = [];
   let n = 0;
   let sobreAnterior = "";
   for (const q of ordenados) {
@@ -449,8 +482,7 @@ export async function GET(
     if (buffer) {
       n += 1;
       const nn = String(n).padStart(2, "0");
-      const entrada = `${sobre ? `${sobre}/` : ""}${nn} ${limpio(q.codigo)} — ${limpio(q.nombre)}${ext}`;
-      zip.file(entrada, buffer);
+      piezas.push({ sobre, nn, codigo: q.codigo, nombre: q.nombre, buffer, ext });
       indice.push(`  ${nn} ${q.codigo} — ${q.nombre} (${origenNota})`);
     } else if (requisitoEstandar(q.codigo)?.via === "linea") {
       indice.push(`  ·· ${q.codigo} — ${q.nombre}: la entidad lo verifica en línea, no lleva archivo`);
@@ -459,14 +491,45 @@ export async function GET(
       sinArchivo.push(`${q.codigo} — ${q.nombre}`);
     }
   }
+
+  // Escritura: suelto (lo de siempre) o UNIDO — un PDF por sobre, en el
+  // mismo orden del índice; lo no unible viaja aparte y queda declarado.
+  const entradaDe = (p: (typeof piezas)[number]) =>
+    `${p.sobre ? `${limpio(p.sobre)}/` : ""}${p.nn}_${limpio(p.codigo)}_${limpio(p.nombre)}${p.ext}`;
+  if (!unir) {
+    for (const p of piezas) zip.file(entradaDe(p), p.buffer);
+  } else {
+    const grupos = new Map<string, typeof piezas>();
+    for (const p of piezas) grupos.set(p.sobre, [...(grupos.get(p.sobre) ?? []), p]);
+    indice.push("", "Unidos para subir:");
+    for (const [sobre, lista] of grupos) {
+      const pdfs = lista.filter((p) => p.ext === ".pdf");
+      const sueltas = lista.filter((p) => p.ext !== ".pdf");
+      const nombreUnido = limpio(sobre || `Subsanacion_${canonico.proceso.codigo}`) + ".pdf";
+      if (pdfs.length > 0) {
+        try {
+          zip.file(nombreUnido, await unirPdfs(pdfs.map((p) => p.buffer)));
+          indice.push(`  ${nombreUnido} — ${pdfs.length} documento${pdfs.length === 1 ? "" : "s"} en orden`);
+        } catch {
+          // Si la unión falla, nada se pierde: van sueltos como siempre.
+          for (const p of pdfs) zip.file(entradaDe(p), p.buffer);
+          indice.push(`  (no se pudieron unir los de ${sobre || "la subsanación"} — van sueltos)`);
+        }
+      }
+      for (const p of sueltas) {
+        zip.file(entradaDe(p), p.buffer);
+        indice.push(`  suelto: ${p.nn} ${p.codigo} (${p.ext} no se une a PDF)`);
+      }
+    }
+  }
   if (sinArchivo.length > 0) {
     indice.push("", "Pendientes de completar antes de presentar:", ...sinArchivo.map((s) => `  - ${s}`));
   }
-  zip.file("00 INDICE.txt", indice.join("\n") + "\n");
+  zip.file("00_INDICE.txt", indice.join("\n") + "\n");
 
   const zipFinal: Buffer = zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
   let zipNombre = `${subsanacion ? "subsanacion" : "paquete"}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}_v${canonico.meta.version}.zip`;
-  if (formato === "pdf") zipNombre = zipNombre.replace(/\.zip$/, "_pdf.zip");
+  if (formato === "pdf") zipNombre = zipNombre.replace(/\.zip$/, unir ? "_pdf_unido.zip" : "_pdf.zip");
   const user = await getUser();
 
   const base = `${miembro.org_id}/licitaciones/${id}/v${canonico.meta.version}`;

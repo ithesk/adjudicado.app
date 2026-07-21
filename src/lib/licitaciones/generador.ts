@@ -148,7 +148,11 @@ export function construirDatos(canonico: ProcesoCanonico): Record<string, unknow
     totalOferta = Math.round((totalOferta + subtotal + itbis) * 100) / 100;
     return {
       numero: linea.item,
-      descripcion: item?.producto?.descripcion ?? item?.spec_cruda ?? "",
+      // LO OFERTADO manda: marca + modelo + descripción (como se estila en
+      // una oferta económica). Sin producto completo, la spec del pliego.
+      descripcion: item?.producto
+        ? `${item.producto.marca} ${item.producto.modelo} — ${item.producto.descripcion}`
+        : item?.spec_cruda ?? "",
       unidad: item?.unidad ?? "UD",
       cantidad: num(item?.cantidad ?? 1).replace(/\.00$/, ""),
       precio_unitario: num(linea.precio_unitario),
