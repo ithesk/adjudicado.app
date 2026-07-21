@@ -8,6 +8,23 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-21 — Cotizador: reordenar líneas y «Agregar línea» al pie
+
+**Hecho:** quejas concretas de Pablo: no se puede mover una línea de posición, y
+para agregar otra hay que subir al «+» de la cabecera. Dos arreglos estilo Odoo:
+
+- **Flechas ▲▼ por fila** (aparecen al pasar el mouse, junto al #): `moverItem`
+  reescribe `orden_indice` SECUENCIAL para todo el proceso (normaliza duplicados
+  heredados) — el orden en pantalla ES el orden del F.033. El # del pliego no
+  cambia (es identidad del pliego, no posición). Bordes deshabilitados.
+- **«+ Agregar línea» al pie de la tabla**, donde termina el ojo — el botón de
+  la cabecera se queda.
+
+Ojo operativo: la laptop anda con ~17 GB libres y load ~5 — eslint/vitest
+tardaron minutos (Turbopack compactó 66 s su caché). Sugerido liberar disco.
+
+---
+
 ## 2026-07-20 — Lista de licitaciones como tabla inteligente
 
 **Hecho:** Pablo: «eso debe tener una tabla dinámica con buscador y todas las

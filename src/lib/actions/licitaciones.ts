@@ -21,6 +21,7 @@ import {
   eliminarRequisito,
   guardarFirmante,
   guardarPerfil,
+  moverItem,
   subirArchivoRequisito,
   toggleRequisitoSubsanacion,
   type NuevoProceso,
@@ -71,6 +72,15 @@ export async function actualizarItemAction(
 
 export async function eliminarItemAction(id: string): Promise<string | null> {
   const error = await eliminarItem(id);
+  if (!error) refrescar();
+  return error;
+}
+
+export async function moverItemAction(
+  id: string,
+  direccion: "arriba" | "abajo",
+): Promise<string | null> {
+  const error = await moverItem(id, direccion);
   if (!error) refrescar();
   return error;
 }

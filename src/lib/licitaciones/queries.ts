@@ -382,6 +382,54 @@ export async function actualizarItem(
   return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
+// Mueve una línea una posición arriba/abajo. Reescribe orden_indice
+// SECUENCIAL para todo el proceso (normaliza duplicados heredados): el
+// orden en pantalla es el orden del F.033. El número del pliego no cambia.
+export async function moverItem(
+  id: string,
+  direccion: "arriba" | "abajo",
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+
+  const { data: fila } = await supabase
+    .from("lic_item")
+    .select("proceso_id")
+    .eq("id", id)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  if (!fila) return "Línea no encontrada.";
+
+  const { data: items } = await supabase
+    .from("lic_item")
+    .select("id, orden_indice")
+    .eq("proceso_id", fila.proceso_id)
+    .eq("org_id", miembro.org_id)
+    .order("orden_indice")
+    .order("numero");
+  const lista = items ?? [];
+  const idx = lista.findIndex((i) => i.id === id);
+  const destino = direccion === "arriba" ? idx - 1 : idx + 1;
+  if (idx < 0 || destino < 0 || destino >= lista.length) return null; // borde: nada que hacer
+
+  const ids = lista.map((i) => i.id);
+  [ids[idx], ids[destino]] = [ids[destino], ids[idx]];
+  const errores = await Promise.all(
+    ids.map(async (itemId, i) => {
+      const { error } = await supabase
+        .from("lic_item")
+        .update({ orden_indice: i })
+        .eq("id", itemId)
+        .eq("org_id", miembro.org_id);
+      return error;
+    }),
+  );
+  const err = errores.find(Boolean);
+  return err ? `No se pudo mover: ${err.message}` : null;
+}
+
 export async function eliminarItem(id: string): Promise<string | null> {
   if (isDemo()) return "En modo demo no se borra.";
   const miembro = await getMiembro();

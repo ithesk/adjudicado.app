@@ -8,7 +8,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, Plus, Search, Trash2, X } from "lucide-react";
+import { Calculator, ChevronDown, ChevronUp, Plus, Search, Trash2, X } from "lucide-react";
 import { Panel, SectionTitle, btnPrimary } from "@/components/ui";
 import { formatRD } from "@/lib/types";
 import { fmtUSD } from "@/lib/precios/tipos";
@@ -18,6 +18,7 @@ import {
   cotizarItemAction,
   crearItemAction,
   eliminarItemAction,
+  moverItemAction,
 } from "@/lib/actions/licitaciones";
 import type { LicItem, LicProceso } from "@/lib/licitaciones/tipos";
 import {
@@ -105,7 +106,7 @@ export default function CotizadorItems({
             columnas chicas y la unidad termina más ancha que la descripción). */}
         <table className="w-full min-w-[760px] table-fixed text-sm">
           <colgroup>
-            <col className="w-8" />
+            <col className="w-14" />
             <col />
             <col className="w-16" />
             <col className="w-14" />
@@ -132,15 +133,18 @@ export default function CotizadorItems({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {items.map((item, i) => (
               <Linea
                 key={item.id}
                 item={item}
                 params={params}
                 pendiente={pendiente}
+                primera={i === 0}
+                ultima={i === items.length - 1}
                 buscando={buscandoEn === item.id}
                 setBuscando={(v) => setBuscandoEn(v ? item.id : null)}
                 onPatch={(p) => patch(item.id, p)}
+                onMover={(dir) => correr(() => moverItemAction(item.id, dir))}
                 onCotizar={(o) => {
                   setBuscandoEn(null);
                   correr(() => cotizarItemAction(item.id, o));
@@ -151,6 +155,22 @@ export default function CotizadorItems({
                 }}
               />
             ))}
+            {/* Agregar donde termina el ojo (patrón Odoo), no solo arriba. */}
+            {items.length > 0 && (
+              <tr>
+                <td colSpan={8} className="px-2 py-1">
+                  <button
+                    type="button"
+                    disabled={pendiente}
+                    onClick={() => correr(() => crearItemAction(proceso.id))}
+                    className="flex w-full items-center gap-1.5 rounded px-1.5 py-1.5 text-left text-[12.5px] font-medium text-primary transition-colors hover:bg-surface-2"
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+                    Agregar línea
+                  </button>
+                </td>
+              </tr>
+            )}
             {items.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center">
@@ -209,18 +229,24 @@ function Linea({
   item,
   params,
   pendiente,
+  primera,
+  ultima,
   buscando,
   setBuscando,
   onPatch,
+  onMover,
   onCotizar,
   onEliminar,
 }: {
   item: LicItem;
   params: ParamsCotizacion;
   pendiente: boolean;
+  primera: boolean;
+  ultima: boolean;
   buscando: boolean;
   setBuscando: (v: boolean) => void;
   onPatch: (p: Parameters<typeof actualizarItemAction>[1]) => void;
+  onMover: (direccion: "arriba" | "abajo") => void;
   onCotizar: (o: { suplidor_id: string; sku: string; costo_usd: number }) => void;
   onEliminar: () => void;
 }) {
@@ -229,9 +255,34 @@ function Linea({
 
   return (
     <>
-      <tr className={`border-b border-line ${descartado ? "opacity-50" : ""}`}>
-        <td className="px-2 py-1 align-top font-mono text-xs font-semibold text-muted">
-          {item.numero}
+      <tr className={`group border-b border-line ${descartado ? "opacity-50" : ""}`}>
+        <td className="px-1 py-1 align-top">
+          <span className="flex items-center gap-0.5">
+            {/* Reordenar: este orden es el del F.033. El # del pliego no cambia. */}
+            <span className="flex flex-col">
+              <button
+                type="button"
+                disabled={pendiente || primera}
+                onClick={() => onMover("arriba")}
+                className="rounded text-muted opacity-0 transition-opacity hover:text-ink disabled:!opacity-0 group-hover:opacity-100"
+                aria-label="Subir línea"
+                title="Mover arriba (cambia el orden en el F.033)"
+              >
+                <ChevronUp className="h-3 w-3" strokeWidth={2.4} />
+              </button>
+              <button
+                type="button"
+                disabled={pendiente || ultima}
+                onClick={() => onMover("abajo")}
+                className="rounded text-muted opacity-0 transition-opacity hover:text-ink disabled:!opacity-0 group-hover:opacity-100"
+                aria-label="Bajar línea"
+                title="Mover abajo (cambia el orden en el F.033)"
+              >
+                <ChevronDown className="h-3 w-3" strokeWidth={2.4} />
+              </button>
+            </span>
+            <span className="font-mono text-xs font-semibold text-muted">{item.numero}</span>
+          </span>
         </td>
         <td className="px-1 py-1 align-top">
           {/* Crece sola con el contenido (auto-resize al montar y al teclear). */}
