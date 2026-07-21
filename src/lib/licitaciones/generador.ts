@@ -37,6 +37,11 @@ export const GENERABLES: Record<string, { plantilla: string; carpeta: string; no
     carpeta: "dgcp",
     nombre: "Compromiso Ético de Proveedores",
   },
+  "SNCC.F.040": {
+    plantilla: "SNCC_F040_Debida_Diligencia-tpl.docx",
+    carpeta: "dgcp",
+    nombre: "Debida Diligencia y Conflicto de Interés",
+  },
   "DJ-ART38": {
     plantilla: "DJ-ART38-tpl.docx",
     carpeta: "cartas",
@@ -65,6 +70,8 @@ export interface ImagenesFirma {
   firma?: Buffer | null;
   sello?: Buffer | null;
   logo?: Buffer | null;
+  // Logo de la institución contratante (lo pide el F.040 en su cabecera).
+  logo_institucion?: Buffer | null;
 }
 
 // Ancho×alto reales de un PNG (IHDR) o JPEG (marcador SOF). Los logos
@@ -87,13 +94,16 @@ function dimensionesImagen(buf: Buffer): { ancho: number; alto: number } | null 
   return null;
 }
 
-// El logo se escala a la caja del membrete conservando su proporción.
-function tamanoLogo(buf: Buffer): [number, number] {
-  const MAX_ANCHO = 190;
-  const MAX_ALTO = 60;
+// Cada logo se escala a su caja conservando la proporción.
+function tamanoEnCaja(
+  buf: Buffer,
+  maxAncho: number,
+  maxAlto: number,
+  porDefecto: [number, number],
+): [number, number] {
   const dim = dimensionesImagen(buf);
-  if (!dim || dim.ancho <= 0 || dim.alto <= 0) return [160, 55];
-  const escala = Math.min(MAX_ANCHO / dim.ancho, MAX_ALTO / dim.alto);
+  if (!dim || dim.ancho <= 0 || dim.alto <= 0) return porDefecto;
+  const escala = Math.min(maxAncho / dim.ancho, maxAlto / dim.alto);
   return [Math.round(dim.ancho * escala), Math.round(dim.alto * escala)];
 }
 
@@ -105,13 +115,18 @@ function moduloImagenes(imagenes: ImagenesFirma) {
         ? imagenes.sello
         : clave === "logo"
           ? imagenes.logo
-          : imagenes.firma) as Buffer,
+          : clave === "logo_institucion"
+            ? imagenes.logo_institucion
+            : imagenes.firma) as Buffer,
     getSize: (img, clave) =>
       clave === "sello"
         ? [110, 110]
         : clave === "logo"
-          ? tamanoLogo(img as Buffer)
-          : [170, 60],
+          ? tamanoEnCaja(img as Buffer, 190, 60, [160, 55])
+          : clave === "logo_institucion"
+            // La caja del F.040 es un cuadrado de ~2.2 cm en la cabecera.
+            ? tamanoEnCaja(img as Buffer, 85, 85, [80, 80])
+            : [170, 60],
   });
 }
 
@@ -200,6 +215,9 @@ export function construirDatos(canonico: ProcesoCanonico): Record<string, unknow
     lineas,
     total_oferta: num(totalOferta),
     total_letras: montoALetras(totalOferta),
+    // F.040: procesos ya adjudicados a la empresa (los aporta el route como
+    // extra; el default vacío elimina la fila-bucle sin dejar tags sueltos).
+    adjudicados: [],
   };
 }
 
@@ -259,6 +277,7 @@ export function rellenarPlantilla(
     firma: imagenes.firma ? "firma" : "",
     sello: imagenes.sello ? "sello" : "",
     logo: imagenes.logo ? "logo" : "",
+    logo_institucion: imagenes.logo_institucion ? "logo_institucion" : "",
   });
   return doc.toBuffer();
 }
@@ -271,8 +290,8 @@ export function generarDesdeBuffer(
   canonico: ProcesoCanonico,
   imagenes: ImagenesFirma = {},
   // Variables personalizadas: valores fijos de la plantilla + los capturados
-  // en el requisito de este proceso.
-  extra: Record<string, string> = {},
+  // en el requisito de este proceso (+ datos de sistema como "adjudicados").
+  extra: Record<string, unknown> = {},
 ): DocGenerado {
   return {
     codigo,
@@ -286,6 +305,7 @@ export function generarDocumento(
   codigo: string,
   canonico: ProcesoCanonico,
   imagenes: ImagenesFirma = {},
+  extra: Record<string, unknown> = {},
 ): DocGenerado {
   const def = GENERABLES[codigo];
   if (!def) throw new Error(`No hay plantilla para ${codigo}`);
@@ -294,7 +314,7 @@ export function generarDocumento(
     codigo,
     nombre: def.nombre,
     archivo: `${codigo.replace(/\./g, "_")}_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}.docx`,
-    buffer: rellenarPlantilla(plantilla, construirDatos(canonico), imagenes),
+    buffer: rellenarPlantilla(plantilla, { ...construirDatos(canonico), ...extra }, imagenes),
   };
 }
 

@@ -51,6 +51,7 @@ export const REQUISITOS_ESTANDAR: RequisitoEstandar[] = [
   { codigo: "NOMINA-ACC", via: "sube", nombre: "Nómina de accionistas y acta de última asamblea", grupo: "legal", subsanable: true },
   { codigo: "ACTA-GERENTE", via: "sube", nombre: "Acta de designación del gerente/consejo con poder de firma", grupo: "legal", subsanable: true },
   { codigo: "COMP-ETICO", via: "genera", nombre: "Compromiso Ético de Proveedores del Estado (firmado y sellado)", grupo: "legal", subsanable: true },
+  { codigo: "SNCC.F.040", via: "genera", nombre: "Formulario de Debida Diligencia y Conflicto de Interés", grupo: "legal", subsanable: true, opcional: true },
   { codigo: "DJ-ART38", via: "genera", nombre: "Declaración jurada simple — prohibiciones art. 38 Ley 47-25", grupo: "legal", subsanable: true },
   { codigo: "CEDULA-REP", via: "empresa", nombre: "Cédula del representante autorizado a firmar (copia)", grupo: "legal", subsanable: true, docEmpresa: "cedula" },
   { codigo: "CARTA-COND", via: "genera", nombre: "Carta de aceptación de condiciones de pago y entrega", grupo: "legal", subsanable: true },

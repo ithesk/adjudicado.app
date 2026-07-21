@@ -8,6 +8,42 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-21 — F.040 Debida Diligencia: nuevo formulario del sistema con LOGO de la entidad
+
+**Hecho:** Pablo trajo el SNCP-PROV-F-040 (debida diligencia y conflicto de interés)
+y pidió agregarlo «oficialmente» — con el detalle de que arriba lleva el logo de cada
+institución contratante. Se armó completo:
+
+- **Plantilla taggeada** `plantillas/dgcp/SNCC_F040_Debida_Diligencia-tpl.docx`
+  construida por cirugía XML sobre el original (que queda de referencia): el content
+  control «Logo de la institución contratante» → tag `{%logo_institucion}`; el
+  «[Insertar nombre...]» del título y la «(INSTITUCIÓN CONTRATANTE)» de la cláusula
+  → `{entidad_nombre}` (quitando el ROJO de placeholder que traía la DGCP); datos de
+  empresa/representante en sus celdas; `{%firma} {%sello}` sobre la línea de firma.
+- **Nuevo tag de imagen** en el motor: `logo_institucion` en `ImagenesFirma`, escala
+  proporcional a caja de 85×85 px (la caja de ~2.2 cm del formato). El route lo baja
+  de `institucion.logo_url` (el logo que ya se sube en la ficha de entidad). Sin logo
+  cargado, el espacio queda en blanco — igual que firma/sello.
+- **Autollenado del historial**: la tabla «procedimientos adjudicados previamente» se
+  llena sola con los procesos en estado `adjudicado` de la org (código, entidad,
+  objeto, fecha) vía fila-bucle `{#adjudicados}`. Con historial vacío la fila
+  desaparece limpia. El dato viaja como `extra` del route al generador (por eso
+  `extra` pasó de `Record<string,string>` a `Record<string,unknown>`).
+- `GENERABLES["SNCC.F.040"]` + entrada en el checklist estándar (legal, subsanable,
+  **opcional** — no todos los pliegos lo piden). Por ser del sistema, ya admite
+  variantes por entidad con la cascada de siempre.
+- **Huella motor v4**: incluye la ruta del logo institucional y el historial
+  adjudicado — cambiar el logo de la entidad o ganar un proceso regenera el paquete.
+- Las 7 tablas declarativas restantes (directivos, accionistas, empleados, familiares,
+  conflictos, empresas relacionadas) quedan en blanco a propósito: no capturamos esos
+  datos aún. Candidatas a una futura sección en Configuración → Empresa.
+
+**Decisión no obvia:** el código interno es `SNCC.F.040` (consistente con la familia
+F.033/034/042) aunque el documento se autodenomina SNCP-PROV-F-040 (versión 2024).
+
+3 tests nuevos (82 en total). Pendiente de Pablo: subir logos a las entidades y
+probar generando un paquete con el F.040 en el checklist.
+
 ## 2026-07-21 — Cotizador: reordenar ARRASTRANDO (las flechas duraron una tarde)
 
 **Hecho:** Pablo: «el sistema que quiero tiene que ser arrastrado». Las flechas ▲▼
