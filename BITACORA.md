@@ -8,6 +8,19 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-21 — Cotizador: reordenar ARRASTRANDO (las flechas duraron una tarde)
+
+**Hecho:** Pablo: «el sistema que quiero tiene que ser arrastrado». Las flechas ▲▼
+se reemplazan por **drag & drop nativo** (HTML5, sin librerías): asa ⋮⋮ junto al
+número (aparece al pasar el mouse), la fila viaja como imagen de arrastre, el
+destino se resalta y al soltar el orden queda al instante (optimista) mientras
+`reordenarItems` persiste orden_indice secuencial — un drop puede saltar varias
+posiciones, por eso la mutación recibe la lista completa de ids. Las dos sub-filas
+de cada línea aceptan el drop. Sigue: orden en pantalla = orden del F.033; el #
+del pliego no cambia. moverItem (flechas) eliminado.
+
+---
+
 ## 2026-07-21 — Cotizador: reordenar líneas y «Agregar línea» al pie
 
 **Hecho:** quejas concretas de Pablo: no se puede mover una línea de posición, y

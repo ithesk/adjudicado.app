@@ -6,9 +6,9 @@
 // celda edita en línea y guarda al salir. El precio sale del catálogo de
 // Precios (snapshot congelado) o se teclea (manual).
 
-import { useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, ChevronDown, ChevronUp, Plus, Search, Trash2, X } from "lucide-react";
+import { Calculator, GripVertical, Plus, Search, Trash2, X } from "lucide-react";
 import { Panel, SectionTitle, btnPrimary } from "@/components/ui";
 import { formatRD } from "@/lib/types";
 import { fmtUSD } from "@/lib/precios/tipos";
@@ -18,7 +18,7 @@ import {
   cotizarItemAction,
   crearItemAction,
   eliminarItemAction,
-  moverItemAction,
+  reordenarItemsAction,
 } from "@/lib/actions/licitaciones";
 import type { LicItem, LicProceso } from "@/lib/licitaciones/tipos";
 import {
@@ -44,6 +44,37 @@ export default function CotizadorItems({
   const [error, setError] = useState<string | null>(null);
   const [buscandoEn, setBuscandoEn] = useState<string | null>(null);
   const [pendiente, startTransition] = useTransition();
+
+  // ARRASTRAR PARA REORDENAR: el orden local manda al instante (optimista)
+  // mientras el servidor persiste; el orden en pantalla es el del F.033.
+  const [ordenLocal, setOrdenLocal] = useState<string[] | null>(null);
+  const [arrastrando, setArrastrando] = useState<string | null>(null);
+  const [sobre, setSobre] = useState<string | null>(null);
+
+  const mostrados = useMemo(() => {
+    if (!ordenLocal) return items;
+    const porId = new Map(items.map((i) => [i.id, i]));
+    const enOrden = ordenLocal
+      .map((id) => porId.get(id))
+      .filter(Boolean) as LicItem[];
+    const nuevos = items.filter((i) => !ordenLocal.includes(i.id));
+    return [...enOrden, ...nuevos];
+  }, [items, ordenLocal]);
+
+  function soltarSobre(targetId: string) {
+    const origen = arrastrando;
+    setArrastrando(null);
+    setSobre(null);
+    if (!origen || origen === targetId) return;
+    const ids = mostrados.map((i) => i.id);
+    const from = ids.indexOf(origen);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, origen); // subir = antes del destino; bajar = después
+    setOrdenLocal(ids);
+    correr(() => reordenarItemsAction(proceso.id, ids));
+  }
 
   const totales = totalesProceso(items, params.itbisPct);
   const sinCotizar = items.filter(
@@ -133,18 +164,25 @@ export default function CotizadorItems({
             </tr>
           </thead>
           <tbody>
-            {items.map((item, i) => (
+            {mostrados.map((item) => (
               <Linea
                 key={item.id}
                 item={item}
                 params={params}
                 pendiente={pendiente}
-                primera={i === 0}
-                ultima={i === items.length - 1}
+                enDrag={arrastrando === item.id}
+                esDestino={sobre === item.id && arrastrando !== null && arrastrando !== item.id}
+                hayArrastre={arrastrando !== null}
                 buscando={buscandoEn === item.id}
                 setBuscando={(v) => setBuscandoEn(v ? item.id : null)}
                 onPatch={(p) => patch(item.id, p)}
-                onMover={(dir) => correr(() => moverItemAction(item.id, dir))}
+                onArrastrar={() => setArrastrando(item.id)}
+                onSobre={() => setSobre(item.id)}
+                onSoltar={() => soltarSobre(item.id)}
+                onFinArrastre={() => {
+                  setArrastrando(null);
+                  setSobre(null);
+                }}
                 onCotizar={(o) => {
                   setBuscandoEn(null);
                   correr(() => cotizarItemAction(item.id, o));
@@ -229,57 +267,79 @@ function Linea({
   item,
   params,
   pendiente,
-  primera,
-  ultima,
+  enDrag,
+  esDestino,
+  hayArrastre,
   buscando,
   setBuscando,
   onPatch,
-  onMover,
+  onArrastrar,
+  onSobre,
+  onSoltar,
+  onFinArrastre,
   onCotizar,
   onEliminar,
 }: {
   item: LicItem;
   params: ParamsCotizacion;
   pendiente: boolean;
-  primera: boolean;
-  ultima: boolean;
+  enDrag: boolean;
+  esDestino: boolean;
+  hayArrastre: boolean;
   buscando: boolean;
   setBuscando: (v: boolean) => void;
   onPatch: (p: Parameters<typeof actualizarItemAction>[1]) => void;
-  onMover: (direccion: "arriba" | "abajo") => void;
+  onArrastrar: () => void;
+  onSobre: () => void;
+  onSoltar: () => void;
+  onFinArrastre: () => void;
   onCotizar: (o: { suplidor_id: string; sku: string; costo_usd: number }) => void;
   onEliminar: () => void;
 }) {
+  const filaRef = useRef<HTMLTableRowElement>(null);
   const t = totalesItem(item, params.itbisPct);
   const descartado = !item.ofertamos;
 
+  // El drop cae sobre cualquiera de las dos sub-filas de la línea.
+  const propsDestino = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!hayArrastre) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      onSobre();
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      onSoltar();
+    },
+  };
+  const claseDrag = enDrag ? "opacity-40" : esDestino ? "bg-primary/10" : "";
+
   return (
     <>
-      <tr className={`group border-b border-line ${descartado ? "opacity-50" : ""}`}>
+      <tr
+        ref={filaRef}
+        className={`group border-b border-line ${descartado ? "opacity-50" : ""} ${claseDrag}`}
+        {...propsDestino}
+      >
         <td className="px-1 py-1 align-top">
-          <span className="flex items-center gap-0.5">
-            {/* Reordenar: este orden es el del F.033. El # del pliego no cambia. */}
-            <span className="flex flex-col">
-              <button
-                type="button"
-                disabled={pendiente || primera}
-                onClick={() => onMover("arriba")}
-                className="rounded text-muted opacity-0 transition-opacity hover:text-ink disabled:!opacity-0 group-hover:opacity-100"
-                aria-label="Subir línea"
-                title="Mover arriba (cambia el orden en el F.033)"
-              >
-                <ChevronUp className="h-3 w-3" strokeWidth={2.4} />
-              </button>
-              <button
-                type="button"
-                disabled={pendiente || ultima}
-                onClick={() => onMover("abajo")}
-                className="rounded text-muted opacity-0 transition-opacity hover:text-ink disabled:!opacity-0 group-hover:opacity-100"
-                aria-label="Bajar línea"
-                title="Mover abajo (cambia el orden en el F.033)"
-              >
-                <ChevronDown className="h-3 w-3" strokeWidth={2.4} />
-              </button>
+          <span className="flex items-center gap-1">
+            {/* ARRASTRA el asa para reordenar: este orden es el del F.033.
+                El # del pliego no cambia (identidad, no posición). */}
+            <span
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", item.id);
+                e.dataTransfer.effectAllowed = "move";
+                if (filaRef.current) e.dataTransfer.setDragImage(filaRef.current, 16, 16);
+                onArrastrar();
+              }}
+              onDragEnd={onFinArrastre}
+              className="cursor-grab touch-none rounded text-muted opacity-0 transition-opacity hover:text-ink active:cursor-grabbing group-hover:opacity-100"
+              title="Arrastra para cambiar el orden (es el orden del F.033)"
+              aria-label={`Arrastrar la línea ${item.numero}`}
+            >
+              <GripVertical className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
             <span className="font-mono text-xs font-semibold text-muted">{item.numero}</span>
           </span>
@@ -387,7 +447,10 @@ function Linea({
 
       {/* Segunda línea: lo que ofertamos + la vía del precio (como la
           descripción extendida de una línea en Odoo). */}
-      <tr className={`border-b border-line ${descartado ? "opacity-60" : ""}`}>
+      <tr
+        className={`border-b border-line ${descartado ? "opacity-60" : ""} ${claseDrag}`}
+        {...propsDestino}
+      >
         <td />
         <td colSpan={7} className="px-1 pb-2 pt-0">
           <div className="flex flex-wrap items-center gap-1.5">
