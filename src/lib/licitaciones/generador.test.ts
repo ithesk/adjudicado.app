@@ -141,3 +141,55 @@ describe("rellenarPlantilla con firma y sello en el mismo run", () => {
     expect(new PizZip(out).file("word/document.xml")!.asText()).not.toContain("{%logo}");
   });
 });
+
+describe("el F.040 (debida diligencia y conflicto de interés)", () => {
+  const tpl = () =>
+    fs.readFileSync(
+      path.join(process.cwd(), "plantillas/dgcp/SNCC_F040_Debida_Diligencia-tpl.docx"),
+    );
+
+  it("pinta el logo de la institución en su caja, la firma (dos veces) y el sello", () => {
+    const out = rellenarPlantilla(
+      tpl(),
+      { entidad_nombre: "Ministerio de Turismo", adjudicados: [] },
+      { firma: PNG, sello: PNG, logo_institucion: pngDe(400, 200) },
+    );
+    // logo institucional + firma en la tabla + firma y sello sobre la línea.
+    expect(dibujos(out)).toBe(4);
+    const xml = new PizZip(out).file("word/document.xml")!.asText();
+    expect(xml).toContain("Ministerio de Turismo");
+    expect(xml).not.toContain("{%logo_institucion}");
+    // 400×200 en caja 85×85 → 85 de ancho, proporción intacta (EMU = px·9525).
+    expect(xml).toContain(String(85 * 9525));
+  });
+
+  it("autollenado del historial: lista lo adjudicado y sin historial la fila desaparece", () => {
+    const con = new PizZip(
+      rellenarPlantilla(
+        tpl(),
+        {
+          adjudicados: [
+            { adj_codigo: "SIE-CCC-CP-2025-01", adj_institucion: "SIE", adj_objeto: "Tablets", adj_fecha: "01/02/2025" },
+            { adj_codigo: "MITUR-CCC-CM-2025-07", adj_institucion: "MITUR", adj_objeto: "Impresoras", adj_fecha: "15/03/2025" },
+          ],
+        },
+        {},
+      ),
+    ).file("word/document.xml")!.asText();
+    expect(con).toContain("SIE-CCC-CP-2025-01");
+    expect(con).toContain("MITUR-CCC-CM-2025-07");
+    const sin = new PizZip(rellenarPlantilla(tpl(), { adjudicados: [] }, {}))
+      .file("word/document.xml")!
+      .asText();
+    // ("adjudicados" a secas aparece en el TEXTO oficial del formulario —
+    // lo que no debe quedar es ningún tag del bucle.)
+    expect(sin).not.toContain("{#adjudicados}");
+    expect(sin).not.toContain("adj_codigo");
+  });
+
+  it("sin logo de la entidad el formulario sale igual (espacio en blanco, ningún tag suelto)", () => {
+    const out = rellenarPlantilla(tpl(), { adjudicados: [] }, { firma: PNG, sello: PNG });
+    expect(dibujos(out)).toBe(3);
+    expect(new PizZip(out).file("word/document.xml")!.asText()).not.toContain("{%");
+  });
+});

@@ -211,18 +211,39 @@ export async function GET(
     );
   }
 
-  // 4) Firma, sello y logo (imágenes de Configuración → Empresa, si existen).
+  // 4) Firma, sello y logo (imágenes de Configuración → Empresa, si existen),
+  //    el logo de la INSTITUCIÓN contratante (lo pinta el F.040 en su
+  //    cabecera) y los procesos ya adjudicados (el F.040 los declara).
   //    En PARALELO — cada viaje a storage cuesta segundos y aquí nada depende
   //    de nada (la lentitud en serie era la queja: 11 requisitos ≈ 2 minutos).
   const imagenes: ImagenesFirma = {};
-  const { data: docsImagen } = await supabase
-    .from("documento_empresa")
-    .select("tipo, archivo_url, created_at")
-    .eq("org_id", miembro.org_id)
-    .in("tipo", ["firma", "sello", "logo"])
-    .order("created_at", { ascending: false });
-  await Promise.all(
-    (["firma", "sello", "logo"] as const).map(async (tipo) => {
+  const [{ data: docsImagen }, { data: instLogo }, { data: adjudicadosPrevios }] =
+    await Promise.all([
+      supabase
+        .from("documento_empresa")
+        .select("tipo, archivo_url, created_at")
+        .eq("org_id", miembro.org_id)
+        .in("tipo", ["firma", "sello", "logo"])
+        .order("created_at", { ascending: false }),
+      proc?.institucion_id
+        ? supabase
+            .from("institucion")
+            .select("logo_url")
+            .eq("id", proc.institucion_id)
+            .eq("org_id", miembro.org_id)
+            .maybeSingle()
+        : Promise.resolve({ data: null as { logo_url: string | null } | null }),
+      supabase
+        .from("lic_proceso")
+        .select("codigo, objeto, updated_at, institucion:institucion_id(nombre)")
+        .eq("org_id", miembro.org_id)
+        .eq("estado", "adjudicado")
+        .neq("id", id)
+        .order("updated_at", { ascending: false })
+        .limit(10),
+    ]);
+  await Promise.all([
+    ...(["firma", "sello", "logo"] as const).map(async (tipo) => {
       const doc = (docsImagen ?? []).find((d) => d.tipo === tipo);
       if (!doc) return;
       const { data: archivo } = await supabase.storage
@@ -230,7 +251,26 @@ export async function GET(
         .download(doc.archivo_url);
       if (archivo) imagenes[tipo] = Buffer.from(await archivo.arrayBuffer());
     }),
-  );
+    (async () => {
+      if (!instLogo?.logo_url) return;
+      const { data: archivo } = await supabase.storage
+        .from("documentos")
+        .download(instLogo.logo_url);
+      if (archivo) imagenes.logo_institucion = Buffer.from(await archivo.arrayBuffer());
+    })(),
+  ]);
+  // Historial para la tabla "procedimientos adjudicados previamente" del
+  // F.040 — el sistema la llena solo con lo que ya ganaste.
+  const adjudicados = (adjudicadosPrevios ?? []).map((p) => {
+    const inst = p.institucion as { nombre?: string } | { nombre?: string }[] | null;
+    const f = p.updated_at as string;
+    return {
+      adj_codigo: p.codigo,
+      adj_institucion: (Array.isArray(inst) ? inst[0]?.nombre : inst?.nombre) ?? "",
+      adj_objeto: p.objeto ?? "",
+      adj_fecha: `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}`,
+    };
+  });
 
   // 4b) ¿Este paquete ya existe? La huella cubre todo lo que cambia el
   //     resultado: el expediente (sin meta — la versión sube sola), los
@@ -244,10 +284,14 @@ export async function GET(
       JSON.stringify({
         // Versión del MOTOR de render: subirla invalida los ZIP reusados
         // cuando cambia cómo se imprimen los documentos (no solo qué datos).
-        // v3: nombres de archivo ASCII puro dentro del ZIP.
-        motor: 3,
+        // v4: F.040 con logo institucional y adjudicados autollenados.
+        motor: 4,
         formato,
         unir,
+        // El F.040 pinta el logo de la entidad y el historial adjudicado:
+        // cambiar cualquiera de los dos debe regenerar.
+        logo_institucion: instLogo?.logo_url ?? null,
+        adjudicados,
         // El paquete de subsanación es OTRO paquete: misma maquinaria,
         // huella propia (acotada a lo pedido).
         subsanacion: subsanacion?.id ?? null,
@@ -311,7 +355,7 @@ export async function GET(
     documentos = await Promise.all(
       codigos.map(async (codigo) => {
         const plantilla = plantillaPorCodigo.get(codigo);
-        if (!plantilla) return generarDocumento(codigo, canonico, imagenes);
+        if (!plantilla) return generarDocumento(codigo, canonico, imagenes, { adjudicados });
         const { data: tpl } = await supabase.storage
           .from("documentos")
           .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
@@ -333,7 +377,7 @@ export async function GET(
           Buffer.from(await tpl.arrayBuffer()),
           canonico,
           imagenes,
-          { ...fijos, ...capturados },
+          { ...fijos, ...capturados, adjudicados },
         );
       }),
     );
