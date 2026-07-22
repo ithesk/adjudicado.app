@@ -5,9 +5,13 @@
 // siempre. Si la red se cae o el servidor cuelga, esto LANZA con un mensaje
 // legible — quien llama lo muestra (useAccion ya lo traduce a aviso).
 
-export async function fetchLargo(url: string, ms = 90_000): Promise<Response> {
+export async function fetchLargo(
+  url: string,
+  ms = 90_000,
+  init: RequestInit = {},
+): Promise<Response> {
   try {
-    return await fetch(url, { signal: AbortSignal.timeout(ms) });
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
   } catch (e) {
     throw new Error(
       e instanceof DOMException && e.name === "TimeoutError"

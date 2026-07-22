@@ -28,6 +28,7 @@ import {
   btnPrimary,
 } from "@/components/ui";
 import { urlFirmada } from "@/lib/actions/storage";
+import { fetchLargo } from "@/lib/fetch-cliente";
 import { diasRestantes, formatRD, nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, textoDias } from "@/lib/ui";
 import {
@@ -227,8 +228,12 @@ export default function BidRoom({
     }, 2600);
     startTransition(async () => {
       try {
-        const res = await fetch(
+        // Con tope de tiempo: la generación es larga (docx→PDF→unir) pero
+        // NUNCA infinita — si la red se cae, el error se muestra, no se
+        // apaga el spinner en silencio.
+        const res = await fetchLargo(
           `/api/licitaciones/${proceso.id}/generar?formato=${formato}${formato === "pdf" && unir ? "&unir=1" : ""}${forzar ? "&regenerar=1" : ""}${subsanacionId ? `&subsanacion=${subsanacionId}` : ""}`,
+          120_000,
         );
         if (!res.ok) {
           const j = await res.json().catch(() => null);
@@ -254,6 +259,16 @@ export default function BidRoom({
         a.click();
         URL.revokeObjectURL(url);
         router.refresh(); // los requisitos generados quedaron listos
+      } catch (err) {
+        // Red caída o timeout: el error queda A LA VISTA, nunca se cancela
+        // en silencio.
+        const msg = err instanceof Error ? err.message : "No se pudo generar.";
+        if (subsanacionId) {
+          setErroresSub([msg]);
+          irA("subsanacion");
+        } else {
+          setValidacion([msg]);
+        }
       } finally {
         clearInterval(reloj);
         setPasoTexto(null);
