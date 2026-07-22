@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { ChevronDown, UserPlus, Check } from "lucide-react";
 import type { Persona } from "@/lib/types";
 import { Avatar } from "@/components/ui";
+import { avisoError } from "@/lib/avisos";
 import { asignarResponsable } from "../actions";
 import { useActividad } from "./Actividad";
 
@@ -22,6 +23,7 @@ export default function ResponsableControl({
   const { emitir } = useActividad();
 
   function asignar(id: string | null) {
+    const previo = responsable;
     const p = id ? personas.find((x) => x.id === id) ?? null : null;
     setResponsable(p);
     emitir(
@@ -29,7 +31,19 @@ export default function ResponsableControl({
         ? `Asignó la orden a ${p.nombre}.`
         : "Quitó el responsable de la orden.",
     );
-    startTransition(() => asignarResponsable(ordenId, id));
+    startTransition(async () => {
+      // Si el guardado falla, restauramos el responsable previo y avisamos.
+      try {
+        const err = await asignarResponsable(ordenId, id);
+        if (err) {
+          setResponsable(previo);
+          avisoError(err);
+        }
+      } catch {
+        setResponsable(previo);
+        avisoError("No se pudo guardar el responsable.");
+      }
+    });
     document
       .querySelectorAll<HTMLDetailsElement>("details[data-resp]")
       .forEach((d) => (d.open = false));

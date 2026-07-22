@@ -8,6 +8,80 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-22 (4) — Sistema de feedback: cada clic responde algo
+
+Pablo: «le di clic a algo y está cargando, no sé qué» — y pasaba en cualquier
+acción. Auditoría con agentes: de ~95 acciones del sistema, 34 sin señal de
+espera, ~40 sin confirmación, 22 con fallo silencioso (órdenes fingía éxito),
+6 spinners potencialmente infinitos, 0 loading.tsx, navegación sin feedback.
+Se construyó el sistema completo (docs/sistema-ui.md §carga es la referencia):
+
+- **Fundación** (`src/lib/`): `useAccion()` — el correr() canónico con clave
+  POR ACCIÓN (se acabó el panel entero deshabilitado), anti doble-clic, error
+  siempre visible (aviso por defecto, `errorInline` para forms). `avisos.ts` +
+  `<Avisos/>` — toasts propios sin librerías (ok 2.5 s, error 7 s cerrable).
+  `fetchLargo()` — tope de tiempo obligatorio en llamadas largas.
+  En ui.tsx: `IndicadorGuardado` (canónico — antes 5 copias), `MicroGuardado`
+  (check junto al campo editado), `Boton cargando`, `Esqueleto(Pagina)`.
+- **Navegación**: `loading.tsx` general de (app) + siluetas de ficha para
+  orden/[id], licitaciones/[id], entidades/[id] (fallback INSTANTÁNEO al
+  clicar — era el ofensor nº1: pantalla congelada en cada navegación) +
+  spinner con retardo 150 ms en el NavLink clicado (useLinkStatus).
+- **Licitaciones/entidades**: cotizador con clave por línea y micro-check en
+  el número (8 campos guardaban mudos); requisitos con «Subiendo…» en el
+  clip y estado por fila; DatosProceso/FichaEntidad/EntidadesEditor/
+  PerfilEmpresa/SubsanacionPanel migrados al patrón canónico.
+- **Órdenes — optimista honesto** (agente): las ~20 actions devuelven ahora
+  `string|null`; todos los controles optimistas hacen ROLLBACK + aviso si el
+  servidor falla (antes la UI mentía); los adjuntos ya no quedan «subiendo…»
+  eternos. El happy path no cambió (misma velocidad).
+- **Esperas largas**: generar paquete/subsanación, vista previa de plantillas
+  y OCR con `fetchLargo` + catch visible; el botón del OCR ganó su spinner.
+
+**Decisiones**: sin librerías (toasts y skeletons propios, regla de la casa);
+`unstable_instant`/Cache Components NO — exige otra arquitectura de datos;
+`loading.tsx` es el camino correcto con páginas force-dynamic. Indicador con
+retardo (150 ms nav / sin indicador <300 ms en autosave) para no parpadear.
+
+**Verificado**: tsc, eslint (solo warnings preexistentes), 94/94 vitest.
+**Pendiente Pablo**: probar en vivo (navegar, cotizador, requisitos, una
+acción de orden sin red para ver el rollback+aviso) y mergear el PR #18.
+
+---
+
+## 2026-07-22 (3) — F.040: los campos «borrados» eran un bug de recorte de LibreOffice
+
+Pablo reportó que el F.040 salía con los campos vacíos en PDF. Investigación
+con A/B reales contra el Gotenberg del VPS (el docx SIEMPRE estuvo bien —
+Word lo abre perfecto; era solo el PDF):
+
+- **Causa raíz**: el `<w:sdt>` (content control del nombre de la entidad) que
+  quedaba del original + una imagen inline en el tope del cuerpo disparan un
+  bug de RECORTE en LibreOffice: pinta la imagen pero descarta el texto de la
+  primera página (título y tabla del representante salían en blanco; los
+  datos SÍ estaban en la capa de texto del PDF). **El original de la DGII,
+  convertido tal cual, rompe igual** — no lo causó el taggeo.
+- **Arreglo estructural en la plantilla**: el logo vive ahora en una tabla
+  1×1 sin bordes (las imágenes dentro de celdas no disparan el bug — la firma
+  lo probaba) y el sdt del nombre quedó desenvuelto (párrafo normal).
+  Verificado E2E contra Gotenberg con el logo real (JPG) de la ONDP: página 1
+  completa — logo, título, tabla del representante llena, firma.
+- **De paso, higiene OPC**: el módulo free de imágenes guarda TODO como .png
+  aunque el buffer sea JPEG. `corregirExtensionesDeMedia()` en generador.ts
+  renombra la media a su formato real (magia de bytes: png/jpeg/gif/webp) y
+  re-apunta relaciones y content-types tras cada render.
+- Los demás formularios (F.033/034/042/047) no sufren el bug: su logo va
+  dentro de un textbox. Verificados los PDF reales de hoy: perfectos (F.042
+  ya sale con firma y sello; quedan en página 2 porque el formulario termina
+  al borde — aceptable).
+- 94 tests (2 nuevos: media renombrada + guardia de «sin content controls»).
+
+**Lección**: «se ve bien en Word» no garantiza el PDF — validar SIEMPRE la
+conversión LibreOffice con contenido real. Los sdt de Word son veneno para
+LibreOffice cuando conviven con imágenes.
+
+---
+
 ## 2026-07-22 (2) — Logos en TODOS los formularios, F.042 firmado, y «Generar este»
 
 Pablo reportó 4 cosas de una vez. Diagnóstico y qué se hizo:

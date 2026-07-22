@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { X, Plus } from "lucide-react";
+import { avisoError } from "@/lib/avisos";
 import { agregarEtiqueta, quitarEtiqueta } from "../actions";
 import { useActividad } from "./Actividad";
 
@@ -28,17 +29,42 @@ export default function MarcadoresControl({
       setAbierto(false);
       return;
     }
+    const previas = etiquetas;
     setEtiquetas((prev) => [...prev, v]);
     setNueva("");
     setAbierto(false);
     emitir(`Agregó el marcador “${v}”.`);
-    startTransition(() => agregarEtiqueta(ordenId, v));
+    startTransition(async () => {
+      // Si el guardado falla, restauramos los marcadores previos y avisamos.
+      try {
+        const err = await agregarEtiqueta(ordenId, v);
+        if (err) {
+          setEtiquetas(previas);
+          avisoError(err);
+        }
+      } catch {
+        setEtiquetas(previas);
+        avisoError(`No se pudo guardar el marcador “${v}”.`);
+      }
+    });
   }
 
   function quitar(v: string) {
+    const previas = etiquetas;
     setEtiquetas((prev) => prev.filter((e) => e !== v));
     emitir(`Quitó el marcador “${v}”.`);
-    startTransition(() => quitarEtiqueta(ordenId, v));
+    startTransition(async () => {
+      try {
+        const err = await quitarEtiqueta(ordenId, v);
+        if (err) {
+          setEtiquetas(previas);
+          avisoError(err);
+        }
+      } catch {
+        setEtiquetas(previas);
+        avisoError(`No se pudo quitar el marcador “${v}”.`);
+      }
+    });
   }
 
   const disponibles = SUGERIDAS.filter((s) => !etiquetas.includes(s));

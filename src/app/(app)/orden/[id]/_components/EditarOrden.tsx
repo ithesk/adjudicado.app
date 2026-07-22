@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Pencil, X, Trash2 } from "lucide-react";
 import { inputBase } from "@/components/ui";
+import { avisoError } from "@/lib/avisos";
 import { actualizarOrden, eliminarOrden } from "../actions";
 
 interface Campos {
@@ -37,21 +38,38 @@ export default function EditarOrden({
       )
     )
       return;
-    start(() => eliminarOrden(ordenId));
+    start(async () => {
+      // Si se elimina bien, la action redirige a «/»; si falla, avisamos.
+      try {
+        const err = await eliminarOrden(ordenId);
+        if (err) avisoError(err);
+      } catch {
+        avisoError("No se pudo eliminar la orden.");
+      }
+    });
   }
 
   function guardar() {
     start(async () => {
-      await actualizarOrden(ordenId, {
-        numero_oc: f.numero_oc.trim(),
-        institucion: f.institucion.trim(),
-        codigo_expediente: f.codigo_expediente.trim(),
-        moneda: f.moneda,
-        monto: f.monto === "" ? null : Number(f.monto),
-        fecha_oc: f.fecha_oc,
-        plazo_entrega: f.plazo_entrega,
-      });
-      setAbierto(false);
+      // Solo cerramos el modal si de verdad se guardó; si falla, avisamos.
+      try {
+        const err = await actualizarOrden(ordenId, {
+          numero_oc: f.numero_oc.trim(),
+          institucion: f.institucion.trim(),
+          codigo_expediente: f.codigo_expediente.trim(),
+          moneda: f.moneda,
+          monto: f.monto === "" ? null : Number(f.monto),
+          fecha_oc: f.fecha_oc,
+          plazo_entrega: f.plazo_entrega,
+        });
+        if (err) {
+          avisoError(err);
+          return;
+        }
+        setAbierto(false);
+      } catch {
+        avisoError("No se pudieron guardar los cambios.");
+      }
     });
   }
 

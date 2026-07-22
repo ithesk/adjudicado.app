@@ -107,6 +107,70 @@ function tamanoEnCaja(
   return [Math.round(dim.ancho * escala), Math.round(dim.alto * escala)];
 }
 
+// Qué imagen es DE VERDAD, por sus primeros bytes (la extensión miente).
+function formatoRealDeImagen(buf: Buffer): string | null {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0x89 && buf[1] === 0x50) return "png";
+  if (buf[0] === 0xff && buf[1] === 0xd8) return "jpeg";
+  if (buf.toString("ascii", 0, 4) === "GIF8") return "gif";
+  if (buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP")
+    return "webp";
+  return null;
+}
+
+// El módulo free de imágenes guarda TODO lo que inserta como .png aunque el
+// buffer sea un JPEG (caso real: el logo .jpg de una entidad). Word lo
+// perdona; el LibreOffice de Gotenberg NO — pinta la imagen pero DESCARTA el
+// texto de esa página (el F.040 salía con los campos «borrados» en PDF).
+// Después del render, cada media cuyo formato real no coincide con su
+// extensión se renombra, y se re-apuntan relaciones y content-types.
+export function corregirExtensionesDeMedia(zip: PizZip): void {
+  const renombres = new Map<string, string>();
+  for (const nombre of Object.keys(zip.files)) {
+    const m = nombre.match(/^word\/media\/(.+)\.(png|jpe?g|gif|webp)$/i);
+    if (!m) continue;
+    const buf = zip.file(nombre)!.asNodeBuffer();
+    const real = formatoRealDeImagen(buf);
+    const declarada = m[2].toLowerCase().replace(/^jpg$/, "jpeg");
+    if (!real || real === declarada) continue;
+    zip.file(`word/media/${m[1]}.${real}`, buf);
+    zip.remove(nombre);
+    renombres.set(`media/${m[1]}.${m[2]}`, `media/${m[1]}.${real}`);
+  }
+  if (renombres.size === 0) return;
+  for (const nombre of Object.keys(zip.files)) {
+    if (!nombre.endsWith(".rels")) continue;
+    let xml = zip.file(nombre)!.asText();
+    let cambio = false;
+    for (const [viejo, nuevo] of renombres) {
+      if (xml.includes(viejo)) {
+        xml = xml.split(viejo).join(nuevo);
+        cambio = true;
+      }
+    }
+    if (cambio) zip.file(nombre, xml);
+  }
+  const MIME: Record<string, string> = {
+    png: "image/png",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+  };
+  let tipos = zip.file("[Content_Types].xml")!.asText();
+  const nuevasExt = new Set(
+    Array.from(renombres.values()).map((v) => v.slice(v.lastIndexOf(".") + 1)),
+  );
+  for (const ext of nuevasExt) {
+    if (!new RegExp(`Extension="${ext}"`, "i").test(tipos)) {
+      tipos = tipos.replace(
+        "</Types>",
+        `<Default Extension="${ext}" ContentType="${MIME[ext]}"/></Types>`,
+      );
+    }
+  }
+  zip.file("[Content_Types].xml", tipos);
+}
+
 function moduloImagenes(imagenes: ImagenesFirma) {
   return new ImageModule({
     centered: false,
@@ -279,6 +343,7 @@ export function rellenarPlantilla(
     logo: imagenes.logo ? "logo" : "",
     logo_institucion: imagenes.logo_institucion ? "logo_institucion" : "",
   });
+  corregirExtensionesDeMedia(doc.getZip() as PizZip);
   return doc.toBuffer();
 }
 

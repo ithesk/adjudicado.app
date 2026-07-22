@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Check, Loader2, type LucideIcon } from "lucide-react";
 import { iniciales } from "@/lib/types";
 
 // Avatar de iniciales con color (hue) determinista por nombre. Chroma baja
@@ -172,3 +172,99 @@ export function btnGhost(extra = "") {
 // Input base.
 export const inputBase =
   "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink shadow-card outline-none transition-colors placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-[var(--ring)]";
+
+// ============================================================
+// FEEDBACK (docs/sistema-ui.md §carga): el vocabulario único de
+// espera/éxito. Nada de spinners ad-hoc: estas primitivas + los
+// avisos (toasts) cubren todos los casos.
+// ============================================================
+
+// El trío idle → guardando → ok de los autosave, en la cabecera del panel
+// o de la página. Canónico (antes vivía copiado en 5 sitios).
+export function IndicadorGuardado({ estado }: { estado: "idle" | "guardando" | "ok" }) {
+  if (estado === "idle") return null;
+  return estado === "guardando" ? (
+    <span className="flex items-center gap-1 text-[11.5px] text-muted">
+      <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
+      Guardando…
+    </span>
+  ) : (
+    <span className="flex items-center gap-1 text-[11.5px] text-ok">
+      <Check className="h-3 w-3" strokeWidth={2.4} aria-hidden />
+      Guardado
+    </span>
+  );
+}
+
+// Botón con la espera integrada: cargando ⇒ spinner + disabled, sin que el
+// contenido salte (el spinner sustituye al icono, no se suma).
+export function Boton({
+  cargando = false,
+  variante = "primary",
+  className = "",
+  children,
+  disabled,
+  ...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  cargando?: boolean;
+  variante?: "primary" | "ghost";
+}) {
+  const base = variante === "primary" ? btnPrimary(className) : btnGhost(className);
+  return (
+    <button type="button" {...rest} disabled={disabled || cargando} className={base}>
+      {cargando && (
+        <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" strokeWidth={2.2} aria-hidden />
+      )}
+      {children}
+    </button>
+  );
+}
+
+// Micro-feedback JUNTO al campo editado (autosave de celdas y campos):
+// punto girando mientras guarda, check ~2 s al confirmar. Tamaño fijo para
+// no mover el layout. Se alimenta de useAccion: ocupada(clave) / okClave.
+export function MicroGuardado({ activo, ok }: { activo: boolean; ok: boolean }) {
+  return (
+    <span className="inline-grid h-3.5 w-3.5 flex-none place-items-center" aria-hidden>
+      {activo ? (
+        <Loader2 className="h-3 w-3 motion-safe:animate-spin text-muted" strokeWidth={2.2} />
+      ) : ok ? (
+        <Check className="h-3 w-3 text-ok" strokeWidth={2.6} />
+      ) : null}
+    </span>
+  );
+}
+
+// Bloque de skeleton (siluetas del contenido mientras carga una ruta —
+// loading.tsx). Se compone: <Esqueleto className="h-4 w-40" />.
+export function Esqueleto({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse rounded-md bg-surface-2 ${className}`} aria-hidden />;
+}
+
+// Página de carga estándar: cabecera + filas. Para loading.tsx de listas.
+export function EsqueletoPagina({ filas = 8 }: { filas?: number }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Esqueleto className="h-6 w-48" />
+          <Esqueleto className="h-3.5 w-72" />
+        </div>
+        <Esqueleto className="h-9 w-32" />
+      </div>
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+        <Esqueleto className="h-9 w-full rounded-none" />
+        <div className="space-y-0 divide-y divide-line">
+          {Array.from({ length: filas }, (_, i) => (
+            <div key={i} className="flex items-center gap-4 px-4 py-3">
+              <Esqueleto className="h-4 w-28" />
+              <Esqueleto className="h-4 flex-1" />
+              <Esqueleto className="h-4 w-20" />
+              <Esqueleto className="h-5 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

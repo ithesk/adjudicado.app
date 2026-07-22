@@ -31,6 +31,7 @@ import {
 } from "@/lib/types";
 import { Avatar, Panel, SectionTitle } from "@/components/ui";
 import type { Adjunto } from "@/lib/types";
+import { avisoError } from "@/lib/avisos";
 import { isDemo } from "@/lib/demo";
 import { createClient } from "@/lib/supabase/client";
 import VisorDocumento from "@/components/VisorDocumento";
@@ -284,18 +285,28 @@ export default function BitacoraPanel({
       scrollAbajo();
       const fd = new FormData();
       fd.append("archivo", file);
-      const res = await adjuntarDocumentoBitacora(ordenId, null, fd);
+      let res: { path: string; nombre: string } | null = null;
+      try {
+        res = await adjuntarDocumentoBitacora(ordenId, null, fd);
+      } catch {
+        res = null;
+      }
       if (res?.path) {
+        const listo = res;
         setItems((prev) =>
           prev.map((b) =>
             b.id === id
               ? {
                   ...b,
-                  adjuntos: [{ nombre: res.nombre, bucket: "documentos", path: res.path }],
+                  adjuntos: [{ nombre: listo.nombre, bucket: "documentos", path: listo.path }],
                 }
               : b,
           ),
         );
+      } else if (!isDemo()) {
+        // La entrada no puede quedarse «subiendo…» para siempre: la quitamos.
+        setItems((prev) => prev.filter((b) => b.id !== id));
+        avisoError(`No se pudo subir ${file.name} — inténtalo de nuevo.`);
       }
     }
   }
@@ -430,10 +441,25 @@ export default function BitacoraPanel({
     setItems((prev) => [entrada, ...prev]);
     setTexto("");
     scrollAbajo();
-    startTransition(() => agregarBitacora(ordenId, t, entrada.texto));
+    startTransition(async () => {
+      // Si el guardado falla, quitamos la entrada optimista, recuperamos el
+      // texto en el composer (si sigue vacío) y avisamos.
+      const deshacer = (msg: string) => {
+        setItems((prev) => prev.filter((b) => b.id !== entrada.id));
+        setTexto((v) => v || entrada.texto);
+        avisoError(msg);
+      };
+      try {
+        const err = await agregarBitacora(ordenId, t, entrada.texto);
+        if (err) deshacer(err);
+      } catch {
+        deshacer("No se pudo guardar la entrada.");
+      }
+    });
   }
 
-  function toggleReaccion(id: string, emoji: string) {
+  // Aplica el toggle de reacción en local; llamarla otra vez lo revierte.
+  function aplicarReaccion(id: string, emoji: string) {
     setItems((prev) =>
       prev.map((b) => {
         if (b.id !== id) return b;
@@ -450,14 +476,30 @@ export default function BitacoraPanel({
         return { ...b, reacciones: reacciones.filter((r) => r.usuarios.length) };
       }),
     );
-    if (esUUID(id)) {
-      startTransition(() => alternarReaccion(ordenId, id, emoji));
-    }
+  }
+
+  function toggleReaccion(id: string, emoji: string) {
+    aplicarReaccion(id, emoji);
+    if (!esUUID(id)) return;
+    startTransition(async () => {
+      // Si falla, volvemos a alternar (queda como estaba) y avisamos.
+      try {
+        const err = await alternarReaccion(ordenId, id, emoji);
+        if (err) {
+          aplicarReaccion(id, emoji);
+          avisoError(err);
+        }
+      } catch {
+        aplicarReaccion(id, emoji);
+        avisoError("No se pudo guardar la reacción.");
+      }
+    });
   }
 
   function comentar(id: string, t: string) {
     const limpio = t.trim();
     if (!limpio) return;
+    const cid = nuevoId("c");
     setItems((prev) =>
       prev.map((b) =>
         b.id === id
@@ -466,7 +508,7 @@ export default function BitacoraPanel({
               comentarios: [
                 ...(b.comentarios ?? []),
                 {
-                  id: nuevoId("c"),
+                  id: cid,
                   autor: currentUser,
                   texto: limpio,
                   created_at: nowISO(),
@@ -476,29 +518,81 @@ export default function BitacoraPanel({
           : b,
       ),
     );
-    if (esUUID(id)) {
-      startTransition(() => agregarComentario(ordenId, id, limpio));
-    }
+    if (!esUUID(id)) return;
+    startTransition(async () => {
+      // Si el guardado falla, quitamos la respuesta optimista y avisamos.
+      const deshacer = (msg: string) => {
+        setItems((prev) =>
+          prev.map((b) =>
+            b.id === id
+              ? {
+                  ...b,
+                  comentarios: (b.comentarios ?? []).filter((c) => c.id !== cid),
+                }
+              : b,
+          ),
+        );
+        avisoError(msg);
+      };
+      try {
+        const err = await agregarComentario(ordenId, id, limpio);
+        if (err) deshacer(err);
+      } catch {
+        deshacer("No se pudo guardar la respuesta.");
+      }
+    });
   }
 
   // Editar una entrada propia (estilo Notion): local + persistente.
   function editarEntrada(id: string, nuevoTexto: string) {
     const limpio = nuevoTexto.trim();
     if (!limpio) return;
+    const anterior = items.find((b) => b.id === id);
     setItems((prev) =>
       prev.map((b) => (b.id === id ? { ...b, texto: limpio, editada: true } : b)),
     );
-    if (esUUID(id)) {
-      startTransition(() => editarBitacora(ordenId, id, limpio));
-    }
+    if (!esUUID(id)) return;
+    startTransition(async () => {
+      // Si el guardado falla, restauramos el texto anterior y avisamos.
+      const restaurar = (msg: string) => {
+        if (anterior) {
+          setItems((prev) =>
+            prev.map((b) =>
+              b.id === id
+                ? { ...b, texto: anterior.texto, editada: anterior.editada }
+                : b,
+            ),
+          );
+        }
+        avisoError(msg);
+      };
+      try {
+        const err = await editarBitacora(ordenId, id, limpio);
+        if (err) restaurar(err);
+      } catch {
+        restaurar("No se pudo guardar la edición.");
+      }
+    });
   }
 
   // Eliminar una entrada propia.
   function borrarEntrada(id: string) {
+    const entrada = items.find((b) => b.id === id);
     setItems((prev) => prev.filter((b) => b.id !== id));
-    if (esUUID(id)) {
-      startTransition(() => eliminarBitacora(ordenId, id));
-    }
+    if (!esUUID(id)) return;
+    startTransition(async () => {
+      // Si el borrado falla, la entrada vuelve al feed (se reordena por fecha).
+      const restaurar = (msg: string) => {
+        if (entrada) setItems((prev) => [entrada, ...prev]);
+        avisoError(msg);
+      };
+      try {
+        const err = await eliminarBitacora(ordenId, id);
+        if (err) restaurar(err);
+      } catch {
+        restaurar("No se pudo eliminar la entrada.");
+      }
+    });
   }
 
   const visibles = useMemo(() => {

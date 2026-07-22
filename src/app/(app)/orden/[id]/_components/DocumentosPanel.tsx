@@ -4,6 +4,7 @@ import { useFormStatus } from "react-dom";
 import { Paperclip, FileText, Upload } from "lucide-react";
 import { formatFecha, type Documento } from "@/lib/types";
 import { Panel, SectionTitle } from "@/components/ui";
+import { avisoError } from "@/lib/avisos";
 import VisorDocumento from "@/components/VisorDocumento";
 import { subirDocumento } from "../actions";
 
@@ -23,7 +24,15 @@ export default function DocumentosPanel({
   documentos: Documento[];
   ocArchivo: string | null;
 }) {
-  const subir = subirDocumento.bind(null, ordenId);
+  // Si la subida falla, la action devuelve el error y lo avisamos.
+  async function subir(formData: FormData) {
+    try {
+      const err = await subirDocumento(ordenId, formData);
+      if (err) avisoError(err);
+    } catch {
+      avisoError("No se pudo subir el documento — inténtalo de nuevo.");
+    }
+  }
 
   return (
     <Panel>

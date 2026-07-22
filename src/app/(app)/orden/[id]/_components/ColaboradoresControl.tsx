@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { ChevronDown, UsersRound, Check } from "lucide-react";
 import type { Persona } from "@/lib/types";
 import { Avatar } from "@/components/ui";
+import { avisoError } from "@/lib/avisos";
 import { actualizarColaboradores } from "../actions";
 import { useActividad } from "./Actividad";
 
@@ -26,6 +27,7 @@ export default function ColaboradoresControl({
   const seleccionados = personas.filter((p) => ids.includes(p.id));
 
   function toggle(p: Persona) {
+    const previos = ids;
     const dentro = ids.includes(p.id);
     const next = dentro ? ids.filter((x) => x !== p.id) : [...ids, p.id];
     setIds(next);
@@ -34,7 +36,19 @@ export default function ColaboradoresControl({
         ? `Quitó a ${p.nombre} de los colaboradores.`
         : `Agregó a ${p.nombre} como colaborador.`,
     );
-    startTransition(() => actualizarColaboradores(ordenId, next));
+    startTransition(async () => {
+      // Si el guardado falla, restauramos la lista previa y avisamos.
+      try {
+        const err = await actualizarColaboradores(ordenId, next);
+        if (err) {
+          setIds(previos);
+          avisoError(err);
+        }
+      } catch {
+        setIds(previos);
+        avisoError("No se pudieron guardar los colaboradores.");
+      }
+    });
   }
 
   return (

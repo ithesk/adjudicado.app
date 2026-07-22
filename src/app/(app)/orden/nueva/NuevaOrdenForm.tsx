@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useRef, useState } from "react";
-import { X, UploadCloud, FileText } from "lucide-react";
+import { X, UploadCloud, FileText, Loader2 } from "lucide-react";
+import { fetchLargo } from "@/lib/fetch-cliente";
 import type { TipoItem } from "@/lib/types";
 import { crearOrden, type CrearState } from "./actions";
 
@@ -75,7 +76,8 @@ export default function NuevaOrdenForm() {
     const fd = new FormData();
     fd.append("archivo", archivo);
     try {
-      const res = await fetch("/api/ocr", { method: "POST", body: fd });
+      // Con tope de tiempo (el OCR puede tardar, pero no infinito).
+      const res = await fetchLargo("/api/ocr", 90_000, { method: "POST", body: fd });
       const json = await res.json();
       if (json.archivo_path) setArchivoPath(json.archivo_path);
 
@@ -207,8 +209,11 @@ export default function NuevaOrdenForm() {
           type="button"
           onClick={procesar}
           disabled={cargando || !archivo}
-          className="mt-4 w-full rounded-md bg-primary py-2.5 text-sm font-semibold text-primary-ink transition hover:bg-primary-hover disabled:opacity-60"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-primary py-2.5 text-sm font-semibold text-primary-ink transition hover:bg-primary-hover disabled:opacity-60"
         >
+          {cargando && (
+            <Loader2 className="h-4 w-4 motion-safe:animate-spin" strokeWidth={2.2} aria-hidden />
+          )}
           {cargando ? "Leyendo el documento…" : "Extraer datos"}
         </button>
       </div>

@@ -9,6 +9,7 @@ import { ESTADO_LABEL, esViva, nombreLegible, type Estado } from "@/lib/types";
 import Sidebar, { MenuMovil, type DatosSidebar } from "./_components/Sidebar";
 import BuscadorGlobal, { BotonBuscar } from "./_components/BuscadorGlobal";
 import { LogoLockup } from "@/components/Logo";
+import Avisos from "@/components/Avisos";
 
 const ESTADOS_NAV: { key: Estado; dot: string }[] = [
   { key: "orden_recibida", dot: "bg-muted/50" },
@@ -89,6 +90,9 @@ export default async function AppLayout({
 
       {/* Buscador global (Cmd/Ctrl+K), montado una vez */}
       <BuscadorGlobal />
+
+      {/* Avisos (toasts), montados una vez */}
+      <Avisos />
     </div>
   );
 }

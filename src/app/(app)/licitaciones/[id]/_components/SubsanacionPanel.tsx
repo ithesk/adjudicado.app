@@ -6,8 +6,6 @@
 // (se marcan en 2 · Requisitos) y se genera el paquete CHICO solo con eso.
 // abierta → enviada → cerrada; cerrada desaparece de la Bid Room.
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,6 +15,7 @@ import {
   Send,
 } from "lucide-react";
 import { Panel, SectionTitle, btnGhost, btnPrimary } from "@/components/ui";
+import { useAccion } from "@/lib/use-accion";
 import { diasRestantes, nivelUrgencia } from "@/lib/types";
 import { textoDias, urgenciaChip } from "@/lib/ui";
 import type { LicRequisito, LicSubsanacion } from "@/lib/licitaciones/tipos";
@@ -58,18 +57,8 @@ export default function SubsanacionPanel({
   onGenerar: (formato: "docx" | "pdf") => void;
   onIrARequisitos: () => void;
 }) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [pendiente, startTransition] = useTransition();
-
-  function correr(fn: () => Promise<string | null>) {
-    setError(null);
-    startTransition(async () => {
-      const err = await fn();
-      if (err) setError(err);
-      router.refresh();
-    });
-  }
+  // Claves por acción; el error del form de registro queda inline (cerca).
+  const { correr, ocupada, error } = useAccion();
 
   if (!subsanacion) {
     return (
@@ -77,12 +66,13 @@ export default function SubsanacionPanel({
         <SectionTitle icon={MailWarning}>Subsanación</SectionTitle>
         <form
           action={(fd) =>
-            correr(() =>
+            correr("registrar", () =>
               crearSubsanacionAction(
                 procesoId,
                 String(fd.get("fecha_limite") || ""),
                 String(fd.get("texto") || ""),
               ),
+              { errorInline: true },
             )
           }
           className="space-y-2 p-4"
@@ -107,9 +97,9 @@ export default function SubsanacionPanel({
             placeholder="Pega aquí el correo de la entidad — qué piden, tal cual lo escribieron."
             className={`${inputSm} w-full`}
           />
-          <button type="submit" disabled={pendiente} className={btnPrimary("!px-3 !py-1.5 !text-[12.5px]")}>
+          <button type="submit" disabled={ocupada("registrar")} className={btnPrimary("!px-3 !py-1.5 !text-[12.5px]")}>
             <MailWarning className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            {pendiente ? "Registrando…" : "Registrar subsanación"}
+            {ocupada("registrar") ? "Registrando…" : "Registrar subsanación"}
           </button>
         </form>
       </Panel>
@@ -203,7 +193,7 @@ export default function SubsanacionPanel({
           <button
             type="button"
             onClick={() => onGenerar(pdfListo ? "pdf" : "docx")}
-            disabled={generando || pendiente || pedidos.length === 0 || bloqueantes > 0}
+            disabled={generando || ocupada("estado") || pedidos.length === 0 || bloqueantes > 0}
             title={
               pdfListo
                 ? "Arma el ZIP solo con lo pedido, EN PDF listo para enviar"
@@ -217,7 +207,7 @@ export default function SubsanacionPanel({
           <button
             type="button"
             onClick={() => onGenerar(pdfListo ? "docx" : "pdf")}
-            disabled={generando || pendiente || pedidos.length === 0 || bloqueantes > 0}
+            disabled={generando || ocupada("estado") || pedidos.length === 0 || bloqueantes > 0}
             title={
               pdfListo
                 ? "Los mismos documentos en Word, por si hay que retocar algo"
@@ -230,8 +220,8 @@ export default function SubsanacionPanel({
           {abierta && (
             <button
               type="button"
-              onClick={() => correr(() => cambiarEstadoSubsanacionAction(subsanacion.id, "enviada"))}
-              disabled={pendiente}
+              onClick={() => correr("estado", () => cambiarEstadoSubsanacionAction(subsanacion.id, "enviada"))}
+              disabled={ocupada("estado")}
               title="Ya se le envió a la entidad — queda registrado con fecha"
               className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
             >
@@ -243,9 +233,9 @@ export default function SubsanacionPanel({
             type="button"
             onClick={() => {
               if (confirm("¿Cerrar esta subsanación? Desaparece de la Bid Room (las marcas de los requisitos se conservan)."))
-                correr(() => cambiarEstadoSubsanacionAction(subsanacion.id, "cerrada"));
+                correr("estado", () => cambiarEstadoSubsanacionAction(subsanacion.id, "cerrada"));
             }}
-            disabled={pendiente}
+            disabled={ocupada("estado")}
             className="ml-auto flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-ink"
           >
             <ListChecks className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />

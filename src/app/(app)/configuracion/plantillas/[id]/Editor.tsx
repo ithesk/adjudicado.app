@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Eye, Loader2, Paperclip, Rocket, X } from "lucide-react";
 import { Panel, SectionTitle, btnGhost, btnPrimary } from "@/components/ui";
+import { fetchLargo } from "@/lib/fetch-cliente";
 import {
   guardarAsignacionesAction,
   guardarVariablesPersonalizadasAction,
@@ -106,19 +107,25 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
   function vistaPrevia() {
     setError(null);
     startTransition(async () => {
-      const res = await fetch(`/api/plantillas/${plantilla.id}/vista-previa`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asignaciones }),
-      });
-      if (!res.ok) {
-        setError((await res.json().catch(() => null))?.error ?? "No se pudo generar la vista previa.");
-        return;
+      try {
+        // Con tope de tiempo: si la red se cae, el error se ve — el botón
+        // no se queda «Generando…» para siempre ni se apaga en silencio.
+        const res = await fetchLargo(`/api/plantillas/${plantilla.id}/vista-previa`, 90_000, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ asignaciones }),
+        });
+        if (!res.ok) {
+          setError((await res.json().catch(() => null))?.error ?? "No se pudo generar la vista previa.");
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "No se pudo generar la vista previa.");
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
     });
   }
 
