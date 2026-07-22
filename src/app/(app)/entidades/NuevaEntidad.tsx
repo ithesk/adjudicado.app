@@ -40,7 +40,8 @@ export default function NuevaEntidad() {
         name="nombre"
         autoFocus
         required
-        placeholder="Nombre de la entidad"
+        placeholder="Nombre o RNC de la entidad"
+        title="Con el RNC traemos el nombre oficial de la DGII; con el nombre buscamos su RNC"
         className="w-64 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary"
       />
       <button type="submit" disabled={pendiente} className={btnPrimary("!px-3 !py-1.5")}>

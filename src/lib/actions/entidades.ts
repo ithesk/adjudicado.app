@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMiembro, getUser } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { normalizarEntidad } from "@/lib/types";
+import { buscarPorNombre, consultarPorRnc, elegirCoincidencia, extraerRnc } from "@/lib/rnc";
 
 function refrescar() {
   revalidatePath("/configuracion/entidades");
@@ -51,21 +52,81 @@ export async function crearEntidadAction(nombre: string): Promise<string | null>
   if (!miembro) return "No autorizado.";
   const supabase = await createClient();
 
+  // Si escribieron el RNC en vez del nombre, la DGII nos da la razón social.
+  let nombreFinal = limpio;
+  let rnc: string | null = null;
+  const rncEscrito = extraerRnc(limpio);
+  if (rncEscrito) {
+    const datos = await consultarPorRnc(rncEscrito);
+    if (!datos) {
+      return "No encontramos ese RNC en el padrón de la DGII — escribe el nombre de la entidad.";
+    }
+    nombreFinal = datos.nombre;
+    rnc = datos.rnc;
+  }
+
   // Evitar duplicados por acentos/mayúsculas: "Lotería" ya existe si hay "LOTERIA".
   const { data: todas } = await supabase
     .from("institucion")
     .select("nombre")
     .eq("org_id", miembro.org_id);
-  const norm = normalizarEntidad(limpio);
+  const norm = normalizarEntidad(nombreFinal);
   if (todas?.some((i) => normalizarEntidad(i.nombre) === norm)) {
     return `Ya existe una entidad con ese nombre.`;
   }
 
-  const { error } = await supabase
+  // Escribieron el nombre: buscamos su RNC en la DGII (best-effort, si el
+  // servicio no responde o hay varios candidatos la entidad se crea igual).
+  if (!rnc) {
+    const encontrado = elegirCoincidencia(nombreFinal, await buscarPorNombre(nombreFinal));
+    if (encontrado) rnc = encontrado.rnc;
+  }
+
+  const { data: creada, error } = await supabase
     .from("institucion")
-    .insert({ org_id: miembro.org_id, nombre: limpio });
+    .insert({ org_id: miembro.org_id, nombre: nombreFinal, rnc })
+    .select("id")
+    .single();
+  if (!error && creada && rnc) {
+    await registrarEvento(creada.id, miembro.org_id, "perfil",
+      `RNC ${rnc} tomado del padrón de la DGII al crear la entidad`);
+  }
   refrescar();
   return error ? `No se pudo crear: ${error.message}` : null;
+}
+
+// Completa el RNC de una entidad existente buscando su nombre en la DGII.
+export async function buscarRncEntidadAction(id: string): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { data: entidad } = await supabase
+    .from("institucion")
+    .select("nombre")
+    .eq("id", id)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  if (!entidad) return "No autorizado.";
+
+  const candidatos = await buscarPorNombre(entidad.nombre);
+  const datos = elegirCoincidencia(entidad.nombre, candidatos);
+  if (!datos) {
+    return candidatos.length > 1
+      ? "La DGII devuelve varias entidades con ese nombre — escribe el RNC a mano."
+      : "No encontramos ese nombre en el padrón de la DGII — revisa cómo está escrito.";
+  }
+
+  const { error } = await supabase
+    .from("institucion")
+    .update({ rnc: datos.rnc })
+    .eq("id", id)
+    .eq("org_id", miembro.org_id);
+  if (error) return `No se pudo guardar: ${error.message}`;
+  await registrarEvento(id, miembro.org_id, "perfil",
+    `RNC ${datos.rnc} tomado del padrón de la DGII (${datos.nombre})`);
+  refrescar();
+  return null;
 }
 
 export async function actualizarEntidadAction(

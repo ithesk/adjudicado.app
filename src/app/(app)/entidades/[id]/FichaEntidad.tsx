@@ -16,6 +16,7 @@ import {
   Mail,
   Phone,
   Plus,
+  Search,
   Trash2,
   Users,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import {
   actualizarContactoEntidadAction,
   actualizarEntidadAction,
   agregarNotaEntidadAction,
+  buscarRncEntidadAction,
   crearContactoEntidadAction,
   eliminarContactoEntidadAction,
   subirLogoEntidadAction,
@@ -186,7 +188,21 @@ export default function FichaEntidad({
               <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
                 <Campo valor={e.nombre} placeholder="Nombre" onSave={(v) => correr(() => actualizarEntidadAction(e.id, { nombre: v }))} />
                 <Campo valor={e.siglas ?? ""} placeholder="Siglas (MICM…)" mono onSave={(v) => correr(() => actualizarEntidadAction(e.id, { siglas: v || null }))} />
-                <Campo valor={e.rnc ?? ""} placeholder="RNC" mono onSave={(v) => correr(() => actualizarEntidadAction(e.id, { rnc: v || null }))} />
+                <div className="flex items-center gap-1">
+                  <Campo valor={e.rnc ?? ""} placeholder="RNC" mono onSave={(v) => correr(() => actualizarEntidadAction(e.id, { rnc: v || null }))} />
+                  {!e.rnc && (
+                    <button
+                      type="button"
+                      disabled={pendiente}
+                      onClick={() => correr(() => buscarRncEntidadAction(e.id))}
+                      className="flex-none rounded-md border border-line bg-surface p-1.5 text-muted transition-colors hover:border-primary hover:text-primary"
+                      title="Buscar el RNC por el nombre en el padrón de la DGII"
+                      aria-label="Buscar el RNC en la DGII"
+                    >
+                      <Search className="h-3.5 w-3.5" strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
                 <Campo valor={e.telefono ?? ""} placeholder="Teléfono central" mono onSave={(v) => correr(() => actualizarEntidadAction(e.id, { telefono: v || null }))} />
                 <div className="sm:col-span-2">
                   <Campo valor={e.direccion ?? ""} placeholder="Dirección" onSave={(v) => correr(() => actualizarEntidadAction(e.id, { direccion: v || null }))} />
