@@ -7,9 +7,9 @@
 // Precios (snapshot congelado) o se teclea (manual).
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Calculator, GripVertical, Plus, Search, Trash2, X } from "lucide-react";
-import { Panel, SectionTitle, btnPrimary } from "@/components/ui";
+import { Calculator, GripVertical, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import { MicroGuardado, Panel, SectionTitle, btnPrimary } from "@/components/ui";
+import { useAccion } from "@/lib/use-accion";
 import { formatRD } from "@/lib/types";
 import { fmtUSD } from "@/lib/precios/tipos";
 import { buscarPreciosAction } from "@/lib/actions/precios";
@@ -40,10 +40,10 @@ export default function CotizadorItems({
   items: LicItem[];
   params: ParamsCotizacion;
 }) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
   const [buscandoEn, setBuscandoEn] = useState<string | null>(null);
-  const [pendiente, startTransition] = useTransition();
+  // Alcance POR LÍNEA: guardar una celda no bloquea el resto de la tabla,
+  // y el micro-check aparece junto al número de la línea que se guardó.
+  const { correr, ocupada, okClave } = useAccion();
 
   // ARRASTRAR PARA REORDENAR: el orden local manda al instante (optimista)
   // mientras el servidor persiste; el orden en pantalla es el del F.033.
@@ -73,7 +73,7 @@ export default function CotizadorItems({
     ids.splice(from, 1);
     ids.splice(to, 0, origen); // subir = antes del destino; bajar = después
     setOrdenLocal(ids);
-    correr(() => reordenarItemsAction(proceso.id, ids));
+    correr("orden", () => reordenarItemsAction(proceso.id, ids));
   }
 
   const totales = totalesProceso(items, params.itbisPct);
@@ -81,17 +81,8 @@ export default function CotizadorItems({
     (i) => i.ofertamos && i.precio_unitario === null,
   ).length;
 
-  function correr(fn: () => Promise<string | null>) {
-    setError(null);
-    startTransition(async () => {
-      const err = await fn();
-      if (err) setError(err);
-      router.refresh();
-    });
-  }
-
   const patch = (id: string, p: Parameters<typeof actualizarItemAction>[1]) =>
-    correr(() => actualizarItemAction(id, p));
+    correr(`it-${id}`, () => actualizarItemAction(id, p));
 
   return (
     <Panel>
@@ -106,11 +97,15 @@ export default function CotizadorItems({
             )}
             <button
               type="button"
-              disabled={pendiente}
-              onClick={() => correr(() => crearItemAction(proceso.id))}
+              disabled={ocupada("crear")}
+              onClick={() => correr("crear", () => crearItemAction(proceso.id))}
               className={btnPrimary("!px-2.5 !py-1 !text-[12.5px]")}
             >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+              {ocupada("crear") ? (
+                <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" strokeWidth={2.4} aria-hidden />
+              ) : (
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+              )}
               Línea
             </button>
           </span>
@@ -119,11 +114,6 @@ export default function CotizadorItems({
         Ítems ({items.length})
       </SectionTitle>
 
-      {error && (
-        <p className="mx-4 mt-3 rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">
-          {error}
-        </p>
-      )}
       {params.tasa === null && (
         <p className="mx-4 mt-3 rounded-md bg-warn-soft px-3 py-2 text-[12.5px] text-warn">
           Configura la tasa USD→DOP en Configuración → Empresa para cotizar del
@@ -169,7 +159,8 @@ export default function CotizadorItems({
                 key={item.id}
                 item={item}
                 params={params}
-                pendiente={pendiente}
+                ocupada={ocupada(`it-${item.id}`)}
+                ok={okClave === `it-${item.id}`}
                 enDrag={arrastrando === item.id}
                 esDestino={sobre === item.id && arrastrando !== null && arrastrando !== item.id}
                 hayArrastre={arrastrando !== null}
@@ -185,11 +176,11 @@ export default function CotizadorItems({
                 }}
                 onCotizar={(o) => {
                   setBuscandoEn(null);
-                  correr(() => cotizarItemAction(item.id, o));
+                  correr(`it-${item.id}`, () => cotizarItemAction(item.id, o));
                 }}
                 onEliminar={() => {
                   if (confirm(`¿Eliminar la línea ${item.numero}?`))
-                    correr(() => eliminarItemAction(item.id));
+                    correr(`it-${item.id}`, () => eliminarItemAction(item.id));
                 }}
               />
             ))}
@@ -199,8 +190,8 @@ export default function CotizadorItems({
                 <td colSpan={8} className="px-2 py-1">
                   <button
                     type="button"
-                    disabled={pendiente}
-                    onClick={() => correr(() => crearItemAction(proceso.id))}
+                    disabled={ocupada("crear")}
+                    onClick={() => correr("crear", () => crearItemAction(proceso.id))}
                     className="flex w-full items-center gap-1.5 rounded px-1.5 py-1.5 text-left text-[12.5px] font-medium text-primary transition-colors hover:bg-surface-2"
                   >
                     <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
@@ -218,8 +209,8 @@ export default function CotizadorItems({
                   </p>
                   <button
                     type="button"
-                    disabled={pendiente}
-                    onClick={() => correr(() => crearItemAction(proceso.id))}
+                    disabled={ocupada("crear")}
+                    onClick={() => correr("crear", () => crearItemAction(proceso.id))}
                     className={btnPrimary()}
                   >
                     <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
@@ -266,7 +257,8 @@ function productoIncompleto(item: LicItem): boolean {
 function Linea({
   item,
   params,
-  pendiente,
+  ocupada,
+  ok,
   enDrag,
   esDestino,
   hayArrastre,
@@ -282,7 +274,9 @@ function Linea({
 }: {
   item: LicItem;
   params: ParamsCotizacion;
-  pendiente: boolean;
+  // Estado de guardado de ESTA línea (clave it-<id> en useAccion).
+  ocupada: boolean;
+  ok: boolean;
   enDrag: boolean;
   esDestino: boolean;
   hayArrastre: boolean;
@@ -342,6 +336,8 @@ function Linea({
               <GripVertical className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             </span>
             <span className="font-mono text-xs font-semibold text-muted">{item.numero}</span>
+            {/* Guardando/guardado de ESTA línea, junto a su número. */}
+            <MicroGuardado activo={ocupada} ok={ok} />
           </span>
         </td>
         <td className="px-1 py-1 align-top">
@@ -436,7 +432,7 @@ function Linea({
           <button
             type="button"
             onClick={onEliminar}
-            disabled={pendiente}
+            disabled={ocupada}
             className="rounded p-1 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
             aria-label="Eliminar línea"
           >
@@ -543,7 +539,7 @@ function SelectorProducto({
       suplidor_nombre: string;
     }[]
   >([]);
-  const [, startTransition] = useTransition();
+  const [buscando, startTransition] = useTransition();
 
   function buscar(texto: string) {
     setQ(texto);
@@ -559,13 +555,22 @@ function SelectorProducto({
 
   return (
     <div className="mt-1.5 rounded-md border border-line bg-surface p-2">
-      <input
-        autoFocus
-        value={q}
-        onChange={(e) => buscar(e.target.value)}
-        placeholder="Buscar en el catálogo de precios (SKU o descripción)…"
-        className="w-full rounded-md border border-line bg-surface px-2 py-1 text-[12.5px] text-ink outline-none focus:border-primary"
-      />
+      <div className="relative">
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => buscar(e.target.value)}
+          placeholder="Buscar en el catálogo de precios (SKU o descripción)…"
+          className="w-full rounded-md border border-line bg-surface px-2 py-1 pr-7 text-[12.5px] text-ink outline-none focus:border-primary"
+        />
+        {buscando && (
+          <Loader2
+            className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 motion-safe:animate-spin text-muted"
+            strokeWidth={2.2}
+            aria-hidden
+          />
+        )}
+      </div>
       <ul className="mt-1 max-h-48 divide-y divide-line overflow-y-auto">
         {resultados.map((p) => (
           <li key={p.id}>

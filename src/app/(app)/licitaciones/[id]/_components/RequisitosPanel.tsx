@@ -17,7 +17,10 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { Panel, SectionTitle, btnPrimary, btnGhost } from "@/components/ui";
+import { MicroGuardado, Panel, SectionTitle, btnPrimary, btnGhost } from "@/components/ui";
+import { useAccion } from "@/lib/use-accion";
+import { avisoError } from "@/lib/avisos";
+import { fetchLargo } from "@/lib/fetch-cliente";
 import VisorDocumento from "@/components/VisorDocumento";
 import {
   actualizarRequisitoAction,
@@ -76,33 +79,27 @@ export default function RequisitosPanel({
   pdfListo?: boolean;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
   const [modo, setModo] = useState<"lista" | "checklist" | "manual">("lista");
   // Qué formulario suelto se está generando ahora mismo (código o null).
   const [generandoSolo, setGenerandoSolo] = useState<string | null>(null);
-  const [pendiente, startTransition] = useTransition();
-
-  function correr(fn: () => Promise<string | null>) {
-    setError(null);
-    startTransition(async () => {
-      const err = await fn();
-      if (err) setError(err);
-      router.refresh();
-    });
-  }
+  const [, startTransition] = useTransition();
+  // Alcance POR REQUISITO: marcar uno "listo" no bloquea el resto del
+  // checklist; los errores de fila salen como aviso, los del form inline.
+  const { correr, ocupada, okClave, error } = useAccion();
 
   // Genera SOLO este formulario y lo baja directo (sin armar el paquete).
+  // Con tope de tiempo: un fallo de red no deja el botón girando ni se
+  // cancela en silencio — el error SIEMPRE se ve.
   function generarSolo(codigo: string) {
-    setError(null);
     setGenerandoSolo(codigo);
     startTransition(async () => {
       try {
-        const res = await fetch(
+        const res = await fetchLargo(
           `/api/licitaciones/${procesoId}/generar?solo=${encodeURIComponent(codigo)}${pdfListo ? "&formato=pdf" : ""}`,
         );
         if (!res.ok) {
           const j = await res.json().catch(() => null);
-          setError(
+          avisoError(
             (j?.faltantes ?? j?.criticos)?.join(" · ") ?? j?.error ?? "No se pudo generar.",
           );
           return;
@@ -118,6 +115,8 @@ export default function RequisitosPanel({
         a.click();
         URL.revokeObjectURL(url);
         router.refresh(); // el requisito quedó con su archivo y en "listo"
+      } catch (e) {
+        avisoError(e instanceof Error ? e.message : "No se pudo generar.");
       } finally {
         setGenerandoSolo(null);
       }
@@ -176,9 +175,9 @@ export default function RequisitosPanel({
         <ChecklistPicker
           yaEstan={new Set(requisitos.map((r) => r.codigo))}
           plantillasOrg={plantillasOrg}
-          pendiente={pendiente}
+          pendiente={ocupada("agregar")}
           onAgregar={(codigos) => {
-            correr(() => crearRequisitosLoteAction(procesoId, codigos));
+            correr("agregar", () => crearRequisitosLoteAction(procesoId, codigos), { errorInline: true });
             setModo("lista");
           }}
         />
@@ -186,9 +185,9 @@ export default function RequisitosPanel({
 
       {modo === "manual" && (
         <FormManual
-          pendiente={pendiente}
+          pendiente={ocupada("agregar")}
           onAgregar={(datos) => {
-            correr(() => crearRequisitoAction(procesoId, datos));
+            correr("agregar", () => crearRequisitoAction(procesoId, datos), { errorInline: true });
             setModo("lista");
           }}
         />
@@ -205,20 +204,22 @@ export default function RequisitosPanel({
                 key={r.id}
                 r={r}
                 preguntas={plantillasOrg.find((p) => p.codigo === r.codigo)?.preguntas ?? []}
-                pendiente={pendiente}
+                ocupada={ocupada(`req-${r.id}`)}
+                subiendo={ocupada(`subir-${r.id}`)}
+                ok={okClave === `req-${r.id}` || okClave === `subir-${r.id}`}
                 subsanacionId={subsanacionId}
                 onToggleSub={(marcar) =>
-                  correr(() =>
+                  correr(`req-${r.id}`, () =>
                     toggleRequisitoSubsanacionAction(r.id, marcar ? subsanacionId : null),
                   )
                 }
-                onPatch={(patch) => correr(() => actualizarRequisitoAction(r.id, patch))}
-                onSubir={(fd) => correr(() => subirArchivoRequisitoAction(r.id, fd))}
+                onPatch={(patch) => correr(`req-${r.id}`, () => actualizarRequisitoAction(r.id, patch))}
+                onSubir={(fd) => correr(`subir-${r.id}`, () => subirArchivoRequisitoAction(r.id, fd))}
                 onGenerarSolo={() => generarSolo(r.codigo)}
                 generandoSolo={generandoSolo === r.codigo}
                 onEliminar={() => {
                   if (confirm(`¿Eliminar el requisito ${r.codigo}?`))
-                    correr(() => eliminarRequisitoAction(r.id));
+                    correr(`req-${r.id}`, () => eliminarRequisitoAction(r.id));
                 }}
               />
             ))}
@@ -444,7 +445,9 @@ function FormManual({
 function FilaRequisito({
   r,
   preguntas,
-  pendiente,
+  ocupada,
+  subiendo,
+  ok,
   subsanacionId,
   onToggleSub,
   onPatch,
@@ -457,7 +460,10 @@ function FilaRequisito({
   // Variables "se pregunta al generar" de la plantilla de la org detrás de
   // este requisito — cada proceso captura sus valores aquí.
   preguntas: { clave: string; etiqueta: string }[];
-  pendiente: boolean;
+  // Estado de ESTA fila (claves req-<id> / subir-<id> en useAccion).
+  ocupada: boolean;
+  subiendo: boolean;
+  ok: boolean;
   subsanacionId: string | null;
   onToggleSub: (marcar: boolean) => void;
   onPatch: (patch: Parameters<typeof actualizarRequisitoAction>[1]) => void;
@@ -486,6 +492,8 @@ function FilaRequisito({
           title={pendienteEstado ? (critico ? "Crítico pendiente" : "Pendiente") : "Listo"}
           aria-hidden
         />
+        {/* Guardando/guardado de ESTA fila, junto a su semáforo. */}
+        <MicroGuardado activo={ocupada || subiendo} ok={ok} />
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium text-ink">
             {r.nombre}
@@ -516,7 +524,7 @@ function FilaRequisito({
           <button
             type="button"
             onClick={onGenerarSolo}
-            disabled={pendiente || generandoSolo}
+            disabled={ocupada || generandoSolo}
             className="flex items-center gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:opacity-60"
             title="Genera SOLO este formulario y lo descarga — el expediente completo sigue saliendo con «Generar paquete» arriba"
           >
@@ -560,7 +568,7 @@ function FilaRequisito({
           <button
             type="button"
             onClick={() => onToggleSub(r.subsanacion_id !== subsanacionId)}
-            disabled={pendiente}
+            disabled={ocupada}
             className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10.5px] font-semibold transition-colors ${
               r.subsanacion_id === subsanacionId
                 ? "bg-warn-soft text-warn"
@@ -605,7 +613,7 @@ function FilaRequisito({
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              disabled={pendiente}
+              disabled={subiendo}
               className="flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-ink"
               title={
                 via === "genera"
@@ -613,8 +621,12 @@ function FilaRequisito({
                   : "Subir el archivo de este requisito (lo marca listo)"
               }
             >
-              <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              {r.storage_path ? "Reemplazar" : via === "genera" ? "Subir hecho" : "Subir"}
+              {subiendo ? (
+                <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
+              ) : (
+                <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              )}
+              {subiendo ? "Subiendo…" : r.storage_path ? "Reemplazar" : via === "genera" ? "Subir hecho" : "Subir"}
             </button>
           </>
         )}
@@ -631,7 +643,7 @@ function FilaRequisito({
         <button
           type="button"
           onClick={onEliminar}
-          disabled={pendiente}
+          disabled={ocupada}
           className="ml-2 rounded p-1 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
           aria-label="Eliminar requisito"
         >

@@ -6,13 +6,10 @@
 // actividad de sus órdenes, en un solo hilo).
 
 import Link from "next/link";
-import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRef } from "react";
 import {
-  Check,
   ImagePlus,
   Landmark,
-  Loader2,
   Mail,
   Phone,
   Plus,
@@ -24,10 +21,12 @@ import {
   CabeceraPagina,
   DisposicionFicha,
   Hoja,
+  IndicadorGuardado,
   Panel,
   SectionTitle,
   btnPrimary,
 } from "@/components/ui";
+import { useAccion } from "@/lib/use-accion";
 import { formatRD } from "@/lib/types";
 import type { EntidadDetalle } from "@/lib/entidades/queries";
 import {
@@ -99,28 +98,11 @@ export default function FichaEntidad({
   personas: { id: string; nombre: string }[];
   grupos: { id: string; nombre: string }[];
 }) {
-  const router = useRouter();
   const e = detalle;
-  const [error, setError] = useState<string | null>(null);
-  const [estado, setEstado] = useState<"idle" | "guardando" | "ok">("idle");
-  const [pendiente, startTransition] = useTransition();
   const logoRef = useRef<HTMLInputElement>(null);
-
-  function correr(fn: () => Promise<string | null>) {
-    setError(null);
-    setEstado("guardando");
-    startTransition(async () => {
-      const err = await fn();
-      if (err) {
-        setError(err);
-        setEstado("idle");
-      } else {
-        setEstado("ok");
-        setTimeout(() => setEstado("idle"), 2000);
-      }
-      router.refresh();
-    });
-  }
+  // Alcance por acción: guardar un campo del perfil no bloquea los contactos
+  // ni las asignaciones. Los errores salen como aviso (toast).
+  const { correr, ocupada, estado } = useAccion();
 
   const asignadasPersonas = new Set(e.asignaciones.filter((a) => a.user_id).map((a) => a.user_id));
   const asignadosGrupos = new Set(e.asignaciones.filter((a) => a.grupo_id).map((a) => a.grupo_id));
@@ -130,24 +112,8 @@ export default function FichaEntidad({
       <CabeceraPagina
         volver="/entidades"
         titulo={`${e.siglas ? `${e.siglas} — ` : ""}${e.nombre}`}
-        acciones={
-          estado === "guardando" ? (
-            <span className="flex items-center gap-1 text-[11.5px] text-muted">
-              <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
-              Guardando…
-            </span>
-          ) : estado === "ok" ? (
-            <span className="flex items-center gap-1 text-[11.5px] text-ok">
-              <Check className="h-3 w-3" strokeWidth={2.4} aria-hidden />
-              Guardado
-            </span>
-          ) : undefined
-        }
+        acciones={<IndicadorGuardado estado={estado} />}
       />
-
-      {error && (
-        <p className="rounded-md bg-danger-soft px-3 py-2 text-[13px] text-danger">{error}</p>
-      )}
 
       <DisposicionFicha
         principal={
@@ -181,20 +147,20 @@ export default function FichaEntidad({
                   if (!f) return;
                   const fd = new FormData();
                   fd.set("logo", f);
-                  correr(() => subirLogoEntidadAction(e.id, fd));
+                  correr("logo", () => subirLogoEntidadAction(e.id, fd));
                   ev.target.value = "";
                 }}
               />
               <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
-                <Campo valor={e.nombre} placeholder="Nombre" onSave={(v) => correr(() => actualizarEntidadAction(e.id, { nombre: v }))} />
-                <Campo valor={e.siglas ?? ""} placeholder="Siglas (MICM…)" mono onSave={(v) => correr(() => actualizarEntidadAction(e.id, { siglas: v || null }))} />
+                <Campo valor={e.nombre} placeholder="Nombre" onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { nombre: v }))} />
+                <Campo valor={e.siglas ?? ""} placeholder="Siglas (MICM…)" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { siglas: v || null }))} />
                 <div className="flex items-center gap-1">
-                  <Campo valor={e.rnc ?? ""} placeholder="RNC" mono onSave={(v) => correr(() => actualizarEntidadAction(e.id, { rnc: v || null }))} />
+                  <Campo valor={e.rnc ?? ""} placeholder="RNC" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { rnc: v || null }))} />
                   {!e.rnc && (
                     <button
                       type="button"
-                      disabled={pendiente}
-                      onClick={() => correr(() => buscarRncEntidadAction(e.id))}
+                      disabled={ocupada("rnc")}
+                      onClick={() => correr("rnc", () => buscarRncEntidadAction(e.id))}
                       className="flex-none rounded-md border border-line bg-surface p-1.5 text-muted transition-colors hover:border-primary hover:text-primary"
                       title="Buscar el RNC por el nombre en el padrón de la DGII"
                       aria-label="Buscar el RNC en la DGII"
@@ -203,9 +169,9 @@ export default function FichaEntidad({
                     </button>
                   )}
                 </div>
-                <Campo valor={e.telefono ?? ""} placeholder="Teléfono central" mono onSave={(v) => correr(() => actualizarEntidadAction(e.id, { telefono: v || null }))} />
+                <Campo valor={e.telefono ?? ""} placeholder="Teléfono central" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { telefono: v || null }))} />
                 <div className="sm:col-span-2">
-                  <Campo valor={e.direccion ?? ""} placeholder="Dirección" onSave={(v) => correr(() => actualizarEntidadAction(e.id, { direccion: v || null }))} />
+                  <Campo valor={e.direccion ?? ""} placeholder="Dirección" onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { direccion: v || null }))} />
                 </div>
                 <textarea
                   defaultValue={e.notas ?? ""}
@@ -213,7 +179,7 @@ export default function FichaEntidad({
                   rows={2}
                   onBlur={(ev) => {
                     const v = ev.target.value.trim();
-                    if (v !== (e.notas ?? "")) correr(() => actualizarEntidadAction(e.id, { notas: v || null }));
+                    if (v !== (e.notas ?? "")) correr("perfil", () => actualizarEntidadAction(e.id, { notas: v || null }));
                   }}
                   className={`${inputSm} w-full resize-y sm:col-span-2`}
                 />
@@ -227,11 +193,11 @@ export default function FichaEntidad({
             <ul className="divide-y divide-line">
               {e.contactos.map((c) => (
                 <li key={c.id} className={`${gridContacto} px-4 py-2`}>
-                  <Campo valor={c.nombre} placeholder="Nombre" onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { nombre: v }))} />
-                  <Campo valor={c.rol ?? ""} placeholder="Cargo" onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { rol: v || null }))} />
-                  <Campo valor={c.email ?? ""} placeholder="Email" mono onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { email: v || null }))} />
-                  <Campo valor={c.telefono ?? ""} placeholder="Tel. directo" mono onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { telefono: v || null }))} />
-                  <Campo valor={c.extension ?? ""} placeholder="Ext." mono onSave={(v) => correr(() => actualizarContactoEntidadAction(e.id, c.id, { extension: v || null }))} />
+                  <Campo valor={c.nombre} placeholder="Nombre" onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { nombre: v }))} />
+                  <Campo valor={c.rol ?? ""} placeholder="Cargo" onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { rol: v || null }))} />
+                  <Campo valor={c.email ?? ""} placeholder="Email" mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { email: v || null }))} />
+                  <Campo valor={c.telefono ?? ""} placeholder="Tel. directo" mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { telefono: v || null }))} />
+                  <Campo valor={c.extension ?? ""} placeholder="Ext." mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { extension: v || null }))} />
                   <span className="flex items-center gap-1.5">
                     {c.email && (
                       <a href={`mailto:${c.email}`} className="text-muted hover:text-primary" title={`Escribir a ${c.email}`}>
@@ -242,7 +208,7 @@ export default function FichaEntidad({
                       type="button"
                       onClick={() => {
                         if (confirm(`¿Eliminar el contacto ${c.nombre}?`))
-                          correr(() => eliminarContactoEntidadAction(e.id, c.id, c.nombre));
+                          correr(`ct-${c.id}`, () => eliminarContactoEntidadAction(e.id, c.id, c.nombre));
                       }}
                       className="rounded p-0.5 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
                       aria-label="Eliminar contacto"
@@ -255,7 +221,7 @@ export default function FichaEntidad({
             </ul>
             <form
               action={(fd) => {
-                correr(() =>
+                correr("ct-nuevo", () =>
                   crearContactoEntidadAction(e.id, {
                     nombre: String(fd.get("nombre") || ""),
                     rol: String(fd.get("rol") || ""),
@@ -272,7 +238,7 @@ export default function FichaEntidad({
               <input name="email" placeholder="Email" className={`${inputSm} font-mono`} />
               <input name="telefono" placeholder="Tel. directo" className={`${inputSm} font-mono`} />
               <input name="extension" placeholder="Ext." className={`${inputSm} font-mono`} />
-              <button type="submit" disabled={pendiente} className={btnPrimary("!px-2.5 !py-1 !text-[12px]")}>
+              <button type="submit" disabled={ocupada("ct-nuevo")} className={btnPrimary("!px-2.5 !py-1 !text-[12px]")}>
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
               </button>
             </form>
@@ -296,8 +262,8 @@ export default function FichaEntidad({
                   <button
                     key={p.id}
                     type="button"
-                    disabled={pendiente}
-                    onClick={() => correr(() => toggleAsignacionEntidadAction(e.id, { userId: p.id }, p.nombre))}
+                    disabled={ocupada(`asig-${p.id}`)}
+                    onClick={() => correr(`asig-${p.id}`, () => toggleAsignacionEntidadAction(e.id, { userId: p.id }, p.nombre))}
                     className={`rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
                       activa
                         ? "bg-primary text-white"
@@ -322,8 +288,8 @@ export default function FichaEntidad({
                   <button
                     key={g.id}
                     type="button"
-                    disabled={pendiente}
-                    onClick={() => correr(() => toggleAsignacionEntidadAction(e.id, { grupoId: g.id }, g.nombre))}
+                    disabled={ocupada(`asig-g-${g.id}`)}
+                    onClick={() => correr(`asig-g-${g.id}`, () => toggleAsignacionEntidadAction(e.id, { grupoId: g.id }, g.nombre))}
                     className={`rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors ${
                       activo
                         ? "bg-primary text-white"
@@ -417,7 +383,7 @@ export default function FichaEntidad({
             <form
               action={(fd) => {
                 const texto = String(fd.get("texto") || "");
-                correr(() => agregarNotaEntidadAction(e.id, texto));
+                correr("nota", () => agregarNotaEntidadAction(e.id, texto));
               }}
               className="flex gap-1.5 border-b border-line px-4 py-2.5"
             >
@@ -427,7 +393,7 @@ export default function FichaEntidad({
                 placeholder="Escribir una nota en la bitácora…"
                 className={`${inputSm} flex-1`}
               />
-              <button type="submit" disabled={pendiente} className={btnPrimary("!px-3 !py-1 !text-[12px]")}>
+              <button type="submit" disabled={ocupada("nota")} className={btnPrimary("!px-3 !py-1 !text-[12px]")}>
                 Anotar
               </button>
             </form>
