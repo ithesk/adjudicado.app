@@ -8,6 +8,38 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-22 — Entidades: RNC autollenado desde el padrón de la DGII
+
+**Hecho:** al crear una entidad, el sistema consulta el padrón de la DGII
+(API pública `rnc.megaplus.com.do`, sin llave) y completa el RNC solo:
+
+- **`src/lib/rnc.ts`** (solo servidor): `consultarPorRnc` / `buscarPorNombre` con
+  timeout de 6 s y best-effort (si el servicio se cae, la app sigue igual);
+  helpers puros testeables `extraerRnc` (¿escribieron un RNC de 9 dígitos o una
+  cédula de 11, con guiones/puntos?) y `elegirCoincidencia` (exacta normalizada
+  por razón social o nombre comercial; un único candidato también vale; con
+  varios ambiguos no elige — mejor sin RNC que con el RNC de otro).
+- **`crearEntidadAction`**: acepta nombre **o RNC** en el mismo campo. Con RNC →
+  trae la razón social oficial de la DGII y crea con ambos (si el RNC no existe,
+  error claro). Con nombre → crea y busca el RNC; si lo encuentra lo guarda y
+  queda **evento en la bitácora de la entidad** («RNC … tomado del padrón de la
+  DGII»). El chequeo de duplicados corre sobre el nombre final (el oficial).
+- **Ficha de entidad**: botón de lupa junto al campo RNC (solo si está vacío) →
+  `buscarRncEntidadAction` busca por el nombre y lo completa; mensajes distintos
+  para «hay varias» vs «no aparece».
+- Placeholder de «Nueva entidad» ahora dice «Nombre o RNC de la entidad».
+
+**Decisión no obvia:** la razón social se guarda tal cual DGII (MAYÚSCULAS) al
+crear por RNC — regla de fidelidad con el dato oficial; se puede editar después.
+
+**Verificado:** tsc, eslint, 89/89 vitest (7 nuevos en `rnc.test.ts`), API real
+probada (Banco Central 401-00755-1, Ministerio de Turismo 401-03681-9).
+
+**Pendiente:** probar en la app con entidades reales; si algún día el servicio
+megaplus muere, cambiar BASE en `src/lib/rnc.ts` por otro espejo del padrón.
+
+---
+
 ## 2026-07-21 — F.040 Debida Diligencia: nuevo formulario del sistema con LOGO de la entidad
 
 **Hecho:** Pablo trajo el SNCP-PROV-F-040 (debida diligencia y conflicto de interés)
