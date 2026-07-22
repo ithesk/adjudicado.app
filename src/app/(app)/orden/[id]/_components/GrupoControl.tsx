@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { ChevronDown, UsersRound, Check } from "lucide-react";
 import type { Grupo } from "@/lib/types";
+import { avisoError } from "@/lib/avisos";
 import { asignarGrupo } from "@/lib/actions/grupos";
 import { useActividad } from "./Actividad";
 
@@ -22,12 +23,21 @@ export default function GrupoControl({
   const actual = grupos.find((g) => g.id === grupoId) ?? null;
 
   function asignar(id: string | null) {
+    const previo = grupoId;
     const g = id ? grupos.find((x) => x.id === id) ?? null : null;
     setGrupoId(id);
     emitir(
       g ? `Asignó la orden al grupo ${g.nombre}.` : "Quitó el grupo de la orden.",
     );
-    startTransition(() => asignarGrupo(ordenId, id));
+    startTransition(async () => {
+      // asignarGrupo no devuelve error; si la llamada lanza, restauramos y avisamos.
+      try {
+        await asignarGrupo(ordenId, id);
+      } catch {
+        setGrupoId(previo);
+        avisoError("No se pudo guardar el grupo.");
+      }
+    });
     document
       .querySelectorAll<HTMLDetailsElement>("details[data-grupo]")
       .forEach((d) => (d.open = false));

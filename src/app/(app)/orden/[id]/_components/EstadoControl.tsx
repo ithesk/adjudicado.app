@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { ArrowRight, CheckCircle2, BadgeCheck } from "lucide-react";
 import { ESTADO_LABEL, siguienteEstado, type Estado } from "@/lib/types";
+import { avisoError } from "@/lib/avisos";
 import { avanzarEstado, fijarEstado } from "../actions";
 import { useActividad } from "./Actividad";
 
@@ -35,18 +36,43 @@ export default function EstadoControl({
 
   // Avanza un paso por la máquina lineal.
   function avanzar(mensaje: string) {
-    const destino = siguienteEstado(estado);
+    const previo = estado;
+    const destino = siguienteEstado(previo);
     if (!destino) return;
     setEstado(destino);
     emitir(mensaje);
-    startTransition(() => avanzarEstado(ordenId, estado));
+    startTransition(async () => {
+      // Si el guardado falla, restauramos el estado previo y avisamos.
+      try {
+        const err = await avanzarEstado(ordenId, previo);
+        if (err) {
+          setEstado(previo);
+          avisoError(err);
+        }
+      } catch {
+        setEstado(previo);
+        avisoError("No se pudo guardar el cambio de estado.");
+      }
+    });
   }
 
   // Salta a un estado puntual (p. ej. cobrar directo, sin pasar por libramiento).
   function saltar(destino: Estado, mensaje: string) {
+    const previo = estado;
     setEstado(destino);
     emitir(mensaje);
-    startTransition(() => fijarEstado(ordenId, destino));
+    startTransition(async () => {
+      try {
+        const err = await fijarEstado(ordenId, destino);
+        if (err) {
+          setEstado(previo);
+          avisoError(err);
+        }
+      } catch {
+        setEstado(previo);
+        avisoError("No se pudo guardar el cambio de estado.");
+      }
+    });
   }
 
   // En Facturado el libramiento es OPCIONAL: hay instituciones que pagan directo.

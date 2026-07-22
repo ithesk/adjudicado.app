@@ -51,6 +51,8 @@ import {
   type TipoItem,
 } from "@/lib/types";
 import { Avatar, Panel, SectionTitle, inputBase } from "@/components/ui";
+import { avisoError } from "@/lib/avisos";
+import { isDemo } from "@/lib/demo";
 import { ContactList } from "@/components/contacts";
 import { textoDias, urgenciaChip } from "@/lib/ui";
 import { useActividad } from "./Actividad";
@@ -131,41 +133,87 @@ export default function ItemsPanel({
     setItems((prev) => mapArbol(prev, id, (it) => ({ ...it, ...patch })));
   }
   // Persiste en Supabase (no-op en demo). Los campos no soportados se filtran.
+  // Aquí no hay rollback: el valor en pantalla es lo que tecleó el usuario;
+  // si el guardado falla solo avisamos.
   function persist(id: string, patch: Record<string, unknown>) {
-    startTransition(() => actualizarItem(ordenId, id, patch));
+    startTransition(async () => {
+      try {
+        const err = await actualizarItem(ordenId, id, patch);
+        if (err) avisoError(err);
+      } catch {
+        avisoError("No se pudo guardar el cambio del ítem.");
+      }
+    });
   }
-  // Local + persistente.
+  // Local + persistente. Si el guardado falla, restaura el árbol previo y avisa.
   function save(id: string, patch: Partial<Item>) {
+    const previos = items;
     update(id, patch);
-    persist(id, patch as Record<string, unknown>);
+    startTransition(async () => {
+      try {
+        const err = await actualizarItem(ordenId, id, patch as Record<string, unknown>);
+        if (err) {
+          setItems(previos);
+          avisoError(err);
+        }
+      } catch {
+        setItems(previos);
+        avisoError("No se pudo guardar el cambio del ítem.");
+      }
+    });
   }
 
   async function addItem() {
-    const nuevo = await agregarItem(ordenId);
-    if (nuevo) {
-      setItems((prev) => [...prev, nuevo]);
-      emitir("Agregó un ítem a la orden.");
+    try {
+      const nuevo = await agregarItem(ordenId);
+      if (nuevo) {
+        setItems((prev) => [...prev, nuevo]);
+        emitir("Agregó un ítem a la orden.");
+      } else if (!isDemo()) {
+        avisoError("No se pudo agregar el ítem.");
+      }
+    } catch {
+      avisoError("No se pudo agregar el ítem.");
     }
   }
 
   // Agrega un componente (sub-ítem) dentro de otro ítem.
   async function addComponente(parentId: string) {
-    const nuevo = await agregarItem(ordenId, parentId);
-    if (nuevo) {
-      setItems((prev) =>
-        mapArbol(prev, parentId, (it) => ({
-          ...it,
-          componentes: [...(it.componentes ?? []), nuevo],
-        })),
-      );
-      emitir("Agregó un componente a un ítem.");
+    try {
+      const nuevo = await agregarItem(ordenId, parentId);
+      if (nuevo) {
+        setItems((prev) =>
+          mapArbol(prev, parentId, (it) => ({
+            ...it,
+            componentes: [...(it.componentes ?? []), nuevo],
+          })),
+        );
+        emitir("Agregó un componente a un ítem.");
+      } else if (!isDemo()) {
+        avisoError("No se pudo agregar el componente.");
+      }
+    } catch {
+      avisoError("No se pudo agregar el componente.");
     }
   }
 
   function delItem(it: Item) {
+    const previos = items;
     setItems((prev) => quitarArbol(prev, it.id));
     emitir(`Eliminó “${it.nombre}”.`);
-    startTransition(() => eliminarItem(ordenId, it.id));
+    startTransition(async () => {
+      // Si el borrado falla, el ítem vuelve a su sitio y avisamos.
+      try {
+        const err = await eliminarItem(ordenId, it.id);
+        if (err) {
+          setItems(previos);
+          avisoError(err);
+        }
+      } catch {
+        setItems(previos);
+        avisoError(`No se pudo eliminar “${it.nombre}”.`);
+      }
+    });
   }
 
   function avanzar(it: Item) {
@@ -219,8 +267,14 @@ export default function ItemsPanel({
       );
       const fd = new FormData();
       fd.append("archivo", file);
-      const res = await adjuntarDocumentoBitacora(ordenId, itemId, fd);
+      let res: { path: string; nombre: string } | null = null;
+      try {
+        res = await adjuntarDocumentoBitacora(ordenId, itemId, fd);
+      } catch {
+        res = null;
+      }
       if (res?.path) {
+        const listo = res;
         setItems((prev) =>
           mapArbol(prev, itemId, (it) => ({
             ...it,
@@ -229,13 +283,22 @@ export default function ItemsPanel({
                 ? {
                     ...c,
                     adjuntos: [
-                      { nombre: res.nombre, bucket: "documentos", path: res.path },
+                      { nombre: listo.nombre, bucket: "documentos", path: listo.path },
                     ],
                   }
                 : c,
             ),
           })),
         );
+      } else if (!isDemo()) {
+        // La entrada no puede quedarse «subiendo…» para siempre: la quitamos.
+        setItems((prev) =>
+          mapArbol(prev, itemId, (it) => ({
+            ...it,
+            coordinacion: (it.coordinacion ?? []).filter((c) => c.id !== cid),
+          })),
+        );
+        avisoError(`No se pudo subir ${file.name} — inténtalo de nuevo.`);
       }
     }
   }
@@ -244,14 +307,14 @@ export default function ItemsPanel({
     // La nota del ítem se persiste con su item_id y rueda hacia la bitácora de
     // la orden (etiquetada con el ítem). No emitimos evento resumen aparte para
     // no duplicar.
-    startTransition(() => agregarCoordinacionItem(ordenId, id, tipo, texto));
+    const cid = nid();
     setItems((prev) =>
       mapArbol(prev, id, (it) => ({
         ...it,
         coordinacion: [
           ...(it.coordinacion ?? []),
           {
-            id: nid(),
+            id: cid,
             orden_id: it.orden_id,
             item_id: id,
             autor_id: currentUser.id,
@@ -263,6 +326,24 @@ export default function ItemsPanel({
         ],
       })),
     );
+    startTransition(async () => {
+      // Si el guardado falla, quitamos la nota optimista y avisamos.
+      const deshacer = (msg: string) => {
+        setItems((prev) =>
+          mapArbol(prev, id, (it) => ({
+            ...it,
+            coordinacion: (it.coordinacion ?? []).filter((c) => c.id !== cid),
+          })),
+        );
+        avisoError(msg);
+      };
+      try {
+        const err = await agregarCoordinacionItem(ordenId, id, tipo, texto);
+        if (err) deshacer(err);
+      } catch {
+        deshacer("No se pudo guardar la nota.");
+      }
+    });
   }
 
   return (

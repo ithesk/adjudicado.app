@@ -8,6 +8,47 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-22 (4) — Sistema de feedback: cada clic responde algo
+
+Pablo: «le di clic a algo y está cargando, no sé qué» — y pasaba en cualquier
+acción. Auditoría con agentes: de ~95 acciones del sistema, 34 sin señal de
+espera, ~40 sin confirmación, 22 con fallo silencioso (órdenes fingía éxito),
+6 spinners potencialmente infinitos, 0 loading.tsx, navegación sin feedback.
+Se construyó el sistema completo (docs/sistema-ui.md §carga es la referencia):
+
+- **Fundación** (`src/lib/`): `useAccion()` — el correr() canónico con clave
+  POR ACCIÓN (se acabó el panel entero deshabilitado), anti doble-clic, error
+  siempre visible (aviso por defecto, `errorInline` para forms). `avisos.ts` +
+  `<Avisos/>` — toasts propios sin librerías (ok 2.5 s, error 7 s cerrable).
+  `fetchLargo()` — tope de tiempo obligatorio en llamadas largas.
+  En ui.tsx: `IndicadorGuardado` (canónico — antes 5 copias), `MicroGuardado`
+  (check junto al campo editado), `Boton cargando`, `Esqueleto(Pagina)`.
+- **Navegación**: `loading.tsx` general de (app) + siluetas de ficha para
+  orden/[id], licitaciones/[id], entidades/[id] (fallback INSTANTÁNEO al
+  clicar — era el ofensor nº1: pantalla congelada en cada navegación) +
+  spinner con retardo 150 ms en el NavLink clicado (useLinkStatus).
+- **Licitaciones/entidades**: cotizador con clave por línea y micro-check en
+  el número (8 campos guardaban mudos); requisitos con «Subiendo…» en el
+  clip y estado por fila; DatosProceso/FichaEntidad/EntidadesEditor/
+  PerfilEmpresa/SubsanacionPanel migrados al patrón canónico.
+- **Órdenes — optimista honesto** (agente): las ~20 actions devuelven ahora
+  `string|null`; todos los controles optimistas hacen ROLLBACK + aviso si el
+  servidor falla (antes la UI mentía); los adjuntos ya no quedan «subiendo…»
+  eternos. El happy path no cambió (misma velocidad).
+- **Esperas largas**: generar paquete/subsanación, vista previa de plantillas
+  y OCR con `fetchLargo` + catch visible; el botón del OCR ganó su spinner.
+
+**Decisiones**: sin librerías (toasts y skeletons propios, regla de la casa);
+`unstable_instant`/Cache Components NO — exige otra arquitectura de datos;
+`loading.tsx` es el camino correcto con páginas force-dynamic. Indicador con
+retardo (150 ms nav / sin indicador <300 ms en autosave) para no parpadear.
+
+**Verificado**: tsc, eslint (solo warnings preexistentes), 94/94 vitest.
+**Pendiente Pablo**: probar en vivo (navegar, cotizador, requisitos, una
+acción de orden sin red para ver el rollback+aviso) y mergear el PR #18.
+
+---
+
 ## 2026-07-22 (3) — F.040: los campos «borrados» eran un bug de recorte de LibreOffice
 
 Pablo reportó que el F.040 salía con los campos vacíos en PDF. Investigación

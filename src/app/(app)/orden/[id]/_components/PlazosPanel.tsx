@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { CalendarClock } from "lucide-react";
 import type { Orden } from "@/lib/types";
 import { Panel, SectionTitle, inputBase } from "@/components/ui";
+import { avisoError } from "@/lib/avisos";
 import { actualizarPlazos } from "../actions";
 
 export default function PlazosPanel({
@@ -23,9 +24,18 @@ export default function PlazosPanel({
 
   function guardar() {
     startTransition(async () => {
-      await actualizarPlazos(ordenId, plazo, pagoDias, metodo);
-      setGuardado(true);
-      setTimeout(() => setGuardado(false), 1500);
+      // «Guardado» solo si de verdad se guardó; si falla, avisamos.
+      try {
+        const err = await actualizarPlazos(ordenId, plazo, pagoDias, metodo);
+        if (err) {
+          avisoError(err);
+          return;
+        }
+        setGuardado(true);
+        setTimeout(() => setGuardado(false), 1500);
+      } catch {
+        avisoError("No se pudieron guardar los plazos.");
+      }
     });
   }
 

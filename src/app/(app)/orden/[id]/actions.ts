@@ -20,42 +20,60 @@ function refrescar(ordenId: string) {
   revalidatePath("/");
 }
 
+// Convención de la casa: las actions de mutación devuelven el mensaje de error
+// (string) o null si todo salió bien. La UI optimista usa ese canal para
+// restaurar el estado previo y avisar.
+
 // Avanza la orden al siguiente estado de la máquina (incluye handoff a Odoo).
-export async function avanzarEstado(ordenId: string, desde: Estado) {
-  if (isDemo()) return;
+export async function avanzarEstado(
+  ordenId: string,
+  desde: Estado,
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
   const proximo = siguienteEstado(desde);
-  if (!proximo) return;
-  await supabase
+  if (!proximo) return null;
+  const { error } = await supabase
     .from("orden")
     .update({ estado: proximo })
     .eq("id", ordenId)
     .eq("estado", desde); // optimista: solo si no cambió mientras tanto
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // Permite fijar un estado puntual (p. ej. retroceder o marcar cobrado).
-export async function fijarEstado(ordenId: string, estado: Estado) {
-  if (isDemo()) return;
+export async function fijarEstado(
+  ordenId: string,
+  estado: Estado,
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
-  await supabase.from("orden").update({ estado }).eq("id", ordenId);
+  const { error } = await supabase
+    .from("orden")
+    .update({ estado })
+    .eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 export async function toggleItem(
   ordenId: string,
   itemId: string,
   entregado: boolean,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("item")
     .update({
       entregado,
       fecha_entrega: entregado ? new Date().toISOString().slice(0, 10) : null,
     })
     .eq("id", itemId);
+  if (error) return `No se pudo guardar: ${error.message}`;
 
   // Si todos los ítems quedaron entregados, la orden pasa a 'entregado'.
   const { data: items } = await supabase
@@ -75,40 +93,46 @@ export async function toggleItem(
     orden &&
     (orden.estado === "orden_recibida" || orden.estado === "en_coordinacion")
   ) {
-    await supabase
+    const { error: cascada } = await supabase
       .from("orden")
       .update({ estado: "entregado" })
       .eq("id", ordenId);
+    if (cascada) return `No se pudo guardar: ${cascada.message}`;
   }
 
   refrescar(ordenId);
+  return null;
 }
 
 export async function asignarResponsable(
   ordenId: string,
   responsableId: string | null,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("orden")
     .update({ responsable_id: responsableId })
     .eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // Colaboradores de una orden (además del responsable líder).
 export async function actualizarColaboradores(
   ordenId: string,
   userIds: string[],
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("orden")
     .update({ colaboradores: userIds })
     .eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // ---------- Editar la orden (corregir lo creado mal) ----------
@@ -126,31 +150,26 @@ const CAMPOS_ORDEN = new Set([
 export async function actualizarOrden(
   ordenId: string,
   patch: Record<string, unknown>,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const limpio: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(patch)) {
     if (CAMPOS_ORDEN.has(k)) limpio[k] = v === "" ? null : v;
   }
-  if (Object.keys(limpio).length === 0) return;
+  if (Object.keys(limpio).length === 0) return null;
   const supabase = await createClient();
   const { error } = await supabase.from("orden").update(limpio).eq("id", ordenId);
-  if (error) {
-    console.error("actualizarOrden falló:", error.message);
-    return;
-  }
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // Elimina una orden completa (ítems, bitácora y documentos se borran en cascada).
-export async function eliminarOrden(ordenId: string) {
-  if (isDemo()) return;
+export async function eliminarOrden(ordenId: string): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
   const { error } = await supabase.from("orden").delete().eq("id", ordenId);
-  if (error) {
-    console.error("eliminarOrden falló:", error.message);
-    return;
-  }
+  if (error) return `No se pudo eliminar: ${error.message}`;
   revalidatePath("/");
   redirect("/");
 }
@@ -192,11 +211,16 @@ export async function agregarItem(
   return data as Item;
 }
 
-export async function eliminarItem(ordenId: string, itemId: string) {
-  if (isDemo()) return;
+export async function eliminarItem(
+  ordenId: string,
+  itemId: string,
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
-  await supabase.from("item").delete().eq("id", itemId);
+  const { error } = await supabase.from("item").delete().eq("id", itemId);
+  if (error) return `No se pudo eliminar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // ---------- Persistencia a nivel de ítem ----------
@@ -221,21 +245,19 @@ export async function actualizarItem(
   ordenId: string,
   itemId: string,
   patch: Record<string, unknown>,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const limpio: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(patch)) {
     // No colapsar arrays/objetos a null: solo cadenas vacías → null.
     if (CAMPOS_ITEM.has(k)) limpio[k] = v === "" ? null : v;
   }
-  if (Object.keys(limpio).length === 0) return;
+  if (Object.keys(limpio).length === 0) return null;
   const supabase = await createClient();
   const { error } = await supabase.from("item").update(limpio).eq("id", itemId);
-  if (error) {
-    console.error("actualizarItem falló:", error.message, limpio);
-    return;
-  }
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 export async function agregarCoordinacionItem(
@@ -243,25 +265,28 @@ export async function agregarCoordinacionItem(
   itemId: string,
   tipo: TipoBitacora,
   texto: string,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const limpio = texto.trim();
-  if (!limpio) return;
+  if (!limpio) return null;
   const user = await getUser();
   const supabase = await createClient();
-  await supabase.from("bitacora").insert({
+  const { error } = await supabase.from("bitacora").insert({
     orden_id: ordenId,
     item_id: itemId,
     autor_id: user?.id ?? null,
     tipo,
     texto: limpio,
   });
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // Registra un evento automático (avance de ítem, suplidor asignado, marcador…)
 // en la bitácora. NO revalida: el feed en vivo ya lo muestra al instante y así
-// evitamos que aparezca duplicado en la misma sesión.
+// evitamos que aparezca duplicado en la misma sesión. Devuelve void (no
+// string|null) porque su único caller —el feed de actividad— es fire-and-forget.
 export async function registrarEvento(ordenId: string, texto: string) {
   if (isDemo()) return;
   const limpio = texto.trim();
@@ -281,19 +306,21 @@ export async function agregarBitacora(
   ordenId: string,
   tipo: TipoBitacora,
   texto: string,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const limpio = texto.trim();
-  if (!limpio) return;
+  if (!limpio) return null;
   const user = await getUser();
   const supabase = await createClient();
-  await supabase.from("bitacora").insert({
+  const { error } = await supabase.from("bitacora").insert({
     orden_id: ordenId,
     autor_id: user?.id ?? null,
     tipo,
     texto: limpio,
   });
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // Alterna la reacción del usuario actual sobre una entrada de bitácora.
@@ -302,10 +329,10 @@ export async function alternarReaccion(
   _ordenId: string,
   bitacoraId: string,
   emoji: string,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const user = await getUser();
-  if (!user) return;
+  if (!user) return null;
   const supabase = await createClient();
   const { data } = await supabase
     .from("bitacora_reaccion")
@@ -315,23 +342,26 @@ export async function alternarReaccion(
     .eq("emoji", emoji)
     .maybeSingle();
   if (data) {
-    await supabase.from("bitacora_reaccion").delete().eq("id", data.id);
-  } else {
     const { error } = await supabase
       .from("bitacora_reaccion")
-      .insert({ bitacora_id: bitacoraId, user_id: user.id, emoji });
-    if (error) console.error("alternarReaccion falló:", error.message);
+      .delete()
+      .eq("id", data.id);
+    return error ? `No se pudo guardar: ${error.message}` : null;
   }
+  const { error } = await supabase
+    .from("bitacora_reaccion")
+    .insert({ bitacora_id: bitacoraId, user_id: user.id, emoji });
+  return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
 export async function agregarComentario(
   _ordenId: string,
   bitacoraId: string,
   texto: string,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const limpio = texto.trim();
-  if (!limpio) return;
+  if (!limpio) return null;
   const user = await getUser();
   const supabase = await createClient();
   const { error } = await supabase.from("bitacora_comentario").insert({
@@ -339,7 +369,7 @@ export async function agregarComentario(
     autor_id: user?.id ?? null,
     texto: limpio,
   });
-  if (error) console.error("agregarComentario falló:", error.message);
+  return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
 // Edita el texto de una entrada propia (estilo Notion). Solo el autor puede.
@@ -347,33 +377,36 @@ export async function editarBitacora(
   _ordenId: string,
   bitacoraId: string,
   texto: string,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const limpio = texto.trim();
-  if (!limpio) return;
+  if (!limpio) return null;
   const user = await getUser();
-  if (!user) return;
+  if (!user) return null;
   const supabase = await createClient();
   const { error } = await supabase
     .from("bitacora")
     .update({ texto: limpio, editada: true })
     .eq("id", bitacoraId)
     .eq("autor_id", user.id); // solo el autor
-  if (error) console.error("editarBitacora falló:", error.message);
+  return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
 // Elimina una entrada propia (y sus reacciones/comentarios en cascada).
-export async function eliminarBitacora(_ordenId: string, bitacoraId: string) {
-  if (isDemo()) return;
+export async function eliminarBitacora(
+  _ordenId: string,
+  bitacoraId: string,
+): Promise<string | null> {
+  if (isDemo()) return null;
   const user = await getUser();
-  if (!user) return;
+  if (!user) return null;
   const supabase = await createClient();
   const { error } = await supabase
     .from("bitacora")
     .delete()
     .eq("id", bitacoraId)
     .eq("autor_id", user.id); // solo el autor
-  if (error) console.error("eliminarBitacora falló:", error.message);
+  return error ? `No se pudo eliminar: ${error.message}` : null;
 }
 
 export async function actualizarSuplidor(
@@ -381,15 +414,15 @@ export async function actualizarSuplidor(
   suplidor: string,
   estado: string,
   fecha: string,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
   const estadoValido: SuplidorEstado | null = (
     ["pedido", "en_transito", "recibido"] as string[]
   ).includes(estado)
     ? (estado as SuplidorEstado)
     : null;
-  await supabase
+  const { error } = await supabase
     .from("orden")
     .update({
       suplidor: suplidor.trim() || null,
@@ -397,7 +430,9 @@ export async function actualizarSuplidor(
       suplidor_fecha_estim: fecha || null,
     })
     .eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 export async function actualizarPlazos(
@@ -405,10 +440,10 @@ export async function actualizarPlazos(
   plazoEntrega: string,
   plazoPagoDias: string,
   metodoPago: string,
-) {
-  if (isDemo()) return;
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from("orden")
     .update({
       plazo_entrega: plazoEntrega || null,
@@ -416,13 +451,18 @@ export async function actualizarPlazos(
       metodo_pago: metodoPago.trim() || null,
     })
     .eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
-export async function agregarEtiqueta(ordenId: string, etiqueta: string) {
-  if (isDemo()) return;
+export async function agregarEtiqueta(
+  ordenId: string,
+  etiqueta: string,
+): Promise<string | null> {
+  if (isDemo()) return null;
   const limpia = etiqueta.trim();
-  if (!limpia) return;
+  if (!limpia) return null;
   const supabase = await createClient();
   const { data } = await supabase
     .from("orden")
@@ -430,16 +470,21 @@ export async function agregarEtiqueta(ordenId: string, etiqueta: string) {
     .eq("id", ordenId)
     .single();
   const actuales: string[] = data?.etiquetas ?? [];
-  if (actuales.includes(limpia)) return;
-  await supabase
+  if (actuales.includes(limpia)) return null;
+  const { error } = await supabase
     .from("orden")
     .update({ etiquetas: [...actuales, limpia] })
     .eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
-export async function quitarEtiqueta(ordenId: string, etiqueta: string) {
-  if (isDemo()) return;
+export async function quitarEtiqueta(
+  ordenId: string,
+  etiqueta: string,
+): Promise<string | null> {
+  if (isDemo()) return null;
   const supabase = await createClient();
   const { data } = await supabase
     .from("orden")
@@ -447,17 +492,20 @@ export async function quitarEtiqueta(ordenId: string, etiqueta: string) {
     .eq("id", ordenId)
     .single();
   const actuales: string[] = data?.etiquetas ?? [];
-  await supabase
+  const { error } = await supabase
     .from("orden")
     .update({ etiquetas: actuales.filter((e) => e !== etiqueta) })
     .eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // Adjunta un archivo a la bitácora: lo sube a Storage, lo registra como
 // documento de la orden (aparece en Documentos y en el repositorio global) y
 // crea una entrada de bitácora que lo referencia. itemId opcional = hilo del ítem.
-// Devuelve el path para poder abrir el adjunto al instante (optimista).
+// Devuelve el path para poder abrir el adjunto al instante (optimista);
+// null = falló (la UI quita la entrada «subiendo…» y avisa).
 export async function adjuntarDocumentoBitacora(
   ordenId: string,
   itemId: string | null,
@@ -510,15 +558,18 @@ export async function adjuntarDocumentoBitacora(
   return { path, nombre: archivo.name };
 }
 
-export async function subirDocumento(ordenId: string, formData: FormData) {
-  if (isDemo()) return;
+export async function subirDocumento(
+  ordenId: string,
+  formData: FormData,
+): Promise<string | null> {
+  if (isDemo()) return null;
   const miembro = await getMiembro();
   const user = await getUser();
-  if (!miembro) return;
+  if (!miembro) return null;
 
   const archivo = formData.get("archivo");
   const tipo = String(formData.get("tipo") || "otro");
-  if (!(archivo instanceof File) || archivo.size === 0) return;
+  if (!(archivo instanceof File) || archivo.size === 0) return null;
 
   const supabase = await createClient();
   const ext = archivo.name.split(".").pop() || "bin";
@@ -530,16 +581,18 @@ export async function subirDocumento(ordenId: string, formData: FormData) {
     .upload(path, bytes, {
       contentType: archivo.type || "application/octet-stream",
     });
-  if (error) return;
+  if (error) return `No se pudo subir: ${error.message}`;
 
-  await supabase.from("documento").insert({
+  const { error: regErr } = await supabase.from("documento").insert({
     orden_id: ordenId,
     nombre: archivo.name,
     tipo,
     archivo_url: path,
     subido_por: user?.id ?? null,
   });
+  if (regErr) return `No se pudo registrar el documento: ${regErr.message}`;
   refrescar(ordenId);
+  return null;
 }
 
 // Genera una URL firmada temporal para ver/descargar un documento privado.
