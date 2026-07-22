@@ -3,14 +3,11 @@
 // PASO 0 — Los datos del proceso: la primera parada de la línea de tiempo.
 // Todo con autosave (se guarda al salir del campo).
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Check, FileText, Loader2 } from "lucide-react";
-import { Panel, SectionTitle, inputBase } from "@/components/ui";
+import { FileText } from "lucide-react";
+import { IndicadorGuardado, Panel, SectionTitle, inputBase } from "@/components/ui";
+import { useAccion } from "@/lib/use-accion";
 import { actualizarProcesoAction } from "@/lib/actions/licitaciones";
 import { MODALIDAD_LABEL, type LicProceso } from "@/lib/licitaciones/tipos";
-
-type Estado = "idle" | "guardando" | "ok" | string;
 
 export default function DatosProceso({
   proceso,
@@ -19,40 +16,15 @@ export default function DatosProceso({
   proceso: LicProceso;
   instituciones: { id: string; nombre: string }[];
 }) {
-  const router = useRouter();
-  const [estado, setEstado] = useState<Estado>("idle");
-  const [, startTransition] = useTransition();
+  const { correr, estado } = useAccion();
 
   function autosave(patch: Parameters<typeof actualizarProcesoAction>[1]) {
-    setEstado("guardando");
-    startTransition(async () => {
-      const err = await actualizarProcesoAction(proceso.id, patch);
-      setEstado(err ?? "ok");
-      if (!err) setTimeout(() => setEstado("idle"), 2000);
-      router.refresh();
-    });
+    correr("proceso", () => actualizarProcesoAction(proceso.id, patch));
   }
 
   return (
     <Panel>
-      <SectionTitle
-        icon={FileText}
-        right={
-          estado === "guardando" ? (
-            <span className="flex items-center gap-1 text-[11.5px] text-muted">
-              <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
-              Guardando…
-            </span>
-          ) : estado === "ok" ? (
-            <span className="flex items-center gap-1 text-[11.5px] text-ok">
-              <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-              Guardado
-            </span>
-          ) : estado !== "idle" ? (
-            <span className="text-[11.5px] text-danger">{estado}</span>
-          ) : null
-        }
-      >
+      <SectionTitle icon={FileText} right={<IndicadorGuardado estado={estado} />}>
         Datos del proceso
       </SectionTitle>
 

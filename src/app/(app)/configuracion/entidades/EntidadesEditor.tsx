@@ -3,10 +3,10 @@
 // CRUD del catálogo de entidades, con autosave por campo (onBlur).
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Landmark, Check, Loader2, Plus, Trash2 } from "lucide-react";
-import { Panel, SectionTitle, btnPrimary, inputBase } from "@/components/ui";
+import { useState } from "react";
+import { Landmark, Plus, Trash2 } from "lucide-react";
+import { IndicadorGuardado, Panel, SectionTitle, btnPrimary, inputBase } from "@/components/ui";
+import { useAccion } from "@/lib/use-accion";
 import type { Institucion } from "@/lib/types";
 import {
   actualizarEntidadAction,
@@ -49,45 +49,16 @@ export default function EntidadesEditor({
 }: {
   entidades: Institucion[];
 }) {
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [estado, setEstado] = useState<"idle" | "guardando" | "ok">("idle");
   const [nueva, setNueva] = useState("");
-  const [pendiente, startTransition] = useTransition();
-
-  function correr(fn: () => Promise<string | null>) {
-    setError(null);
-    setEstado("guardando");
-    startTransition(async () => {
-      const err = await fn();
-      if (err) {
-        setError(err);
-        setEstado("idle");
-      } else {
-        setEstado("ok");
-        setTimeout(() => setEstado("idle"), 2000);
-      }
-      router.refresh();
-    });
-  }
+  // Alcance por entidad: guardar una fila no bloquea las demás; el error de
+  // la fila sale como aviso, el del alta queda junto al form (errorInline).
+  const { correr, ocupada, estado, error } = useAccion();
 
   return (
     <Panel>
       <SectionTitle
         icon={Landmark}
-        right={
-          estado === "guardando" ? (
-            <span className="flex items-center gap-1 text-[11.5px] text-muted">
-              <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
-              Guardando…
-            </span>
-          ) : estado === "ok" ? (
-            <span className="flex items-center gap-1 text-[11.5px] text-ok">
-              <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-              Guardado
-            </span>
-          ) : null
-        }
+        right={<IndicadorGuardado estado={estado} />}
       >
         Entidades ({entidades.length})
       </SectionTitle>
@@ -102,7 +73,7 @@ export default function EntidadesEditor({
       <form
         action={() => {
           if (!nueva.trim()) return;
-          correr(() => crearEntidadAction(nueva));
+          correr("crear", () => crearEntidadAction(nueva), { errorInline: true });
           setNueva("");
         }}
         className="flex gap-2 border-b border-line p-3"
@@ -113,7 +84,7 @@ export default function EntidadesEditor({
           placeholder="Nombre de la entidad nueva (Ministerio de…)"
           className={`${inputBase} flex-1`}
         />
-        <button type="submit" disabled={pendiente || !nueva.trim()} className={btnPrimary()}>
+        <button type="submit" disabled={ocupada("crear") || !nueva.trim()} className={btnPrimary()}>
           <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
           Agregar
         </button>
@@ -135,26 +106,26 @@ export default function EntidadesEditor({
               valor={e.nombre}
               placeholder="Nombre"
               ancho="min-w-48 flex-1"
-              onSave={(v) => v && correr(() => actualizarEntidadAction(e.id, { nombre: v }))}
+              onSave={(v) => v && correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { nombre: v }))}
             />
             <CampoEntidad
               valor={e.siglas ?? ""}
               placeholder="Siglas"
               ancho="w-20"
-              onSave={(v) => correr(() => actualizarEntidadAction(e.id, { siglas: v || null }))}
+              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { siglas: v || null }))}
             />
             <CampoEntidad
               valor={e.rnc ?? ""}
               placeholder="RNC"
               ancho="w-32"
               mono
-              onSave={(v) => correr(() => actualizarEntidadAction(e.id, { rnc: v || null }))}
+              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { rnc: v || null }))}
             />
             <CampoEntidad
               valor={e.direccion ?? ""}
               placeholder="Dirección"
               ancho="w-56"
-              onSave={(v) => correr(() => actualizarEntidadAction(e.id, { direccion: v || null }))}
+              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { direccion: v || null }))}
             />
             <Link
               href={`/entidades/${e.id}`}
@@ -167,9 +138,9 @@ export default function EntidadesEditor({
               type="button"
               onClick={() => {
                 if (confirm(`¿Eliminar "${e.nombre}"?`))
-                  correr(() => eliminarEntidadAction(e.id));
+                  correr(`ent-${e.id}`, () => eliminarEntidadAction(e.id));
               }}
-              disabled={pendiente}
+              disabled={ocupada(`ent-${e.id}`)}
               className="rounded p-1 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
               aria-label="Eliminar entidad"
             >

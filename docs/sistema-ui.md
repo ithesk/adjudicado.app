@@ -46,6 +46,44 @@ ESTRUCTURA.
 5. **Sidebar**: colapsable a rail; secciones plegables con preferencia
    recordada; Configuración/Equipo siempre visibles al pie.
 
+## §carga — El sistema de feedback (espera, éxito, error)
+
+El principio: **cada clic responde algo en <300 ms, cerca de donde se hizo**.
+Un spinner global que bloquea la pantalla está prohibido; un error que no se
+ve, también. Las piezas (todas existen ya — no se inventan spinners ad-hoc):
+
+- **`useAccion()`** (`src/lib/use-accion.ts`) — EL patrón de mutación. Cada
+  llamada lleva una CLAVE (`correr("it-"+id, fn)`): `ocupada(clave)` responde
+  por control (nada de deshabilitar el panel entero), anti doble-clic de
+  serie, y el error SIEMPRE sale — aviso (toast) por defecto, `errorInline`
+  para pintarlo junto a un form. Prohibido copiar `correr()` a mano.
+- **Avisos (toasts)** — `avisoOk`/`avisoError` de `src/lib/avisos.ts`. Para
+  confirmar lo que no queda a la vista y para errores de acciones optimistas.
+  El error persiste 7 s y se puede cerrar; el ok se va solo.
+- **`IndicadorGuardado`** — el trío Guardando…/Guardado de cabecera (autosave
+  de un panel). **`MicroGuardado`** — el mismo estado JUNTO al campo/fila
+  editada (celdas del cotizador, filas de requisitos): puntico girando →
+  check ~2 s. Tamaño fijo, sin saltos de layout.
+- **`Boton cargando`** — spinner integrado + disabled (el spinner sustituye
+  al icono, el ancho no salta).
+- **`Esqueleto` / `EsqueletoPagina` + `loading.tsx`** — TODA ruta navegable
+  tiene fallback instantáneo (hay uno general en `(app)/loading.tsx`; las
+  fichas con riel tienen silueta propia). El NavLink muestra su pista de
+  navegación pendiente (useLinkStatus, retardo 150 ms).
+- **`fetchLargo()`** (`src/lib/fetch-cliente.ts`) — obligatorio para toda
+  llamada larga del cliente (generar, PDF, OCR, importar): tope de tiempo y
+  error legible. Un spinner NUNCA puede girar para siempre ni apagarse en
+  silencio.
+
+Qué patrón toca, según la espera:
+
+| Espera | Patrón obligatorio |
+|---|---|
+| <300 ms (toggle, checkbox, drag) | Optimista/no-controlado, SIN indicador (parpadea). Si el servidor falla: rollback + `avisoError` — la UI no miente. |
+| Corta (escritura a DB) | `useAccion` con clave propia → `MicroGuardado` junto a lo editado o `IndicadorGuardado` en la cabecera; botón con `disabled` de SU clave. |
+| Larga (generar, subir, OCR, ERP) | Spinner + texto EN el botón («Subiendo…») o stepper narrado (Bid Room); `fetchLargo` con timeout; error pegado al botón que lo disparó o aviso. |
+| Navegación | `loading.tsx` (skeleton) — nunca pantalla congelada. |
+
 ## Reglas de la casa vigentes (no UI, pero se pagan caro)
 
 - Componentes definidos FUERA del padre (adentro se remontan y pierden foco).

@@ -3,10 +3,10 @@
 // Perfil fiscal, cotizador y firmantes — con AUTOSAVE: cada campo se guarda
 // al salir de él (fricción cero, no hay botón "Guardar" que olvidar).
 
-import { useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Building2, Check, Loader2, PenLine } from "lucide-react";
-import { Panel, SectionTitle, inputBase } from "@/components/ui";
+import { useRef, useState } from "react";
+import { Building2, PenLine } from "lucide-react";
+import { IndicadorGuardado, Panel, SectionTitle, inputBase } from "@/components/ui";
+import { useAccion } from "@/lib/use-accion";
 import { formatRD } from "@/lib/types";
 import {
   guardarFirmanteAction,
@@ -23,27 +23,6 @@ import {
   type LicFirmante,
   type RolFirmante,
 } from "@/lib/licitaciones/tipos";
-
-type EstadoGuardado = "idle" | "guardando" | "ok" | string;
-
-function IndicadorGuardado({ estado }: { estado: EstadoGuardado }) {
-  if (estado === "idle") return null;
-  if (estado === "guardando")
-    return (
-      <span className="flex items-center gap-1 text-[11.5px] text-muted">
-        <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
-        Guardando…
-      </span>
-    );
-  if (estado === "ok")
-    return (
-      <span className="flex items-center gap-1 text-[11.5px] text-ok">
-        <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-        Guardado
-      </span>
-    );
-  return <span className="text-[11.5px] text-danger">{estado}</span>;
-}
 
 // Fuera del componente a propósito: si se define adentro, React lo remonta en
 // cada render y el refresh del autosave borraría texto a medio escribir.
@@ -87,10 +66,7 @@ export default function PerfilEmpresa({
   perfil: EmpresaPerfil | null;
   firmantes: LicFirmante[];
 }) {
-  const router = useRouter();
-  const [estado, setEstado] = useState<EstadoGuardado>("idle");
-  const [, startTransition] = useTransition();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { correr, estado } = useAccion();
 
   // Estado vivo del cotizador (para la vista previa de los dos modos).
   const [margenPct, setMargenPct] = useState(perfil?.margen_pct ?? 30);
@@ -100,16 +76,7 @@ export default function PerfilEmpresa({
   const [tasa, setTasa] = useState(perfil?.tasa_usd_dop ?? 0);
 
   function autosave(patch: Parameters<typeof guardarPerfilAction>[0]) {
-    setEstado("guardando");
-    startTransition(async () => {
-      const err = await guardarPerfilAction(patch);
-      setEstado(err ?? "ok");
-      if (!err) {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setEstado("idle"), 2000);
-      }
-      router.refresh();
-    });
+    correr("perfil", () => guardarPerfilAction(patch));
   }
 
   const ejemploCosto = 1000;
@@ -257,9 +224,7 @@ function FirmanteAutosave({
   rol: RolFirmante;
   actual: LicFirmante | null;
 }) {
-  const router = useRouter();
-  const [estado, setEstado] = useState<EstadoGuardado>("idle");
-  const [, startTransition] = useTransition();
+  const { correr, estado } = useAccion();
   // El upsert necesita la fila completa: el estado local acumula los campos.
   const datos = useRef({
     nombre: actual?.nombre ?? "",
@@ -270,17 +235,13 @@ function FirmanteAutosave({
   function guardar() {
     const d = datos.current;
     if (!d.nombre.trim()) return; // sin nombre no hay firmante todavía
-    setEstado("guardando");
-    startTransition(async () => {
-      const err = await guardarFirmanteAction(rol, {
+    correr(`firmante-${rol}`, () =>
+      guardarFirmanteAction(rol, {
         nombre: d.nombre.trim(),
         cedula: d.cedula.trim() || null,
         cargo: d.cargo.trim() || ROL_FIRMANTE_LABEL[rol],
-      });
-      setEstado(err ?? "ok");
-      if (!err) setTimeout(() => setEstado("idle"), 2000);
-      router.refresh();
-    });
+      }),
+    );
   }
 
   return (
