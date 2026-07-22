@@ -8,6 +8,42 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-22 (2) — Logos en TODOS los formularios, F.042 firmado, y «Generar este»
+
+Pablo reportó 4 cosas de una vez. Diagnóstico y qué se hizo:
+
+- **«Vercel está por detrás»** — falso ya: PR #15 y #16 se mergearon (el 16 hoy
+  9:09 AM) y el deploy de main salió en verde. Lo único fuera era el fix de
+  acentos del RNC (va en el PR de hoy). **«Falta la parte de PDF»**: el código
+  está; `pdfDisponible()` exige GOTENBERG_URL **y** GOTENBERG_TOKEN en el
+  runtime — si el botón dice solo «Generar paquete» (sin «PDF»), es que a la
+  función no le llegan las DOS variables en el entorno Production. No se pudo
+  verificar desde fuera (el middleware manda a /login antes del 501).
+- **Logos en los formularios**: TODOS los SNCC oficiales traen el recuadro
+  «Logo de la dependencia gubernamental», no solo el F.040. Cirugía XML sobre
+  los 4 tpl restantes: F.033 (1 recuadro), F.034 (2 — una por página), F.042
+  (2), F.047 (1) → `{%logo_institucion}` centrado en el lugar del sdt con la
+  imagen en blanco. Sin logo cargado salen igual que siempre.
+- **F.042 sin firma ni sello**: el formulario oficial TERMINA en el punto 6,
+  no trae zona de firma. Se le añadió al pie el bloque centrado
+  `{%firma} {%sello}` (mismo patrón del F.040).
+- **Generar UN solo formulario**: `?solo=<código>` en /generar — baja directo
+  el docx/pdf sin ZIP, sin gate (un formulario no es el paquete), y en
+  segundo plano lo archiva y deja el requisito en «listo». En la Bid Room el
+  chip «Se genera aquí» ahora es el botón **«Generar este»** (spinner mientras
+  corre; PDF si el convertidor está configurado). El route ganó el helper
+  `generarUno` (cascada completa) que usan el paquete y el suelto por igual.
+- **Huella motor v5** (cambió cómo se imprimen los documentos).
+
+**Verificado:** tsc, eslint, 92/92 vitest (3 nuevos), textutil OK sobre las 4
+plantillas parchadas y sobre un F.042 rendido con firma+sello+logo.
+
+**Pendiente Pablo:** revisar en Vercel → Settings → Environment Variables que
+GOTENBERG_URL y GOTENBERG_TOKEN existan AMBAS marcadas para Production (y
+redeploy si hubo que tocarlas); mergear el PR nuevo; subir logos de entidades.
+
+---
+
 ## 2026-07-22 — Entidades: RNC autollenado desde el padrón de la DGII
 
 **Hecho:** al crear una entidad, el sistema consulta el padrón de la DGII

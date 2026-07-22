@@ -381,6 +381,7 @@ export default function BidRoom({
                 requisitos={requisitos}
                 plantillasOrg={plantillasOrg}
                 subsanacionId={subAbierta && subsanacion ? subsanacion.id : null}
+                pdfListo={pdfListo}
               />
             </section>
 
