@@ -202,6 +202,33 @@ describe("el F.040 (debida diligencia y conflicto de interés)", () => {
       path.join(process.cwd(), "plantillas/dgcp/SNCC_F040_Debida_Diligencia-tpl.docx"),
     );
 
+  // Un JPEG «de mentira» pero con la magia real (ffd8): el módulo de imágenes
+  // no valida el contenido, solo lo incrusta.
+  const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(24, 1)]);
+
+  it("un logo JPG queda incrustado como .jpeg de verdad (no .png mentiroso)", () => {
+    // El módulo free guarda TODO como .png; un JPEG disfrazado viola el
+    // formato OPC y a LibreOffice le daba por descartar texto. La media
+    // se renombra a su formato real y las relaciones se re-apuntan.
+    const out = new PizZip(
+      rellenarPlantilla(tpl(), { adjudicados: [] }, { logo_institucion: JPEG }),
+    );
+    const media = Object.keys(out.files).filter((f) => f.startsWith("word/media/image_generated"));
+    expect(media).toHaveLength(1);
+    expect(media[0]).toMatch(/\.jpeg$/);
+    expect(out.file("word/_rels/document.xml.rels")!.asText()).toContain(media[0].replace("word/", ""));
+    expect(out.file("[Content_Types].xml")!.asText()).toContain('Extension="jpeg"');
+  });
+
+  it("la plantilla no tiene content controls (disparaban el recorte de LibreOffice)", () => {
+    // Con un <w:sdt> entre el logo y el título, LibreOffice (Gotenberg)
+    // RECORTABA el texto de la primera página: el PDF salía con el título y
+    // la tabla del representante «borrados». El logo vive en una tabla 1x1
+    // sin bordes y el nombre de la entidad quedó desenvuelto.
+    const xml = new PizZip(tpl()).file("word/document.xml")!.asText();
+    expect(xml).not.toContain("<w:sdt>");
+  });
+
   it("pinta el logo de la institución en su caja, la firma (dos veces) y el sello", () => {
     const out = rellenarPlantilla(
       tpl(),

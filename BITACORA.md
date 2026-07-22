@@ -8,6 +8,39 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-22 (3) — F.040: los campos «borrados» eran un bug de recorte de LibreOffice
+
+Pablo reportó que el F.040 salía con los campos vacíos en PDF. Investigación
+con A/B reales contra el Gotenberg del VPS (el docx SIEMPRE estuvo bien —
+Word lo abre perfecto; era solo el PDF):
+
+- **Causa raíz**: el `<w:sdt>` (content control del nombre de la entidad) que
+  quedaba del original + una imagen inline en el tope del cuerpo disparan un
+  bug de RECORTE en LibreOffice: pinta la imagen pero descarta el texto de la
+  primera página (título y tabla del representante salían en blanco; los
+  datos SÍ estaban en la capa de texto del PDF). **El original de la DGII,
+  convertido tal cual, rompe igual** — no lo causó el taggeo.
+- **Arreglo estructural en la plantilla**: el logo vive ahora en una tabla
+  1×1 sin bordes (las imágenes dentro de celdas no disparan el bug — la firma
+  lo probaba) y el sdt del nombre quedó desenvuelto (párrafo normal).
+  Verificado E2E contra Gotenberg con el logo real (JPG) de la ONDP: página 1
+  completa — logo, título, tabla del representante llena, firma.
+- **De paso, higiene OPC**: el módulo free de imágenes guarda TODO como .png
+  aunque el buffer sea JPEG. `corregirExtensionesDeMedia()` en generador.ts
+  renombra la media a su formato real (magia de bytes: png/jpeg/gif/webp) y
+  re-apunta relaciones y content-types tras cada render.
+- Los demás formularios (F.033/034/042/047) no sufren el bug: su logo va
+  dentro de un textbox. Verificados los PDF reales de hoy: perfectos (F.042
+  ya sale con firma y sello; quedan en página 2 porque el formulario termina
+  al borde — aceptable).
+- 94 tests (2 nuevos: media renombrada + guardia de «sin content controls»).
+
+**Lección**: «se ve bien en Word» no garantiza el PDF — validar SIEMPRE la
+conversión LibreOffice con contenido real. Los sdt de Word son veneno para
+LibreOffice cuando conviven con imágenes.
+
+---
+
 ## 2026-07-22 (2) — Logos en TODOS los formularios, F.042 firmado, y «Generar este»
 
 Pablo reportó 4 cosas de una vez. Diagnóstico y qué se hizo:
