@@ -78,7 +78,9 @@ export async function consultarPorRnc(rnc: string): Promise<DatosRnc | null> {
 }
 
 export async function buscarPorNombre(nombre: string): Promise<DatosRnc[]> {
-  const json = await pedir(`/consulta/nombres?buscar=${encodeURIComponent(nombre)}`);
+  // La DGII guarda los nombres SIN acentos y la búsqueda del servicio es
+  // literal: «Educación» da 404 pero «educacion» encuentra. Se consulta plegado.
+  const json = await pedir(`/consulta/nombres?buscar=${encodeURIComponent(normalizarEntidad(nombre))}`);
   if (!json?.resultados) return [];
   return json.resultados.map(aDatos).filter((d): d is DatosRnc => d !== null);
 }

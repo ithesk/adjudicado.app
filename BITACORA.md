@@ -35,6 +35,11 @@ crear por RNC — regla de fidelidad con el dato oficial; se puede editar despu�
 **Verificado:** tsc, eslint, 89/89 vitest (7 nuevos en `rnc.test.ts`), API real
 probada (Banco Central 401-00755-1, Ministerio de Turismo 401-03681-9).
 
+**Fix del mismo día (Pablo lo cazó en vivo):** la búsqueda por nombre fallaba si
+el nombre llevaba acentos — la DGII guarda sin acentos y su búsqueda es literal
+(«Educación» → 404, «educacion» → encuentra). Ahora `buscarPorNombre` pliega el
+nombre con `normalizarEntidad` antes de consultar.
+
 **Pendiente:** probar en la app con entidades reales; si algún día el servicio
 megaplus muere, cambiar BASE en `src/lib/rnc.ts` por otro espejo del padrón.
 
