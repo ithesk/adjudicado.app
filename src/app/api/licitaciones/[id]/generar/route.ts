@@ -67,6 +67,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const formato = new URL(req.url).searchParams.get("formato") ?? "docx";
+  // Con ?solo=<código> se genera ÚNICAMENTE ese formulario y baja directo
+  // (docx o pdf, sin ZIP): para reponer o revisar un documento suelto sin
+  // armar el expediente. No pasa por el gate — un formulario no es el paquete.
+  const solo = new URL(req.url).searchParams.get("solo");
   // Con ?subsanacion=<id> el paquete es CHICO: solo los requisitos que la
   // entidad pidió en esa subsanación, todos obligatorios, sin sobres.
   const subsanacionId = new URL(req.url).searchParams.get("subsanacion");
@@ -134,7 +138,22 @@ export async function GET(
   // esto ES el después).
   let subsanacion: { id: string; fecha_limite: string } | null = null;
   let enPaquete = requisitos ?? [];
-  if (subsanacionId) {
+  if (solo) {
+    // Un solo formulario: debe estar en el checklist y ser generable.
+    const requisito = enPaquete.find((q) => q.codigo === solo);
+    if (!requisito) {
+      return NextResponse.json(
+        { error: `El requisito ${solo} no está en el checklist de este proceso.` },
+        { status: 404 },
+      );
+    }
+    if (!esGenerable(solo)) {
+      return NextResponse.json(
+        { error: `${solo} no se genera por el sistema — es un documento que se sube o se verifica.` },
+        { status: 422 },
+      );
+    }
+  } else if (subsanacionId) {
     const { data: s } = await supabase
       .from("lic_subsanacion")
       .select("id, fecha_limite")
@@ -180,13 +199,14 @@ export async function GET(
     }
   }
 
-  // 3) Qué se genera: los requisitos con plantilla — del sistema o de la org.
-  const codigos = enPaquete
-    .filter((q) => esGenerable(q.codigo))
-    .map((q) => q.codigo);
+  // 3) Qué se genera: los requisitos con plantilla — del sistema o de la
+  //    org. Con ?solo, exactamente ese.
+  const codigos = solo
+    ? [solo]
+    : enPaquete.filter((q) => esGenerable(q.codigo)).map((q) => q.codigo);
   // Las variables "se pregunta al generar" deben estar completas.
   const datosFaltantes: string[] = [];
-  for (const q of enPaquete) {
+  for (const q of solo ? enPaquete.filter((q) => q.codigo === solo) : enPaquete) {
     const plantilla = plantillaPorCodigo.get(q.codigo);
     if (!plantilla) continue;
     const datos = (q.datos ?? {}) as Record<string, string>;
@@ -272,6 +292,82 @@ export async function GET(
     };
   });
 
+  // Cómo se genera UN documento — la CASCADA completa: la plantilla resuelta
+  // (variante de la entidad o genérica de la org) GANA sobre el formulario
+  // del sistema — si MITUR exige su propia versión del F.033, sale la de MITUR.
+  const generarUno = async (codigo: string): Promise<DocGenerado> => {
+    const plantilla = plantillaPorCodigo.get(codigo);
+    if (!plantilla) return generarDocumento(codigo, canonico, imagenes, { adjudicados });
+    const { data: tpl } = await supabase.storage
+      .from("documentos")
+      .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
+    if (!tpl) {
+      throw new Error(`No se pudo leer la plantilla ${plantilla.nombre} (${codigo}).`);
+    }
+    // Datos: los del expediente + valores fijos de la plantilla + los
+    // capturados en el requisito de ESTE proceso.
+    const requisito = enPaquete.find((q) => q.codigo === codigo);
+    const fijos = Object.fromEntries(
+      (plantilla.variables_personalizadas ?? [])
+        .filter((v) => v.valor)
+        .map((v) => [v.clave, v.valor]),
+    );
+    const capturados = (requisito?.datos ?? {}) as Record<string, string>;
+    return generarDesdeBuffer(
+      codigo,
+      plantilla.nombre,
+      Buffer.from(await tpl.arrayBuffer()),
+      canonico,
+      imagenes,
+      { ...fijos, ...capturados, adjudicados },
+    );
+  };
+
+  // 4-solo) UN formulario suelto: se genera, se convierte si toca, baja
+  //         directo — y en segundo plano queda archivado y su requisito
+  //         en "listo", igual que si hubiera salido dentro del paquete.
+  if (solo) {
+    try {
+      const doc = await generarUno(solo);
+      const esPdf = formato === "pdf";
+      const archivo = esPdf ? doc.archivo.replace(/\.docx$/, ".pdf") : doc.archivo;
+      const buffer = esPdf ? await docxAPdf(doc.archivo, doc.buffer) : doc.buffer;
+      const contentType = esPdf
+        ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      const base = `${miembro.org_id}/licitaciones/${id}/v${canonico.meta.version}`;
+      after(async () => {
+        try {
+          const rutaDoc = `${base}/${archivo}`;
+          const { error: errSubida } = await supabase.storage
+            .from("documentos")
+            .upload(rutaDoc, buffer, { contentType, upsert: true });
+          if (!errSubida) {
+            await supabase
+              .from("lic_requisito")
+              .update({ storage_path: rutaDoc, estado: "listo", origen: "generado" })
+              .eq("proceso_id", id)
+              .eq("org_id", miembro.org_id)
+              .eq("codigo", solo);
+          }
+        } catch (e) {
+          console.error("No se pudo archivar el formulario suelto:", e);
+        }
+      });
+      return new NextResponse(new Uint8Array(buffer), {
+        headers: {
+          "Content-Type": contentType,
+          "Content-Disposition": `attachment; filename="${archivo}"`,
+        },
+      });
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "No se pudo generar." },
+        { status: 500 },
+      );
+    }
+  }
+
   // 4b) ¿Este paquete ya existe? La huella cubre todo lo que cambia el
   //     resultado: el expediente (sin meta — la versión sube sola), los
   //     archivos anexados, los datos capturados, la firma/sello y el
@@ -284,8 +380,9 @@ export async function GET(
       JSON.stringify({
         // Versión del MOTOR de render: subirla invalida los ZIP reusados
         // cuando cambia cómo se imprimen los documentos (no solo qué datos).
-        // v4: F.040 con logo institucional y adjudicados autollenados.
-        motor: 4,
+        // v5: logo institucional en TODOS los formularios del sistema y
+        // firma/sello al pie del F.042.
+        motor: 5,
         formato,
         unir,
         // El F.040 pinta el logo de la entidad y el historial adjudicado:
@@ -346,41 +443,10 @@ export async function GET(
     }
   }
 
-  // 5) Generar. La CASCADA completa: la plantilla resuelta (variante de la
-  //    entidad o genérica de la org) GANA sobre el formulario del sistema —
-  //    si MITUR exige su propia versión del F.033, sale la de MITUR.
-  //    Las plantillas de la org se DESCARGAN en paralelo.
+  // 5) Generar todos (las plantillas de la org se DESCARGAN en paralelo).
   let documentos: DocGenerado[];
   try {
-    documentos = await Promise.all(
-      codigos.map(async (codigo) => {
-        const plantilla = plantillaPorCodigo.get(codigo);
-        if (!plantilla) return generarDocumento(codigo, canonico, imagenes, { adjudicados });
-        const { data: tpl } = await supabase.storage
-          .from("documentos")
-          .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
-        if (!tpl) {
-          throw new Error(`No se pudo leer la plantilla ${plantilla.nombre} (${codigo}).`);
-        }
-        // Datos: los del expediente + valores fijos de la plantilla + los
-        // capturados en el requisito de ESTE proceso.
-        const requisito = enPaquete.find((q) => q.codigo === codigo);
-        const fijos = Object.fromEntries(
-          (plantilla.variables_personalizadas ?? [])
-            .filter((v) => v.valor)
-            .map((v) => [v.clave, v.valor]),
-        );
-        const capturados = (requisito?.datos ?? {}) as Record<string, string>;
-        return generarDesdeBuffer(
-          codigo,
-          plantilla.nombre,
-          Buffer.from(await tpl.arrayBuffer()),
-          canonico,
-          imagenes,
-          { ...fijos, ...capturados, adjudicados },
-        );
-      }),
-    );
+    documentos = await Promise.all(codigos.map(generarUno));
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "No se pudo generar." },

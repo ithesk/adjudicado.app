@@ -142,6 +142,60 @@ describe("rellenarPlantilla con firma y sello en el mismo run", () => {
   });
 });
 
+describe("el logo de la INSTITUCIÓN en los formularios del sistema", () => {
+  // Todos los SNCC oficiales traen el recuadro «Logo de la dependencia
+  // gubernamental» — con el logo de la entidad cargado se pinta en cada uno;
+  // sin él, el recuadro queda en blanco (ningún tag suelto).
+  const CASOS: [string, number][] = [
+    ["SNCC_F033_Of_Economica-tpl.docx", 1],
+    ["SNCC_F034_Presentacion_de_Oferta-tpl.docx", 2], // 2 páginas, 2 recuadros
+    ["SNCC_F042_Informacion_Oferente-tpl.docx", 2],
+    ["SNCC_F047_Autorizacion_Fabricante-tpl.docx", 1],
+  ];
+
+  it("con logo cargado, cada recuadro lo pinta", () => {
+    for (const [archivo, recuadros] of CASOS) {
+      const tpl = fs.readFileSync(path.join(process.cwd(), "plantillas/dgcp", archivo));
+      const base = dibujos(tpl);
+      const out = rellenarPlantilla(
+        tpl,
+        { lineas: [], adjudicados: [] },
+        { logo_institucion: pngDe(400, 200) },
+      );
+      expect(dibujos(out), archivo).toBe(base + recuadros);
+      expect(new PizZip(out).file("word/document.xml")!.asText(), archivo).not.toContain(
+        "{%logo_institucion}",
+      );
+    }
+  });
+
+  it("sin logo, los formularios salen igual que siempre", () => {
+    for (const [archivo] of CASOS) {
+      const tpl = fs.readFileSync(path.join(process.cwd(), "plantillas/dgcp", archivo));
+      const base = dibujos(tpl);
+      const out = rellenarPlantilla(tpl, { lineas: [], adjudicados: [] }, {});
+      expect(dibujos(out), archivo).toBe(base);
+      expect(new PizZip(out).file("word/document.xml")!.asText(), archivo).not.toContain("{%");
+    }
+  });
+
+  it("el F.042 ahora sale FIRMADO y sellado al pie", () => {
+    const tpl = fs.readFileSync(
+      path.join(process.cwd(), "plantillas/dgcp/SNCC_F042_Informacion_Oferente-tpl.docx"),
+    );
+    const base = dibujos(tpl);
+    const out = rellenarPlantilla(
+      tpl,
+      { empresa_nombre: "ITHESK SRL" },
+      { firma: PNG, sello: PNG, logo_institucion: PNG },
+    );
+    // 2 recuadros de logo + firma + sello.
+    expect(dibujos(out)).toBe(base + 4);
+    // Copia para la validación externa con textutil (¿Word la abre?).
+    fs.writeFileSync(path.join(os.tmpdir(), "f042-firmado-prueba.docx"), out);
+  });
+});
+
 describe("el F.040 (debida diligencia y conflicto de interés)", () => {
   const tpl = () =>
     fs.readFileSync(

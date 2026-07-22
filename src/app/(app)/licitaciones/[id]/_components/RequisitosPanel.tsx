@@ -9,8 +9,10 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  FileDown,
   FileWarning,
   ListPlus,
+  Loader2,
   Paperclip,
   Plus,
   Trash2,
@@ -59,6 +61,7 @@ export default function RequisitosPanel({
   requisitos,
   plantillasOrg = [],
   subsanacionId = null,
+  pdfListo = false,
 }: {
   procesoId: string;
   requisitos: LicRequisito[];
@@ -69,10 +72,14 @@ export default function RequisitosPanel({
   }[];
   // Con una subsanación ABIERTA, cada fila puede marcarse como "pedido".
   subsanacionId?: string | null;
+  // Con el convertidor configurado, el formulario suelto también baja en PDF.
+  pdfListo?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [modo, setModo] = useState<"lista" | "checklist" | "manual">("lista");
+  // Qué formulario suelto se está generando ahora mismo (código o null).
+  const [generandoSolo, setGenerandoSolo] = useState<string | null>(null);
   const [pendiente, startTransition] = useTransition();
 
   function correr(fn: () => Promise<string | null>) {
@@ -81,6 +88,39 @@ export default function RequisitosPanel({
       const err = await fn();
       if (err) setError(err);
       router.refresh();
+    });
+  }
+
+  // Genera SOLO este formulario y lo baja directo (sin armar el paquete).
+  function generarSolo(codigo: string) {
+    setError(null);
+    setGenerandoSolo(codigo);
+    startTransition(async () => {
+      try {
+        const res = await fetch(
+          `/api/licitaciones/${procesoId}/generar?solo=${encodeURIComponent(codigo)}${pdfListo ? "&formato=pdf" : ""}`,
+        );
+        if (!res.ok) {
+          const j = await res.json().catch(() => null);
+          setError(
+            (j?.faltantes ?? j?.criticos)?.join(" · ") ?? j?.error ?? "No se pudo generar.",
+          );
+          return;
+        }
+        const blob = await res.blob();
+        const nombre =
+          res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] ??
+          `${codigo}.${pdfListo ? "pdf" : "docx"}`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nombre;
+        a.click();
+        URL.revokeObjectURL(url);
+        router.refresh(); // el requisito quedó con su archivo y en "listo"
+      } finally {
+        setGenerandoSolo(null);
+      }
     });
   }
 
@@ -174,6 +214,8 @@ export default function RequisitosPanel({
                 }
                 onPatch={(patch) => correr(() => actualizarRequisitoAction(r.id, patch))}
                 onSubir={(fd) => correr(() => subirArchivoRequisitoAction(r.id, fd))}
+                onGenerarSolo={() => generarSolo(r.codigo)}
+                generandoSolo={generandoSolo === r.codigo}
                 onEliminar={() => {
                   if (confirm(`¿Eliminar el requisito ${r.codigo}?`))
                     correr(() => eliminarRequisitoAction(r.id));
@@ -408,6 +450,8 @@ function FilaRequisito({
   onPatch,
   onSubir,
   onEliminar,
+  onGenerarSolo,
+  generandoSolo,
 }: {
   r: LicRequisito;
   // Variables "se pregunta al generar" de la plantilla de la org detrás de
@@ -419,6 +463,8 @@ function FilaRequisito({
   onPatch: (patch: Parameters<typeof actualizarRequisitoAction>[1]) => void;
   onSubir: (fd: FormData) => void;
   onEliminar: () => void;
+  onGenerarSolo: () => void;
+  generandoSolo: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const critico = !r.subsanable;
@@ -464,14 +510,23 @@ function FilaRequisito({
           </p>
         </div>
 
-        {/* La VÍA del documento: no todo se sube. */}
+        {/* La VÍA del documento: no todo se sube. Lo generable se puede
+            bajar SUELTO desde aquí — sin armar el paquete completo. */}
         {via === "genera" && (
-          <span
-            className="whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-primary"
-            title="Este formulario lo generará el sistema (motor documental). Mientras tanto puedes subirlo hecho."
+          <button
+            type="button"
+            onClick={onGenerarSolo}
+            disabled={pendiente || generandoSolo}
+            className="flex items-center gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:opacity-60"
+            title="Genera SOLO este formulario y lo descarga — el expediente completo sigue saliendo con «Generar paquete» arriba"
           >
-            Se genera aquí
-          </span>
+            {generandoSolo ? (
+              <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2.4} aria-hidden />
+            ) : (
+              <FileDown className="h-3 w-3" strokeWidth={2.4} aria-hidden />
+            )}
+            {generandoSolo ? "Generando…" : "Generar este"}
+          </button>
         )}
         {via === "linea" && (
           <span
