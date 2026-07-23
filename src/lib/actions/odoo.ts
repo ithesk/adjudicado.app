@@ -9,9 +9,25 @@ import { obtenerConfigOdoo } from "@/lib/odoo-config";
 import {
   probarConexion,
   buscarFactura,
+  descubrirServidor,
   type ResultadoConexion,
   type FacturaOdoo,
+  type ServidorOdoo,
 } from "@/lib/odoo";
+
+// ── Paso 1 del conectar: con la URL sola, descubrir versión y bases ──────────
+
+export async function detectarOdoo(
+  url: string,
+): Promise<{ ok: true; servidor: ServidorOdoo; url: string } | { ok: false; error: string }> {
+  const miembro = await getMiembro();
+  if (!miembro) return { ok: false, error: "No autorizado." };
+  let limpia = url.trim().replace(/\/+$/, "");
+  if (!limpia) return { ok: false, error: "Pon la URL de tu Odoo." };
+  if (!/^https?:\/\//.test(limpia)) limpia = `https://${limpia}`;
+  const r = await descubrirServidor(limpia);
+  return r.ok ? { ...r, url: limpia } : r;
+}
 
 // ── Conectar / desconectar la cuenta de Odoo de ESTA organización ────────────
 

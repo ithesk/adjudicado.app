@@ -27,8 +27,8 @@ export function configDesdeEnv(): OdooConfig | null {
 
 /** Llama a un método JSON-RPC de Odoo con timeout automático. */
 async function rpc(
-  config: OdooConfig,
-  service: "common" | "object",
+  config: Pick<OdooConfig, "url">,
+  service: "common" | "object" | "db",
   method: string,
   args: unknown[],
 ): Promise<unknown> {
@@ -91,6 +91,42 @@ export interface ResultadoConexion {
   ok: boolean;
   error?: string;
   version?: string;
+}
+
+// Lo que se puede DESCUBRIR de un servidor Odoo con solo la URL — para que
+// el usuario no tenga que saber ni la versión ni el nombre de la base.
+export interface ServidorOdoo {
+  version: string;
+  /** Bases publicadas por db.list (muchos servidores lo deshabilitan). */
+  bases: string[];
+  /** Mejor conjetura cuando db.list no está: el subdominio de odoo.com. */
+  sugerida: string | null;
+}
+
+export async function descubrirServidor(
+  url: string,
+): Promise<{ ok: true; servidor: ServidorOdoo } | { ok: false; error: string }> {
+  try {
+    const info = (await rpc({ url }, "common", "version", [])) as Record<string, unknown>;
+    const version = String(info?.server_version ?? info?.server_serie ?? "desconocida");
+
+    let bases: string[] = [];
+    try {
+      const r = await rpc({ url }, "db", "list", []);
+      if (Array.isArray(r)) bases = r.filter((x): x is string => typeof x === "string");
+    } catch {
+      // db.list deshabilitado (normal en odoo.com y servidores endurecidos).
+    }
+
+    // En odoo.com la base casi siempre se llama como el subdominio.
+    const sub = url.match(/^https?:\/\/([^./]+)\.odoo\.com/i)?.[1] ?? null;
+    return { ok: true, servidor: { version, bases, sugerida: bases.length ? null : sub } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `No se pudo alcanzar ese servidor Odoo: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 /**

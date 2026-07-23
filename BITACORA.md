@@ -10,6 +10,15 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ## 2026-07-23 (4) — Odoo por EMPRESA: botón «Conectar con Odoo»
 
+**Iteración friendly (mismo día)**: Pablo quería flujo tipo OAuth (redirigir
+y autorizar, como Claude↔Gmail). Odoo estándar NO tiene servidor de
+autorización al cual redirigir (su API solo autentica usuario+clave), así
+que se construyó lo más cercano: asistente de DOS pasos — (1) solo la URL →
+`descubrirServidor()` detecta versión y bases (`db.list`; en odoo.com,
+sugerencia por subdominio); (2) usuario + contraseña O API key (la API
+acepta ambas; con 2FA hace falta la key). Verificado contra Odoo públicos
+(runbot 19.0, odoo.com saas). El paso de URL normaliza (agrega https://).
+
 Pablo pidió algo friendly: nada de variables universales — cada empresa
 conecta su Odoo desde el menú con un botón. Hecho completo:
 
