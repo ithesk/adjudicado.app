@@ -144,7 +144,31 @@ export async function probarConexion(config: OdooConfig): Promise<ResultadoConex
 
     return { ok: true, version };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+
+    // Odoo dice «credenciales incorrectas» también cuando la BASE está mal
+    // o cuando el usuario entra con Google/2FA. Diagnosticar cuál es.
+    if (/Autenticación fallida/.test(msg)) {
+      try {
+        const r = await rpc(config, "db", "list", []);
+        if (Array.isArray(r) && r.length && !r.includes(config.db)) {
+          return {
+            ok: false,
+            error: `La base de datos «${config.db}» no existe en ese servidor. Disponibles: ${r.join(", ")}.`,
+          };
+        }
+      } catch {
+        // db.list deshabilitado: no se puede verificar la base.
+      }
+      return {
+        ok: false,
+        error:
+          "Odoo rechazó las credenciales. Revisa: (1) que la base de datos sea EXACTA; " +
+          "(2) si entras a Odoo con Google o tienes verificación en dos pasos, tu contraseña NO sirve para la API — " +
+          "crea una API key en Odoo: tu avatar → Mi perfil → Seguridad de la cuenta → Claves API → Nueva.",
+      };
+    }
+    return { ok: false, error: msg };
   }
 }
 
