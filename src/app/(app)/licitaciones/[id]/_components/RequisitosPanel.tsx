@@ -483,7 +483,10 @@ function FilaRequisito({
 
   return (
     <li className="px-4 py-2">
-      <div className="flex items-center gap-2.5">
+      {/* flex-wrap + min-w del bloque del nombre: en móvil los controles
+          BAJAN a su propia línea en vez de montarse sobre el texto (en
+          desktop cabe todo y sigue siendo una sola línea). */}
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
         {/* El semáforo del gate: rojo = crítico pendiente. */}
         <span
           className={`h-2.5 w-2.5 flex-none rounded-full ${
@@ -494,7 +497,7 @@ function FilaRequisito({
         />
         {/* Guardando/guardado de ESTA fila, junto a su semáforo. */}
         <MicroGuardado activo={ocupada || subiendo} ok={ok} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-52 flex-1">
           <p className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium text-ink">
             {r.nombre}
             <button

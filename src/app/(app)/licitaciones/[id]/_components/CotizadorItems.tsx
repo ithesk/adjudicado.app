@@ -121,7 +121,11 @@ export default function CotizadorItems({
         </p>
       )}
 
-      <div className="overflow-x-auto">
+      {/* En móvil la tabla de 760px era ilegible (descripciones cortadas,
+          edición a punta de scroll horizontal): bajo sm cada línea es una
+          TARJETA apilada con los mismos campos y handlers. La tabla queda
+          intacta para desktop. */}
+      <div className="hidden overflow-x-auto sm:block">
         {/* table-fixed + colgroup: la descripción se queda con TODO el espacio
             sobrante (sin esto, las filas combinadas de abajo inflan las
             columnas chicas y la unidad termina más ancha que la descripción). */}
@@ -221,6 +225,41 @@ export default function CotizadorItems({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Las líneas como tarjetas (solo móvil) */}
+      <div className="divide-y divide-line sm:hidden">
+        {mostrados.map((item) => (
+          <TarjetaLinea
+            key={item.id}
+            item={item}
+            params={params}
+            ocupada={ocupada(`it-${item.id}`)}
+            ok={okClave === `it-${item.id}`}
+            buscando={buscandoEn === item.id}
+            setBuscando={(v) => setBuscandoEn(v ? item.id : null)}
+            onPatch={(p) => patch(item.id, p)}
+            onCotizar={(o) => {
+              setBuscandoEn(null);
+              correr(`it-${item.id}`, () => cotizarItemAction(item.id, o));
+            }}
+            onEliminar={() => {
+              if (confirm(`¿Eliminar la línea ${item.numero}?`))
+                correr(`it-${item.id}`, () => eliminarItemAction(item.id));
+            }}
+          />
+        ))}
+        <div className="px-4 py-2">
+          <button
+            type="button"
+            disabled={ocupada("crear")}
+            onClick={() => correr("crear", () => crearItemAction(proceso.id))}
+            className="flex w-full items-center gap-1.5 rounded px-1.5 py-2 text-left text-[13px] font-medium text-primary transition-colors hover:bg-surface-2"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+            {items.length === 0 ? "Primera línea" : "Agregar línea"}
+          </button>
+        </div>
       </div>
 
       {/* Totales, estilo cotización */}
@@ -518,6 +557,202 @@ function Linea({
         </td>
       </tr>
     </>
+  );
+}
+
+// La línea como TARJETA (solo móvil): mismos campos y handlers que la fila
+// de la tabla, apilados a lo ancho — la descripción se lee completa y cada
+// campo es tocable. Sin drag&drop (reordenar es tarea de desktop).
+const campoMovil =
+  "w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-ink outline-none focus:border-primary";
+
+function TarjetaLinea({
+  item,
+  params,
+  ocupada,
+  ok,
+  buscando,
+  setBuscando,
+  onPatch,
+  onCotizar,
+  onEliminar,
+}: {
+  item: LicItem;
+  params: ParamsCotizacion;
+  ocupada: boolean;
+  ok: boolean;
+  buscando: boolean;
+  setBuscando: (v: boolean) => void;
+  onPatch: (p: Parameters<typeof actualizarItemAction>[1]) => void;
+  onCotizar: (o: { suplidor_id: string; sku: string; costo_usd: number }) => void;
+  onEliminar: () => void;
+}) {
+  const t = totalesItem(item, params.itbisPct);
+  const descartado = !item.ofertamos;
+
+  return (
+    <div className={`space-y-2 px-4 py-3 ${descartado ? "opacity-60" : ""}`}>
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-[13px] font-semibold text-muted">#{item.numero}</span>
+        <MicroGuardado activo={ocupada} ok={ok} />
+        <span className="ml-auto font-mono text-[13px] font-semibold text-ink">
+          {descartado ? "—" : t ? formatRD(t.subtotal) : "—"}
+        </span>
+        <button
+          type="button"
+          onClick={onEliminar}
+          disabled={ocupada}
+          className="rounded p-1.5 text-muted transition-colors hover:bg-danger-soft hover:text-danger"
+          aria-label="Eliminar línea"
+        >
+          <Trash2 className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </div>
+
+      <textarea
+        defaultValue={item.spec_cruda}
+        placeholder="Descripción tal cual el pliego…"
+        rows={2}
+        ref={(el) => {
+          if (el) {
+            el.style.height = "auto";
+            el.style.height = `${el.scrollHeight}px`;
+          }
+        }}
+        onInput={(e) => {
+          const el = e.currentTarget;
+          el.style.height = "auto";
+          el.style.height = `${el.scrollHeight}px`;
+        }}
+        onBlur={(e) => {
+          if (e.target.value !== item.spec_cruda) onPatch({ spec_cruda: e.target.value });
+        }}
+        className={`${campoMovil} resize-none overflow-hidden leading-snug`}
+      />
+
+      <div className="grid grid-cols-3 gap-2">
+        <label className="block text-[11px] text-muted">
+          Cant
+          <input
+            type="number"
+            defaultValue={item.cantidad}
+            min={0.01}
+            step="0.01"
+            onBlur={(e) => {
+              const v = Number(e.target.value) || 1;
+              if (v !== item.cantidad) onPatch({ cantidad: v });
+            }}
+            className={`${campoMovil} mt-0.5 text-right font-mono`}
+          />
+        </label>
+        <label className="block text-[11px] text-muted">
+          Unidad
+          <input
+            defaultValue={item.unidad}
+            onBlur={(e) => {
+              if (e.target.value !== item.unidad) onPatch({ unidad: e.target.value || "UD" });
+            }}
+            className={`${campoMovil} mt-0.5`}
+          />
+        </label>
+        <label className="block text-[11px] text-muted">
+          Precio unit.
+          <input
+            type="number"
+            key={`pm-${item.precio_unitario}`}
+            defaultValue={item.precio_unitario ?? ""}
+            min={0}
+            step="0.01"
+            placeholder="—"
+            disabled={descartado}
+            onBlur={(e) => {
+              const v = e.target.value === "" ? null : Number(e.target.value);
+              if (v !== item.precio_unitario) onPatch({ precio_unitario: v });
+            }}
+            className={`${campoMovil} mt-0.5 text-right font-mono`}
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={item.itbis_modo}
+          disabled={descartado}
+          onChange={(e) => onPatch({ itbis_modo: e.target.value as LicItem["itbis_modo"] })}
+          className={`${campoMovil} w-auto cursor-pointer`}
+        >
+          <option value="mas">+ ITBIS</option>
+          <option value="incluido">ITBIS incluido</option>
+          <option value="exento">exento</option>
+        </select>
+        <label className="flex items-center gap-1.5 text-[13px] text-ink-soft">
+          <input
+            type="checkbox"
+            defaultChecked={item.ofertamos}
+            onChange={(e) => onPatch({ ofertamos: e.target.checked })}
+          />
+          Ofertamos
+        </label>
+      </div>
+
+      {descartado ? (
+        <input
+          defaultValue={item.motivo_descarte ?? ""}
+          placeholder="Motivo del descarte (obligatorio)"
+          onBlur={(e) => onPatch({ motivo_descarte: e.target.value || null })}
+          className={campoMovil}
+        />
+      ) : (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              defaultValue={item.marca ?? ""}
+              placeholder="Marca"
+              onBlur={(e) => onPatch({ marca: e.target.value || null })}
+              className={campoMovil}
+            />
+            <input
+              defaultValue={item.modelo ?? ""}
+              placeholder="Modelo"
+              onBlur={(e) => onPatch({ modelo: e.target.value || null })}
+              className={campoMovil}
+            />
+          </div>
+          <input
+            defaultValue={item.descripcion ?? ""}
+            placeholder="Descripción de lo ofertado (afirmativa)"
+            onBlur={(e) => onPatch({ descripcion: e.target.value || null })}
+            className={campoMovil}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            {productoIncompleto(item) && (
+              <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-medium text-warn">
+                saldrá la spec del pliego
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setBuscando(!buscando)}
+              className="flex items-center gap-1 text-[13px] font-medium text-primary"
+            >
+              {buscando ? (
+                <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              ) : (
+                <Search className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              )}
+              {buscando ? "Cerrar" : item.sku ? "Recotizar" : "Cotizar del catálogo"}
+            </button>
+          </div>
+          {item.sku && (
+            <p className="font-mono text-[11px] text-muted">
+              {item.sku} · {fmtUSD(item.costo_usd)} × {item.tasa} ·{" "}
+              {item.margen_modo === "margen" ? "margen" : "markup"} {item.margen_pct}%
+            </p>
+          )}
+          {buscando && <SelectorProducto onElegir={onCotizar} />}
+        </div>
+      )}
+    </div>
   );
 }
 
