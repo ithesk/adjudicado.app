@@ -1,24 +1,21 @@
-// CRON — Sincronización automática de facturas con Odoo.
+// CRON — Sincronización automática de facturas con Odoo, POR ORGANIZACIÓN.
 //
-// Lo que antes era un botón manual en cada orden, ahora corre solo: para
-// cada orden VIVA en fase de facturación (entregado → libramiento) busca su
-// factura en Odoo por número de OC y:
+// Para cada empresa con su cuenta de Odoo conectada (integracion_odoo) — y,
+// en modo legado, las que aún dependen de las env ODOO_* — busca la factura
+// de cada orden viva en fase de facturación (entregado → libramiento) y:
 //   1. guarda id/estado de la factura si cambiaron;
 //   2. deja constancia del cambio en la bitácora de la orden (evento);
 //   3. avanza el estado de la orden cuando Odoo lo confirma:
 //        listo_facturar → facturado  (la factura existe y está publicada)
 //        facturado/libramiento → cobrado  (payment_state = paid)
 //
-// Programado en vercel.json. Vercel manda `Authorization: Bearer CRON_SECRET`
-// automáticamente cuando la variable está definida — sin ella, 401.
-// Corre con el cliente admin (no hay sesión de usuario en un cron); el
-// universo de órdenes es el mismo que ve el botón manual (Odoo es una sola
-// cuenta global por env vars — si algún día hay credenciales por org, este
-// cron se acota por org junto con ellas).
+// Una empresa con credenciales rotas no afecta a las demás. Programado en
+// vercel.json; Vercel manda `Authorization: Bearer CRON_SECRET` solo.
 
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buscarFacturasLote, odooConfigurado } from "@/lib/odoo";
+import { descifrar } from "@/lib/cifrado";
+import { buscarFacturasLote, configDesdeEnv, type OdooConfig } from "@/lib/odoo";
 import type { Estado } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -34,97 +31,157 @@ const ESTADO_FACTURA: Record<string, string> = {
   reversed: "revertida",
 };
 
+type OrdenViva = {
+  id: string;
+  numero_oc: string | null;
+  estado: Estado;
+  odoo_factura_estado: string | null;
+};
+
+const ESTADOS_FACTURABLES = ["entregado", "listo_facturar", "facturado", "libramiento"];
+
 export async function GET(req: Request) {
   if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
-  if (!odooConfigurado()) {
-    return NextResponse.json({ ok: true, nota: "Odoo no está configurado — nada que hacer." });
-  }
 
   const supabase = createAdminClient();
 
-  // Las órdenes donde el estado de la factura importa (y hay OC que buscar).
-  const { data: ordenes, error } = await supabase
-    .from("orden")
-    .select("id, numero_oc, estado, odoo_factura_estado")
-    .not("numero_oc", "is", null)
-    .in("estado", ["entregado", "listo_facturar", "facturado", "libramiento"])
-    .order("updated_at", { ascending: false })
-    .limit(60);
-  if (error) {
-    return NextResponse.json({ error: `No se pudieron leer las órdenes: ${error.message}` }, { status: 500 });
+  // Las cuentas conectadas por organización.
+  const { data: cuentas, error: errCuentas } = await supabase
+    .from("integracion_odoo")
+    .select("org_id, url, db, usuario, api_key_cifrada")
+    .eq("activo", true);
+  if (errCuentas) {
+    return NextResponse.json(
+      { error: `No se pudieron leer las integraciones: ${errCuentas.message}` },
+      { status: 500 },
+    );
   }
 
-  const vivas = (ordenes ?? []).filter((o) => o.numero_oc);
-  const facturas = await buscarFacturasLote(vivas.map((o) => o.numero_oc as string));
+  // Tandas: cada org con su config; y el modo legado (env) para las órdenes
+  // de organizaciones SIN cuenta conectada — hasta que migren.
+  const tandas: { etiqueta: string; config: OdooConfig; orgId: string | null }[] = [];
+  for (const c of cuentas ?? []) {
+    try {
+      tandas.push({
+        etiqueta: c.org_id,
+        orgId: c.org_id,
+        config: { url: c.url, db: c.db, usuario: c.usuario, apiKey: descifrar(c.api_key_cifrada) },
+      });
+    } catch {
+      console.error(`cron odoo: no se pudo descifrar la API key de la org ${c.org_id} — saltada.`);
+    }
+  }
+  const legado = configDesdeEnv();
+  if (legado) tandas.push({ etiqueta: "legado-env", orgId: null, config: legado });
 
+  if (tandas.length === 0) {
+    return NextResponse.json({ ok: true, nota: "Ninguna organización tiene Odoo conectado." });
+  }
+
+  const orgsConCuenta = (cuentas ?? []).map((c) => c.org_id);
+  let revisadas = 0;
+  let conFactura = 0;
   let cambios = 0;
   let avanzadas = 0;
 
-  for (const orden of vivas) {
-    const factura = facturas.get(orden.numero_oc as string);
-    if (!factura) continue;
-
-    // 1) El estado de la factura cambió → guardar + bitácora.
-    if (factura.estado !== orden.odoo_factura_estado) {
-      const { error: errUpd } = await supabase
-        .from("orden")
-        .update({ odoo_factura_id: factura.id, odoo_factura_estado: factura.estado })
-        .eq("id", orden.id);
-      if (errUpd) {
-        console.error(`cron odoo: no se pudo guardar la orden ${orden.id}:`, errUpd.message);
-        continue;
-      }
-      cambios += 1;
-      const legible = ESTADO_FACTURA[factura.estado] ?? factura.estado;
-      const pendiente =
-        factura.residual > 0 && factura.estado !== "paid"
-          ? ` — pendiente ${factura.residual.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-          : "";
-      await supabase.from("bitacora").insert({
-        orden_id: orden.id,
-        autor_id: null,
-        tipo: "evento",
-        texto: `Odoo: la factura ${factura.name} está ${legible}${pendiente}`,
-      });
+  for (const tanda of tandas) {
+    // Las órdenes donde el estado de la factura importa (y hay OC que buscar).
+    // (El builder tipado de supabase-js explota en profundidad al condicionar
+    // filtros — el resultado se tipa a mano con OrdenViva más abajo.)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let filtro: any = supabase
+      .from("orden")
+      .select("id, numero_oc, estado, odoo_factura_estado")
+      .not("numero_oc", "is", null)
+      .in("estado", ESTADOS_FACTURABLES);
+    if (tanda.orgId) {
+      filtro = filtro.eq("org_id", tanda.orgId);
+    } else if (orgsConCuenta.length > 0) {
+      // Modo legado: solo las órdenes de organizaciones SIN cuenta conectada.
+      filtro = filtro.not("org_id", "in", `(${orgsConCuenta.join(",")})`);
+    }
+    const { data: ordenes, error } = (await filtro
+      .order("updated_at", { ascending: false })
+      .limit(60)) as { data: OrdenViva[] | null; error: { message: string } | null };
+    if (error) {
+      console.error(`cron odoo [${tanda.etiqueta}]: no se pudieron leer las órdenes:`, error.message);
+      continue;
     }
 
-    // 2) Avance de estado cuando Odoo lo confirma.
-    let nuevoEstado: Estado | null = null;
-    if (orden.estado === "listo_facturar" && factura.estado !== "draft") {
-      nuevoEstado = "facturado";
-    } else if (
-      (orden.estado === "facturado" || orden.estado === "libramiento") &&
-      factura.estado === "paid"
-    ) {
-      nuevoEstado = "cobrado";
-    }
-    if (nuevoEstado) {
-      const { error: errEstado } = await supabase
-        .from("orden")
-        .update({ estado: nuevoEstado })
-        .eq("id", orden.id)
-        .eq("estado", orden.estado); // nadie la movió entre lectura y escritura
-      if (!errEstado) {
-        avanzadas += 1;
+    const vivas = (ordenes ?? []).filter((o) => o.numero_oc) as OrdenViva[];
+    if (vivas.length === 0) continue;
+    revisadas += vivas.length;
+
+    const facturas = await buscarFacturasLote(tanda.config, vivas.map((o) => o.numero_oc as string));
+    conFactura += facturas.size;
+
+    for (const orden of vivas) {
+      const factura = facturas.get(orden.numero_oc as string);
+      if (!factura) continue;
+
+      // 1) El estado de la factura cambió → guardar + bitácora.
+      if (factura.estado !== orden.odoo_factura_estado) {
+        const { error: errUpd } = await supabase
+          .from("orden")
+          .update({ odoo_factura_id: factura.id, odoo_factura_estado: factura.estado })
+          .eq("id", orden.id);
+        if (errUpd) {
+          console.error(`cron odoo: no se pudo guardar la orden ${orden.id}:`, errUpd.message);
+          continue;
+        }
+        cambios += 1;
+        const legible = ESTADO_FACTURA[factura.estado] ?? factura.estado;
+        const pendiente =
+          factura.residual > 0 && factura.estado !== "paid"
+            ? ` — pendiente ${factura.residual.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+            : "";
         await supabase.from("bitacora").insert({
           orden_id: orden.id,
           autor_id: null,
           tipo: "evento",
-          texto:
-            nuevoEstado === "cobrado"
-              ? `Odoo confirma el pago de ${factura.name} — la orden pasa a Cobrado`
-              : `Odoo tiene la factura ${factura.name} publicada — la orden pasa a Facturado`,
+          texto: `Odoo: la factura ${factura.name} está ${legible}${pendiente}`,
         });
+      }
+
+      // 2) Avance de estado cuando Odoo lo confirma.
+      let nuevoEstado: Estado | null = null;
+      if (orden.estado === "listo_facturar" && factura.estado !== "draft") {
+        nuevoEstado = "facturado";
+      } else if (
+        (orden.estado === "facturado" || orden.estado === "libramiento") &&
+        factura.estado === "paid"
+      ) {
+        nuevoEstado = "cobrado";
+      }
+      if (nuevoEstado) {
+        const { error: errEstado } = await supabase
+          .from("orden")
+          .update({ estado: nuevoEstado })
+          .eq("id", orden.id)
+          .eq("estado", orden.estado); // nadie la movió entre lectura y escritura
+        if (!errEstado) {
+          avanzadas += 1;
+          await supabase.from("bitacora").insert({
+            orden_id: orden.id,
+            autor_id: null,
+            tipo: "evento",
+            texto:
+              nuevoEstado === "cobrado"
+                ? `Odoo confirma el pago de ${factura.name} — la orden pasa a Cobrado`
+                : `Odoo tiene la factura ${factura.name} publicada — la orden pasa a Facturado`,
+          });
+        }
       }
     }
   }
 
   return NextResponse.json({
     ok: true,
-    revisadas: vivas.length,
-    conFactura: facturas.size,
+    organizaciones: tandas.length,
+    revisadas,
+    conFactura,
     cambios,
     avanzadas,
   });

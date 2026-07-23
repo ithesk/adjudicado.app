@@ -8,6 +8,42 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (4) — Odoo por EMPRESA: botón «Conectar con Odoo»
+
+Pablo pidió algo friendly: nada de variables universales — cada empresa
+conecta su Odoo desde el menú con un botón. Hecho completo:
+
+- **`supabase_integraciones.sql`** (⚠️ CORRER EN SUPABASE): tabla
+  `integracion_odoo` (una fila por org: url, db, usuario, api_key_cifrada,
+  activo, version/probado_at) con RLS es_miembro.
+- **Cifrado**: `src/lib/cifrado.ts` — AES-256-GCM; llave derivada de
+  `CREDENCIALES_SECRET` (env del sistema, generada en .env.local; agregar en
+  Vercel). La API key nunca viaja al navegador ni se guarda en claro.
+- **`lib/odoo.ts` refactorizado**: todas las funciones reciben `OdooConfig`
+  como parámetro; `configDesdeEnv()` queda como modo legado.
+  `lib/odoo-config.ts`: `obtenerConfigOdoo(supabase, orgId)` (cuenta de la
+  org → env → null; llave rota NO cae al env de otra empresa) y
+  `estadoIntegracionOdoo` (lo mostrable, sin api key).
+- **Flujo «Conectar con Odoo»** (Configuración → Integraciones,
+  `ConexionOdoo.tsx`): botón → form (url/db/usuario/api key) → se PRUEBA la
+  conexión ANTES de guardar (si falla, no se guarda nada) → tarjeta verde
+  «Conectado a <db> — Odoo <versión> · probado <fecha>» con Probar y
+  Desconectar. El modo legado por env se muestra como tal con botón para
+  migrar a cuenta propia. ProbarOdooBtn eliminado.
+- **Cron multi-empresa**: recorre las orgs con cuenta activa (cada una
+  contra SU Odoo, órdenes filtradas por org) + tanda legado por env para
+  las orgs sin fila. Credenciales rotas de una no afectan a las demás.
+- 97 tests (3 nuevos de cifrado: round-trip, GCM detecta manipulación,
+  error claro sin secreto).
+
+**Pendiente Pablo**: (1) correr `supabase_integraciones.sql` en el SQL
+Editor; (2) `CREDENCIALES_SECRET` y `CRON_SECRET` a Vercel (valores en las
+últimas líneas de .env.local); (3) mergear PR #19; (4) darle a «Conectar
+con Odoo» con sus credenciales reales (localmente no existen — nunca
+estuvieron en .env.local).
+
+---
+
 ## 2026-07-23 (3) — Odoo: sincronización automática de facturas (cron)
 
 Pablo eligió llevar la integración de Odoo (que solo tenía botón manual de
