@@ -354,12 +354,12 @@ export default function BuscadorPrecios({
           <table className="w-full table-fixed text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-2 text-left font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
-                <th className="w-[200px] px-3 py-2 font-medium">SKU</th>
+                <th className="w-[120px] px-3 py-2 font-medium md:w-[200px]">SKU</th>
                 <th className="px-3 py-2 font-medium">Descripción</th>
-                <th className="w-[84px] px-3 py-2 font-medium">Término</th>
+                <th className="hidden w-[84px] px-3 py-2 font-medium md:table-cell">Término</th>
                 <th className="w-[118px] px-3 py-2 text-right font-medium">Precio</th>
                 {variosSuplidores && (
-                  <th className="w-[110px] px-3 py-2 font-medium">Suplidor</th>
+                  <th className="hidden w-[110px] px-3 py-2 font-medium md:table-cell">Suplidor</th>
                 )}
               </tr>
             </thead>
@@ -402,14 +402,14 @@ export default function BuscadorPrecios({
                       </div>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-soft">
+                  <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-ink-soft md:table-cell">
                     {fmtTermino(p.term_meses)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums text-ink">
                     {fmtUSD(p.precio)}
                   </td>
                   {variosSuplidores && (
-                    <td className="truncate px-3 py-2 text-xs text-ink-soft">
+                    <td className="hidden truncate px-3 py-2 text-xs text-ink-soft md:table-cell">
                       {p.suplidor_nombre}
                     </td>
                   )}

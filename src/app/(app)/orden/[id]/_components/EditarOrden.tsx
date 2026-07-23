@@ -169,7 +169,7 @@ export default function EditarOrden({
               </Campo>
             </div>
 
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-line px-4 py-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3">
               <button
                 type="button"
                 onClick={borrar}

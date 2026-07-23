@@ -111,13 +111,13 @@ export default function ListasManager({
             </SectionTitle>
 
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] table-fixed text-sm">
+            <table className="w-full table-fixed text-sm md:min-w-[640px]">
               <thead>
                 <tr className="border-b border-line text-left font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
                   <th className="px-4 py-2 font-medium">Archivo</th>
-                  <th className="w-[104px] px-3 py-2 font-medium">Vigencia</th>
-                  <th className="w-[130px] px-3 py-2 font-medium">Importada</th>
-                  <th className="w-[92px] px-3 py-2 text-right font-medium">Productos</th>
+                  <th className="hidden w-[104px] px-3 py-2 font-medium md:table-cell">Vigencia</th>
+                  <th className="hidden w-[130px] px-3 py-2 font-medium md:table-cell">Importada</th>
+                  <th className="hidden w-[92px] px-3 py-2 text-right font-medium md:table-cell">Productos</th>
                   <th className="w-[96px] px-3 py-2 font-medium">Estado</th>
                   <th className="w-[110px] px-3 py-2 text-right font-medium">Acciones</th>
                 </tr>
@@ -139,17 +139,17 @@ export default function ListasManager({
                           </span>
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-soft">
+                      <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-ink-soft md:table-cell">
                         {l.vigencia ?? "—"}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-xs text-ink-soft">
+                      <td className="hidden whitespace-nowrap px-3 py-2 text-xs text-ink-soft md:table-cell">
                         {l.importada_at.slice(0, 10)}
                         <span className="text-muted">
                           {" "}
                           · {edadLista(null, l.importada_at).label}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs text-ink">
+                      <td className="hidden whitespace-nowrap px-3 py-2 text-right font-mono text-xs text-ink md:table-cell">
                         {l.row_count.toLocaleString()}
                       </td>
                       <td className="px-3 py-2">

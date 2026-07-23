@@ -151,9 +151,11 @@ export default function DocumentosBuscador({
                 />
                 <Link
                   href={`/orden/${d.orden_id}`}
+                  title="Abrir orden"
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
                 >
-                  Abrir orden
+                  {/* En móvil, solo la flecha: el texto comía el nombre del doc. */}
+                  <span className="hidden sm:inline">Abrir orden</span>
                   <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
                 </Link>
               </li>

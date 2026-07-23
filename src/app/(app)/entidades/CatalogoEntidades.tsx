@@ -73,7 +73,7 @@ export default function CatalogoEntidades({
               <li key={e.id}>
                 <Link
                   href={`/entidades/${e.id}`}
-                  className={`group grid items-center gap-3 px-4 py-2 transition-colors hover:bg-surface-2 ${COLS}`}
+                  className={`group flex items-center gap-3 px-4 py-2 transition-colors hover:bg-surface-2 sm:grid ${COLS}`}
                 >
                   {e.logo ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -87,7 +87,7 @@ export default function CatalogoEntidades({
                       <Landmark className="h-4 w-4" strokeWidth={1.8} aria-hidden />
                     </span>
                   )}
-                  <span className="min-w-0">
+                  <span className="min-w-0 flex-1 sm:flex-none">
                     <span className="block truncate text-[13px] font-medium text-ink group-hover:text-primary">
                       {e.siglas ? `${e.siglas} — ` : ""}
                       {e.nombre}

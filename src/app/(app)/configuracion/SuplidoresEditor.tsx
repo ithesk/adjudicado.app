@@ -94,7 +94,7 @@ export default function SuplidoresEditor({
             className="rounded-lg border border-line bg-surface shadow-card"
           >
             {/* Encabezado editable */}
-            <div className="flex items-center gap-2 border-b border-line p-3">
+            <div className="flex flex-wrap items-center gap-2 border-b border-line p-3">
               <span className="grid h-9 w-9 flex-none place-items-center rounded-md bg-surface-2 text-muted">
                 <Building className="h-4 w-4" strokeWidth={2} aria-hidden />
               </span>

@@ -90,7 +90,7 @@ function FilaPlantilla({
   const esVariante = Boolean(plantilla.institucion_id);
   return (
     <li className={esVariante ? "bg-surface-2/40" : ""}>
-      <div className="flex items-center gap-3 px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
         {esVariante && (
           <CornerDownRight className="h-3.5 w-3.5 flex-none text-muted" strokeWidth={2} aria-hidden />
         )}
@@ -99,7 +99,7 @@ function FilaPlantilla({
           title={plantilla.estado === "lista" ? "Lista para generar" : "Borrador"}
           aria-hidden
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-52 flex-1">
           <Link href={`/configuracion/plantillas/${plantilla.id}`} className="block">
             <p className="flex items-center gap-2 truncate text-[13px] font-medium text-ink">
               <span className="truncate">{plantilla.nombre}</span>

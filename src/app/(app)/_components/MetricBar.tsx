@@ -153,7 +153,7 @@ function Metrica({
         </span>
       </dt>
       <dd
-        className={`mt-1 font-mono text-xl font-semibold tracking-tight tabular-nums ${color}`}
+        className={`mt-1 truncate font-mono text-lg font-semibold tracking-tight tabular-nums sm:text-xl ${color}`}
       >
         {valor}
       </dd>

@@ -8,6 +8,38 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (2) — Usabilidad móvil, segunda pasada: especialista UI/UX
+
+Pablo probó en su iPhone y aparecieron más: descripciones de ítems cortadas,
+«Generar este» montado sobre el texto de los requisitos. Además dos causas de
+fondo previas: el dev server bloqueaba el JS desde otro origen
+(`allowedDevOrigins` en next.config.ts) y el drawer quedaba fuera de pantalla
+(el `backdrop-blur` de la top bar es containing block de `fixed` → portal al
+body). Luego, barrido de especialista UI/UX (agente, 358px, toda la app):
+
+- **Cotizador móvil = TARJETAS**: bajo `sm` cada línea es una tarjeta apilada
+  (descripción a lo ancho, campos tocables, mismos handlers — `TarjetaLinea`);
+  la tabla de 760px queda solo en desktop. Sin drag&drop en móvil (adrede).
+- **Patrón transversal corregido**: filas `flex items-center` con botonera
+  sin `flex-wrap` aplastaban el texto. Arreglado con wrap + `min-w`/`basis`
+  en: FilaRequisito, **filas de ítems de orden/nueva (rompía crear orden)**,
+  **DocsEmpresa (el nombre del doc quedaba en ~0px con 6 acciones)**,
+  PlantillasLista, footer del modal EditarOrden, acciones del Editor de
+  plantillas, cabeceras de bitácora, SuplidoresEditor.
+- **Tablas admin en móvil**: BuscadorPrecios oculta Término/Suplidor y
+  estrecha SKU; ListasManager oculta Vigencia/Importada/Productos (patrón
+  `hidden md:table-cell`, como la bandeja).
+- Menores: «Abrir orden» de documentos deja solo la flecha en móvil;
+  MetricBar con truncate y text-lg; PlazosPanel a 1 columna; catálogo de
+  entidades en flex (el logo se apilaba sobre el nombre); conectores de la
+  LineaTiempo ocultos bajo sm (guiones sueltos al envolver); instrucción del
+  editor de plantillas dice «toca» en móvil (el drag no existe al tacto).
+
+**Lección**: el `backdrop-filter` de un ancestro captura los `fixed` (portal
+o nada), y toda fila con botonera necesita `flex-wrap` + `min-w` en el texto.
+
+---
+
 ## 2026-07-23 — Revisión móvil completa: menús y datos cortados
 
 Pablo: «en móvil no funcionan bien los menús y se cortan los datos». Auditoría

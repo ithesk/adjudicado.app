@@ -279,14 +279,17 @@ function FilaDoc({
 
   return (
     <li className="space-y-2 px-4 py-2.5">
-      <div className="flex items-center gap-3">
+      {/* flex-wrap + min-w del bloque del nombre: en móvil las 6 acciones
+          bajan a su propia línea — antes comprimían el nombre del documento
+          a ~0px y no se sabía qué documento era. Desktop: una línea igual. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <span
           className={`h-2 w-2 flex-none rounded-full ${
             vigente ? urgenciaDot(nivel) : "border border-line-strong"
           }`}
           aria-hidden
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-52 flex-1">
           <p className={`truncate text-[13px] ${vigente ? "font-medium text-ink" : "text-muted"}`}>
             {tipo.codigo === "otro" ? vigente?.nombre : tipo.label}
           </p>
