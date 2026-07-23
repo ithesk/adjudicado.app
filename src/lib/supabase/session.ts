@@ -3,8 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { isDemo } from "@/lib/demo";
 
-// Rutas públicas (no requieren sesión).
-const PUBLIC_PATHS = ["/login", "/registro", "/inicio", "/auth"];
+// Rutas públicas (no requieren sesión). Los endpoints de máquina traen su
+// PROPIA autenticación: el cron valida Bearer CRON_SECRET y el webhook de
+// correo su x-inbound-secret — el redirect al login los rompía (el cron de
+// Vercel recibía 307 y nunca corría).
+const PUBLIC_PATHS = ["/login", "/registro", "/inicio", "/auth", "/api/cron", "/api/correo-entrante"];
 
 // Páginas de auth/marketing que no aplican con sesión activa → al tablero.
 const SOLO_ANONIMO = ["/login", "/registro", "/inicio"];
