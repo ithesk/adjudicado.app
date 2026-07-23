@@ -120,6 +120,66 @@ export interface FacturaOdoo {
  * Busca en account.move la factura (out_invoice) cuyo invoice_origin o ref
  * contenga el número de OC recibido. Devuelve null si no encuentra ninguna.
  */
+/**
+ * Versión por LOTE para el cron: autentica UNA vez y busca la factura de
+ * cada OC en serie (gentil con el Odoo del VPS). Devuelve solo las
+ * encontradas; un fallo en una OC no tumba el resto.
+ */
+export async function buscarFacturasLote(
+  numerosOc: string[],
+): Promise<Map<string, FacturaOdoo>> {
+  const resultado = new Map<string, FacturaOdoo>();
+  if (!odooConfigurado() || numerosOc.length === 0) return resultado;
+
+  let uid: number;
+  const { db, apiKey } = vars();
+  try {
+    uid = await autenticar();
+  } catch (err) {
+    console.error("buscarFacturasLote: autenticación falló:", err instanceof Error ? err.message : err);
+    return resultado;
+  }
+
+  for (const oc of numerosOc) {
+    try {
+      const registros = (await rpc("object", "execute_kw", [
+        db,
+        uid,
+        apiKey,
+        "account.move",
+        "search_read",
+        [[
+          ["move_type", "=", "out_invoice"],
+          "|",
+          ["invoice_origin", "ilike", oc],
+          ["ref", "ilike", oc],
+        ]],
+        { fields: ["name", "state", "payment_state", "amount_total", "amount_residual"], limit: 1 },
+      ])) as Array<{
+        id: number;
+        name: string;
+        state: string;
+        payment_state: string;
+        amount_total: number;
+        amount_residual: number;
+      }>;
+      if (registros?.length) {
+        const r = registros[0];
+        resultado.set(oc, {
+          id: r.id,
+          name: r.name,
+          estado: r.state === "draft" ? "draft" : (r.payment_state ?? r.state),
+          montoTotal: r.amount_total,
+          residual: r.amount_residual,
+        });
+      }
+    } catch (err) {
+      console.error(`buscarFacturasLote: falló la OC ${oc}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return resultado;
+}
+
 export async function buscarFactura(numeroOc: string): Promise<FacturaOdoo | null> {
   if (!odooConfigurado()) return null;
 

@@ -8,6 +8,36 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (3) — Odoo: sincronización automática de facturas (cron)
+
+Pablo eligió llevar la integración de Odoo (que solo tenía botón manual de
+buscar factura) a AUTOMÁTICA:
+
+- **`/api/cron/odoo-facturas`** (GET, Bearer CRON_SECRET): para cada orden
+  viva en fase de facturación (entregado→libramiento, máx 60, con OC) busca
+  su factura en Odoo; si el estado cambió lo guarda y deja EVENTO en la
+  bitácora de la orden («Odoo: la factura F-123 está PAGADA»); y avanza el
+  estado cuando Odoo lo confirma: listo_facturar→facturado (factura
+  publicada), facturado/libramiento→cobrado (paid). El avance usa
+  `.eq("estado", anterior)` como guarda de carrera. Cliente admin (no hay
+  sesión en un cron).
+- **`buscarFacturasLote()`** en lib/odoo.ts: autentica UNA vez y busca en
+  serie (gentil con el VPS); un fallo por OC no tumba el resto.
+- **`vercel.json`** nuevo: cron diario 11:00 UTC (7 AM RD) — el plan Hobby
+  limita a una vez al día; con Pro se puede subir la frecuencia.
+- CRON_SECRET generado y agregado a `.env.local` (última línea); Vercel manda
+  el header solo cuando la variable existe allá.
+
+**Descubierto**: las ODOO_* NO están en .env.local (solo en Vercel, si
+acaso) — localmente la integración está sin configurar; el cron hace no-op
+limpio en ese caso. **Pendiente Pablo**: (1) confirmar que ODOO_URL/DB/
+USERNAME/API_KEY están en Vercel (Production); (2) agregar CRON_SECRET en
+Vercel con el MISMO valor de .env.local; (3) mergear PR #19; (4) probar
+manual: `curl -H "Authorization: Bearer <secreto>"
+https://adjudicado-app.vercel.app/api/cron/odoo-facturas`.
+
+---
+
 ## 2026-07-23 (2) — Usabilidad móvil, segunda pasada: especialista UI/UX
 
 Pablo probó en su iPhone y aparecieron más: descripciones de ítems cortadas,
