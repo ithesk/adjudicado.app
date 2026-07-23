@@ -88,6 +88,7 @@ function ItemNav({
   return (
     <Link
       href={href}
+      prefetch={false}
       title={rail ? label : undefined}
       onClick={onNavegar}
       className={`flex items-center gap-2.5 rounded-[11px] px-2.5 text-[13px] transition-colors ${
@@ -186,6 +187,7 @@ function CuerpoNav({
                 <Link
                   key={e.key}
                   href={`/?estado=${e.key}`}
+                  prefetch={false}
                   onClick={onNavegar}
                   className={`flex items-center gap-2.5 rounded-[11px] px-2.5 text-[12.5px] text-ink-soft transition-colors hover:bg-surface-2 ${tactil ? "py-2.5" : "py-1.5"}`}
                 >
@@ -372,6 +374,7 @@ export default function Sidebar({ datos }: { datos: DatosSidebar }) {
       {/* Acción primaria */}
       <Link
         href="/orden/nueva"
+        prefetch={false}
         title={rail ? "Nueva orden" : undefined}
         className={`mt-2.5 flex items-center justify-center gap-1.5 rounded-lg bg-primary py-2 text-[13px] font-semibold text-primary-ink shadow-card transition-colors hover:bg-primary-hover ${
           rail ? "px-0" : "px-2.5"

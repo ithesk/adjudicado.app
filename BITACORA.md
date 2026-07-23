@@ -8,6 +8,30 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (7) — Cotizador lento con 18 líneas: optimista + fin de la tormenta de prefetch
+
+Pablo con una licitación real de 18 ítems: cambiar una cantidad tardaba una
+eternidad en local y en producción «un círculo dando vueltas». Dos causas,
+confirmadas con un trace de red que él mismo pegó:
+
+1. **Cada celda guardada recargaba la página ENTERA** (router.refresh del
+   useAccion): el servidor re-ejecutaba el page + el LAYOUT (que consulta
+   todas las órdenes para los contadores del sidebar). Fix: el cotizador es
+   OPTIMISTA de verdad — overlay local `parches` por ítem (los totales se
+   calculan del estado parchado), `useAccion` gana `sinRefresh` +
+   `alTerminar(err)` para revertir si el servidor falla. Guardar una celda
+   ya no recarga nada.
+2. **Tormenta de prefetch**: el trace mostraba al navegador precargando
+   `/?estado=entregado` etc. — los 13 enlaces del sidebar + cada fila de
+   tabla visible precargaban páginas force-dynamic (cada una ejecuta el
+   layout completo). `prefetch={false}` en: ItemNav/estados/Nueva orden del
+   sidebar, NavLink, filas de TriageTable, ProcesosLista, CatalogoEntidades,
+   «Abrir orden» de documentos. La navegación sigue instantánea por los
+   loading.tsx.
+
+⚠️ Pablo pegó su cookie de sesión completa (con refresh token) en el chat —
+recordado: cerrar sesión y volver a entrar en producción para invalidarla.
+
 ## 2026-07-23 (6) — «Crear en Odoo»: el flujo manual de venta, en un clic
 
 Pablo describió su flujo manual al llegar una OC: crear producto si falta,

@@ -261,7 +261,7 @@ export default function ProcesosLista({
                       </span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <Link href={`/licitaciones/${p.id}`} className="block">
+                      <Link href={`/licitaciones/${p.id}`} prefetch={false} className="block">
                         <span className="font-mono text-xs font-medium text-ink">{p.codigo}</span>
                         <span className="block truncate text-[12.5px] text-muted">
                           {ent ? `${ent.siglas ?? ent.nombre} · ` : ""}
