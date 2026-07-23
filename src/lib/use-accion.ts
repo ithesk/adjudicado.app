@@ -33,7 +33,16 @@ export function useAccion() {
   function correr(
     clave: string,
     fn: () => Promise<string | null>,
-    opts: { errorInline?: boolean } = {},
+    opts: {
+      errorInline?: boolean;
+      /** No recargar la página al terminar — para autosave OPTIMISTA de
+       *  celdas (la UI ya muestra el valor; recargar todo por una celda es
+       *  lo que hacía lento el cotizador con 18 líneas). */
+      sinRefresh?: boolean;
+      /** Se llama al terminar con el error (o null): para revertir el
+       *  estado optimista si el servidor falló. */
+      alTerminar?: (err: string | null) => void;
+    } = {},
   ) {
     if (ocupadas.has(clave)) return; // anti doble-clic
     setError(null);
@@ -64,7 +73,8 @@ export function useAccion() {
           setOkClave(null);
         }, 2000);
       }
-      router.refresh();
+      opts.alTerminar?.(err);
+      if (!opts.sinRefresh) router.refresh();
     });
   }
 

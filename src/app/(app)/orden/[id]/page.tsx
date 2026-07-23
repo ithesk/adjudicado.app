@@ -231,7 +231,9 @@ export default async function OrdenDetallePage({
             numeroOc={orden.numero_oc ?? ""}
             facturaEstado={orden.odoo_factura_estado ?? null}
             facturaId={orden.odoo_factura_id ?? null}
-            facturaNombre={null}
+            facturaNombre={orden.odoo_factura_nombre ?? null}
+            ordenVentaId={orden.odoo_orden_id ?? null}
+            ordenVentaNombre={orden.odoo_orden_nombre ?? null}
           />
           <BuzonOrden
             buzon={orden.buzon ?? null}

@@ -471,6 +471,7 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
     plazo: (
       <Link
         href={href}
+        prefetch={false}
         className="flex items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
       >
         <span className={`h-2 w-2 shrink-0 rounded-full ${urgenciaDot(nivel)}`} />
@@ -486,6 +487,7 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
     oc: (
       <Link
         href={href}
+        prefetch={false}
         className="block min-w-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
       >
         <span className="block truncate font-mono text-[13px] font-medium text-ink group-hover:text-primary">

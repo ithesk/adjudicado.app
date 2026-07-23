@@ -39,6 +39,7 @@ export default function NavLink({
   return (
     <Link
       href={href}
+      prefetch={false}
       className={`flex items-center gap-2.5 rounded-[11px] px-2.5 py-1.5 text-[13px] transition-colors ${
         active
           ? "bg-primary/10 font-semibold text-primary"

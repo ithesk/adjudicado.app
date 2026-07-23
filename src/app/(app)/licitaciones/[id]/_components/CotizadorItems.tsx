@@ -45,6 +45,12 @@ export default function CotizadorItems({
   // y el micro-check aparece junto al número de la línea que se guardó.
   const { correr, ocupada, okClave } = useAccion();
 
+  // OPTIMISTA: la celda editada aplica al instante (totales incluidos) y se
+  // guarda en el fondo SIN recargar la página — recargar todo el proceso por
+  // una celda era lo que hacía eterno el cotizador con muchas líneas. Si el
+  // servidor falla, se revierte y sale el aviso.
+  const [parches, setParches] = useState<Record<string, Partial<LicItem>>>({});
+
   // ARRASTRAR PARA REORDENAR: el orden local manda al instante (optimista)
   // mientras el servidor persiste; el orden en pantalla es el del F.033.
   const [ordenLocal, setOrdenLocal] = useState<string[] | null>(null);
@@ -52,14 +58,15 @@ export default function CotizadorItems({
   const [sobre, setSobre] = useState<string | null>(null);
 
   const mostrados = useMemo(() => {
-    if (!ordenLocal) return items;
-    const porId = new Map(items.map((i) => [i.id, i]));
+    const conParche = items.map((i) => (parches[i.id] ? { ...i, ...parches[i.id] } : i));
+    if (!ordenLocal) return conParche;
+    const porId = new Map(conParche.map((i) => [i.id, i]));
     const enOrden = ordenLocal
       .map((id) => porId.get(id))
       .filter(Boolean) as LicItem[];
-    const nuevos = items.filter((i) => !ordenLocal.includes(i.id));
+    const nuevos = conParche.filter((i) => !ordenLocal.includes(i.id));
     return [...enOrden, ...nuevos];
-  }, [items, ordenLocal]);
+  }, [items, ordenLocal, parches]);
 
   function soltarSobre(targetId: string) {
     const origen = arrastrando;
@@ -76,13 +83,21 @@ export default function CotizadorItems({
     correr("orden", () => reordenarItemsAction(proceso.id, ids));
   }
 
-  const totales = totalesProceso(items, params.itbisPct);
-  const sinCotizar = items.filter(
+  const totales = totalesProceso(mostrados, params.itbisPct);
+  const sinCotizar = mostrados.filter(
     (i) => i.ofertamos && i.precio_unitario === null,
   ).length;
 
-  const patch = (id: string, p: Parameters<typeof actualizarItemAction>[1]) =>
-    correr(`it-${id}`, () => actualizarItemAction(id, p));
+  const patch = (id: string, p: Parameters<typeof actualizarItemAction>[1]) => {
+    const previo = parches[id];
+    setParches((m) => ({ ...m, [id]: { ...m[id], ...p } }));
+    correr(`it-${id}`, () => actualizarItemAction(id, p), {
+      sinRefresh: true,
+      alTerminar: (err) => {
+        if (err) setParches((m) => ({ ...m, [id]: previo ?? {} }));
+      },
+    });
+  };
 
   return (
     <Panel>

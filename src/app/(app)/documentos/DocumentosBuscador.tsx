@@ -151,6 +151,7 @@ export default function DocumentosBuscador({
                 />
                 <Link
                   href={`/orden/${d.orden_id}`}
+                  prefetch={false}
                   title="Abrir orden"
                   className="inline-flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
                 >

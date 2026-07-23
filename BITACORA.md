@@ -8,6 +8,144 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (7) — Cotizador lento con 18 líneas: optimista + fin de la tormenta de prefetch
+
+Pablo con una licitación real de 18 ítems: cambiar una cantidad tardaba una
+eternidad en local y en producción «un círculo dando vueltas». Dos causas,
+confirmadas con un trace de red que él mismo pegó:
+
+1. **Cada celda guardada recargaba la página ENTERA** (router.refresh del
+   useAccion): el servidor re-ejecutaba el page + el LAYOUT (que consulta
+   todas las órdenes para los contadores del sidebar). Fix: el cotizador es
+   OPTIMISTA de verdad — overlay local `parches` por ítem (los totales se
+   calculan del estado parchado), `useAccion` gana `sinRefresh` +
+   `alTerminar(err)` para revertir si el servidor falla. Guardar una celda
+   ya no recarga nada.
+2. **Tormenta de prefetch**: el trace mostraba al navegador precargando
+   `/?estado=entregado` etc. — los 13 enlaces del sidebar + cada fila de
+   tabla visible precargaban páginas force-dynamic (cada una ejecuta el
+   layout completo). `prefetch={false}` en: ItemNav/estados/Nueva orden del
+   sidebar, NavLink, filas de TriageTable, ProcesosLista, CatalogoEntidades,
+   «Abrir orden» de documentos. La navegación sigue instantánea por los
+   loading.tsx.
+
+⚠️ Pablo pegó su cookie de sesión completa (con refresh token) en el chat —
+recordado: cerrar sesión y volver a entrar en producción para invalidarla.
+
+## 2026-07-23 (6) — «Crear en Odoo»: el flujo manual de venta, en un clic
+
+Pablo describió su flujo manual al llegar una OC: crear producto si falta,
+serie si aplica, conduce de entrega, esperar recepción conforme, facturar.
+Ahora el botón **«Crear en Odoo»** en la ficha de la orden hace la parte
+tecleable: busca/crea el CLIENTE (por nombre exacto y por RNC del catálogo),
+busca/crea cada PRODUCTO (convención del Odoo del cliente: consumible para
+licencias/físico — visto en sus datos —, service para servicios; físico
+intenta tracking por serie con fallback), crea la ORDEN DE VENTA con las
+líneas (precio unitario = item.precio/cantidad; client_order_ref = nº OC) y
+la CONFIRMA → Odoo genera el conduce. Guarda odoo_orden_id/nombre (migración
+corrida en prod), evento en bitácora con el detalle, y el panel muestra
+«En Odoo: S00042». Lo físico queda en Odoo: series al validar el conduce,
+recepción conforme, factura (que se vincula con lo del checkpoint anterior).
+Verificado read-only contra su Odoo: acceso a res.partner/product/sale.order/
+stock.picking OK; el cliente OGTIC ya existe (vat 430019501). NO se creó
+nada en su ERP — el primer clic del botón es la prueba real.
+
+## 2026-07-23 (5) — Odoo: VINCULAR factura (las facturas reales no llevan la OC)
+
+Pablo conectó su Odoo real (ventas.innovaciontecnologica.com.do, Odoo 17;
+el error de credenciales era la API key — entra con Google/2FA; la tabla la
+creé yo vía Management API con su token, guardado en .env.local a pedido
+suyo). Al probar con la orden OGTIC-2026-00057: la búsqueda por OC no
+encuentra NADA porque sus facturas en Odoo no llevan el número de OC
+(invoice_origin trae el nº de cotización tipo CS089…, o va vacío).
+
+Solución: **vincular una vez, seguir por id**:
+- `listarFacturasRecientes()` + `leerFacturasPorId()` en lib/odoo.ts.
+- Actions `listarFacturasOdoo()` y `vincularFacturaOdoo(ordenId, facturaId)`
+  (guarda id+estado+nombre, evento en bitácora); `sincronizarFacturaOdoo`
+  refresca por id si hay vínculo, si no intenta por OC como antes.
+- OdooSync UI: «Elegir factura de Odoo…» → lista de las 15 recientes
+  (INV/… · monto · cliente · fecha · estado) → clic vincula; vinculada
+  muestra chip + nombre + «Actualizar estado» + «Cambiar factura…».
+- Cron: las vinculadas se refrescan POR ID en una sola llamada; las sueltas
+  siguen intentando por OC. Columna nueva `orden.odoo_factura_nombre`
+  (migración corrida en prod y anexada a supabase_integraciones.sql).
+
+## 2026-07-23 (4) — Odoo por EMPRESA: botón «Conectar con Odoo»
+
+**Iteración friendly (mismo día)**: Pablo quería flujo tipo OAuth (redirigir
+y autorizar, como Claude↔Gmail). Odoo estándar NO tiene servidor de
+autorización al cual redirigir (su API solo autentica usuario+clave), así
+que se construyó lo más cercano: asistente de DOS pasos — (1) solo la URL →
+`descubrirServidor()` detecta versión y bases (`db.list`; en odoo.com,
+sugerencia por subdominio); (2) usuario + contraseña O API key (la API
+acepta ambas; con 2FA hace falta la key). Verificado contra Odoo públicos
+(runbot 19.0, odoo.com saas). El paso de URL normaliza (agrega https://).
+
+Pablo pidió algo friendly: nada de variables universales — cada empresa
+conecta su Odoo desde el menú con un botón. Hecho completo:
+
+- **`supabase_integraciones.sql`** (⚠️ CORRER EN SUPABASE): tabla
+  `integracion_odoo` (una fila por org: url, db, usuario, api_key_cifrada,
+  activo, version/probado_at) con RLS es_miembro.
+- **Cifrado**: `src/lib/cifrado.ts` — AES-256-GCM; llave derivada de
+  `CREDENCIALES_SECRET` (env del sistema, generada en .env.local; agregar en
+  Vercel). La API key nunca viaja al navegador ni se guarda en claro.
+- **`lib/odoo.ts` refactorizado**: todas las funciones reciben `OdooConfig`
+  como parámetro; `configDesdeEnv()` queda como modo legado.
+  `lib/odoo-config.ts`: `obtenerConfigOdoo(supabase, orgId)` (cuenta de la
+  org → env → null; llave rota NO cae al env de otra empresa) y
+  `estadoIntegracionOdoo` (lo mostrable, sin api key).
+- **Flujo «Conectar con Odoo»** (Configuración → Integraciones,
+  `ConexionOdoo.tsx`): botón → form (url/db/usuario/api key) → se PRUEBA la
+  conexión ANTES de guardar (si falla, no se guarda nada) → tarjeta verde
+  «Conectado a <db> — Odoo <versión> · probado <fecha>» con Probar y
+  Desconectar. El modo legado por env se muestra como tal con botón para
+  migrar a cuenta propia. ProbarOdooBtn eliminado.
+- **Cron multi-empresa**: recorre las orgs con cuenta activa (cada una
+  contra SU Odoo, órdenes filtradas por org) + tanda legado por env para
+  las orgs sin fila. Credenciales rotas de una no afectan a las demás.
+- 97 tests (3 nuevos de cifrado: round-trip, GCM detecta manipulación,
+  error claro sin secreto).
+
+**Pendiente Pablo**: (1) correr `supabase_integraciones.sql` en el SQL
+Editor; (2) `CREDENCIALES_SECRET` y `CRON_SECRET` a Vercel (valores en las
+últimas líneas de .env.local); (3) mergear PR #19; (4) darle a «Conectar
+con Odoo» con sus credenciales reales (localmente no existen — nunca
+estuvieron en .env.local).
+
+---
+
+## 2026-07-23 (3) — Odoo: sincronización automática de facturas (cron)
+
+Pablo eligió llevar la integración de Odoo (que solo tenía botón manual de
+buscar factura) a AUTOMÁTICA:
+
+- **`/api/cron/odoo-facturas`** (GET, Bearer CRON_SECRET): para cada orden
+  viva en fase de facturación (entregado→libramiento, máx 60, con OC) busca
+  su factura en Odoo; si el estado cambió lo guarda y deja EVENTO en la
+  bitácora de la orden («Odoo: la factura F-123 está PAGADA»); y avanza el
+  estado cuando Odoo lo confirma: listo_facturar→facturado (factura
+  publicada), facturado/libramiento→cobrado (paid). El avance usa
+  `.eq("estado", anterior)` como guarda de carrera. Cliente admin (no hay
+  sesión en un cron).
+- **`buscarFacturasLote()`** en lib/odoo.ts: autentica UNA vez y busca en
+  serie (gentil con el VPS); un fallo por OC no tumba el resto.
+- **`vercel.json`** nuevo: cron diario 11:00 UTC (7 AM RD) — el plan Hobby
+  limita a una vez al día; con Pro se puede subir la frecuencia.
+- CRON_SECRET generado y agregado a `.env.local` (última línea); Vercel manda
+  el header solo cuando la variable existe allá.
+
+**Descubierto**: las ODOO_* NO están en .env.local (solo en Vercel, si
+acaso) — localmente la integración está sin configurar; el cron hace no-op
+limpio en ese caso. **Pendiente Pablo**: (1) confirmar que ODOO_URL/DB/
+USERNAME/API_KEY están en Vercel (Production); (2) agregar CRON_SECRET en
+Vercel con el MISMO valor de .env.local; (3) mergear PR #19; (4) probar
+manual: `curl -H "Authorization: Bearer <secreto>"
+https://adjudicado-app.vercel.app/api/cron/odoo-facturas`.
+
+---
+
 ## 2026-07-23 (2) — Usabilidad móvil, segunda pasada: especialista UI/UX
 
 Pablo probó en su iPhone y aparecieron más: descripciones de ítems cortadas,
