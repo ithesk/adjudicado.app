@@ -213,7 +213,10 @@ export default function ProcesosLista({
           Nada coincide{q ? ` con “${q}”` : ""} en este filtro.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+        // overflow-x-auto (NO hidden): en móvil las columnas fijas clipaban
+        // Modalidad y Estado sin manera de verlos. Modalidad además se oculta
+        // en pantallas chicas (como hace la bandeja). En desktop nada cambia.
+        <div className="overflow-x-auto rounded-lg border border-line bg-surface shadow-card">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-2 text-left font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
@@ -223,7 +226,7 @@ export default function ProcesosLista({
                 <th className="px-3 py-2 font-medium">
                   <Cabecera col="codigo" orden={orden} onOrdenar={ordenarPor}>Proceso</Cabecera>
                 </th>
-                <th className="w-[150px] px-3 py-2 font-medium">Modalidad</th>
+                <th className="hidden w-[150px] px-3 py-2 font-medium md:table-cell">Modalidad</th>
                 <th className="w-[130px] px-3 py-2 font-medium">
                   <Cabecera col="estado" orden={orden} onOrdenar={ordenarPor}>Estado</Cabecera>
                 </th>
@@ -266,7 +269,7 @@ export default function ProcesosLista({
                         </span>
                       </Link>
                     </td>
-                    <td className="px-3 py-2.5 text-[12.5px] text-ink-soft">
+                    <td className="hidden px-3 py-2.5 text-[12.5px] text-ink-soft md:table-cell">
                       {MODALIDAD_LABEL[p.modalidad] ?? p.modalidad}
                     </td>
                     <td className="px-3 py-2.5">

@@ -11,7 +11,7 @@ const TABS = [
 export default function PreciosTabs() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 border-b border-line">
+    <nav className="flex gap-1 overflow-x-auto border-b border-line">
       {TABS.map((t) => {
         const active = t.exact ? pathname === t.href : pathname.startsWith(t.href);
         return (

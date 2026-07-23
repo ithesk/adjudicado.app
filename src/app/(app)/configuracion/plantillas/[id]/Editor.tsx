@@ -193,7 +193,7 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
             {plantilla.codigo} · {plantilla.estado === "lista" ? "lista" : "borrador"}
           </p>
         </div>
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex flex-wrap items-center gap-2">
           {guardado === "guardando" && (
             <span className="flex items-center gap-1 text-[11.5px] text-muted">
               <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
@@ -290,9 +290,14 @@ export default function Editor({ plantilla }: { plantilla: LicPlantilla }) {
         <Panel className="max-h-[70vh] self-start overflow-y-auto">
           <SectionTitle icon={Rocket}>Variables</SectionTitle>
           <div className="space-y-3 p-3">
-            <p className="text-[11.5px] text-muted">
+            {/* El drag&drop HTML5 no existe al tacto: en móvil la instrucción
+                es SOLO la vía tocar-tocar. */}
+            <p className="hidden text-[11.5px] text-muted md:block">
               Arrastra una ficha al hueco resaltado — o haz clic en el hueco y
               luego en la ficha.
+            </p>
+            <p className="text-[11.5px] text-muted md:hidden">
+              Toca un hueco del documento y luego toca la ficha que va ahí.
             </p>
             {(Object.keys(GRUPO_VARIABLE_LABEL) as GrupoVariable[]).map((g) => (
               <div key={g}>

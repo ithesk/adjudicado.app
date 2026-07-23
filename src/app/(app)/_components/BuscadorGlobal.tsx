@@ -218,7 +218,7 @@ export default function BuscadorGlobal() {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar en órdenes, ítems, documentos, suplidores, bitácora…"
             aria-label="Buscar en todo"
-            className="w-full bg-transparent py-3.5 text-[14px] text-ink outline-none placeholder:text-muted/70"
+            className="w-full bg-transparent py-3.5 text-base sm:text-[14px] text-ink outline-none placeholder:text-muted/70"
           />
           {cargando && (
             <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted" strokeWidth={2} aria-hidden />

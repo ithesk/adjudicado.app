@@ -310,7 +310,9 @@ export default function BidRoom({
           .filter(Boolean)
           .join(" · ")}
         acciones={
-          <span className="flex flex-wrap items-center justify-end gap-1.5">
+          // En móvil las acciones toman el ancho completo y el botón primario
+          // se estira (objetivo táctil y jerarquía clara); desktop igual.
+          <span className="flex flex-wrap items-center justify-end gap-1.5 max-sm:w-full">
             <span className={`rounded px-2 py-1 font-mono text-[13px] font-semibold ${urgenciaChip(nivel)}`}>
               {textoDias(dias)}
             </span>
@@ -349,8 +351,8 @@ export default function BidRoom({
                   // (vive en el riel); el paquete completo baja a secundario.
                   className={
                     subAbierta
-                      ? btnGhost("!px-3 !py-1.5 !text-[12.5px]")
-                      : btnPrimary("!px-3 !py-1.5 !text-[12.5px]")
+                      ? btnGhost("!px-3 !py-1.5 !text-[12.5px] max-sm:flex-1")
+                      : btnPrimary("!px-3 !py-1.5 !text-[12.5px] max-sm:flex-1")
                   }
                 >
                   <PackageOpen className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />

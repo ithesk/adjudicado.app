@@ -257,7 +257,8 @@ export default function NuevaOrdenForm() {
           value={datos.fecha_oc}
           onChange={(v) => setDatos({ ...datos, fecha_oc: v })}
         />
-        <div className="grid grid-cols-3 gap-2">
+        {/* En móvil la moneda va sola arriba y el monto a lo ancho. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <label className="col-span-1 block">
             <span className="mb-1 block text-sm font-medium text-ink">
               Moneda
@@ -373,12 +374,15 @@ function Items({
       </div>
       <div className="space-y-2">
         {items.map((it, i) => (
-          <div key={i} className="flex gap-2">
+          // En móvil el nombre toma su propia línea (basis-full) y los
+          // controles bajan a la segunda — antes los 4 anchos fijos se
+          // montaban y el nombre colapsaba a nada. Desktop: una línea igual.
+          <div key={i} className="flex flex-wrap gap-2">
             <input
               value={it.nombre}
               onChange={(e) => actualizar(i, { nombre: e.target.value })}
               placeholder="Nombre del ítem"
-              className="flex-1 rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-primary"
+              className="min-w-0 basis-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-primary sm:flex-1 sm:basis-auto"
             />
             <select
               value={it.tipo}

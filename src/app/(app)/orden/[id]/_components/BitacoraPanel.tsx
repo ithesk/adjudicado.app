@@ -670,7 +670,7 @@ export default function BitacoraPanel({
             className="w-full rounded-md border border-line bg-surface py-1.5 pl-8 pr-2 text-[12px] text-ink outline-none placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-[var(--ring)]"
           />
         </label>
-        <div className="flex items-center gap-0.5">
+        <div className="flex flex-wrap items-center gap-0.5">
           {(["todo", "llamada", "correo", "nota", "evento"] as const).map((f) => (
             <button
               key={f}
@@ -919,7 +919,7 @@ function Registro({
     <div className="group flex gap-3 py-2.5">
       <Avatar nombre={b.autor?.nombre} size={28} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
+        <div className="flex flex-wrap items-baseline gap-2">
           <span className="text-[13px] font-medium text-ink">
             {b.autor?.nombre ?? (b.tipo === "evento" ? "Sistema" : "Miembro del equipo")}
           </span>
@@ -1103,7 +1103,7 @@ function Registro({
               <div key={c.id} className="flex gap-2">
                 <Avatar nombre={c.autor.nombre} size={20} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline gap-2">
+                  <div className="flex flex-wrap items-baseline gap-2">
                     <span className="text-[12px] font-medium text-ink">
                       {c.autor.nombre}
                     </span>

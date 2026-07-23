@@ -8,6 +8,78 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (2) — Usabilidad móvil, segunda pasada: especialista UI/UX
+
+Pablo probó en su iPhone y aparecieron más: descripciones de ítems cortadas,
+«Generar este» montado sobre el texto de los requisitos. Además dos causas de
+fondo previas: el dev server bloqueaba el JS desde otro origen
+(`allowedDevOrigins` en next.config.ts) y el drawer quedaba fuera de pantalla
+(el `backdrop-blur` de la top bar es containing block de `fixed` → portal al
+body). Luego, barrido de especialista UI/UX (agente, 358px, toda la app):
+
+- **Cotizador móvil = TARJETAS**: bajo `sm` cada línea es una tarjeta apilada
+  (descripción a lo ancho, campos tocables, mismos handlers — `TarjetaLinea`);
+  la tabla de 760px queda solo en desktop. Sin drag&drop en móvil (adrede).
+- **Patrón transversal corregido**: filas `flex items-center` con botonera
+  sin `flex-wrap` aplastaban el texto. Arreglado con wrap + `min-w`/`basis`
+  en: FilaRequisito, **filas de ítems de orden/nueva (rompía crear orden)**,
+  **DocsEmpresa (el nombre del doc quedaba en ~0px con 6 acciones)**,
+  PlantillasLista, footer del modal EditarOrden, acciones del Editor de
+  plantillas, cabeceras de bitácora, SuplidoresEditor.
+- **Tablas admin en móvil**: BuscadorPrecios oculta Término/Suplidor y
+  estrecha SKU; ListasManager oculta Vigencia/Importada/Productos (patrón
+  `hidden md:table-cell`, como la bandeja).
+- Menores: «Abrir orden» de documentos deja solo la flecha en móvil;
+  MetricBar con truncate y text-lg; PlazosPanel a 1 columna; catálogo de
+  entidades en flex (el logo se apilaba sobre el nombre); conectores de la
+  LineaTiempo ocultos bajo sm (guiones sueltos al envolver); instrucción del
+  editor de plantillas dice «toca» en móvil (el drag no existe al tacto).
+
+**Lección**: el `backdrop-filter` de un ancestro captura los `fixed` (portal
+o nada), y toda fila con botonera necesita `flex-wrap` + `min-w` en el texto.
+
+---
+
+## 2026-07-23 — Revisión móvil completa: menús y datos cortados
+
+Pablo: «en móvil no funcionan bien los menús y se cortan los datos». Auditoría
+con 2 agentes (navegación + layout 360-414px) y correcciones aplicadas — TODO
+con clases base/max-sm o adiciones puras: desktop intacto.
+
+**Lo grave que apareció (y se arregló):**
+- **En móvil NO existía cerrar sesión ni cambiar de empresa**: el drawer nunca
+  montaba `PieUsuario` ni el selector de org (solo estaban en el sidebar
+  desktop). Ahora el drawer trae el selector «Tus empresas» en línea (nuevo
+  `OpcionesOrg` compartido con desktop) y el pie de usuario con logout.
+- **La lista de licitaciones cortaba Modalidad y Estado**: tabla con columnas
+  fijas (400px+) dentro de `overflow-hidden` → clipaba sin scroll. Ahora
+  `overflow-x-auto` + Modalidad oculta bajo md (patrón de la bandeja). Igual
+  el buscador de precios (columna Precio clipada).
+- **Los 8 tabs de Configuración se desbordaban** sin scroll → carrusel
+  horizontal (`overflow-x-auto`, también en precios por defensa).
+
+**Lo demás del drawer:** Escape cierra; scroll del body bloqueado mientras
+está abierto; el acordeón «Estados» ahora responde (el onToggle era un no-op);
+targets táctiles a ~44px (prop `tactil` en ItemNav/CuerpoNav — desktop
+conserva su densidad); animación `slide-in-left` nueva (entraba desde el lado
+contrario); `role="dialog"`; ancho 280px con `max-w-[85vw]`; hamburguesa y X
+a 40px. Avisos (toasts) suben a z-60 (empataban con el drawer).
+
+**Cortes menores:** alta de entidad (input w-64 fijo desbordaba → flex-wrap +
+max-w-full); moneda/monto del alta de orden (grid-cols-3 → 2/sm:3); cierre
+del proceso (datetime w-48 → w-full sm:w-48); filtros de bitácora con wrap;
+botón primario de la Bid Room estirado en móvil (max-sm:flex-1); input del
+buscador global a 16px en móvil (evita el auto-zoom de iOS).
+
+**Sin tocar:** cotizador en móvil queda con scroll horizontal (usable; una
+vista de tarjetas por línea sería v2), LineaTiempo hace wrap (funciona).
+
+**Verificado:** tsc, eslint, 94/94 vitest. Pendiente Pablo: probar en su
+teléfono (menú → cambiar empresa/cerrar sesión, lista de licitaciones,
+Configuración, generar desde la Bid Room).
+
+---
+
 ## 2026-07-22 (4) — Sistema de feedback: cada clic responde algo
 
 Pablo: «le di clic a algo y está cargando, no sé qué» — y pasaba en cualquier

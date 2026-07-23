@@ -52,7 +52,7 @@ export default function LineaTiempo({
           <span key={e} className="flex items-center">
             {i > 0 && (
               <span
-                className={`h-px w-4 sm:w-6 ${i <= posicion ? "bg-primary" : "bg-line"}`}
+                className={`hidden h-px sm:block sm:w-6 ${i <= posicion ? "bg-primary" : "bg-line"}`}
                 aria-hidden
               />
             )}
