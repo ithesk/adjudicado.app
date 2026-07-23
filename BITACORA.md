@@ -8,6 +8,57 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (8) — TRASPASO DE MÁQUINA: estado exacto y pendientes
+
+Pablo se mueve de PC. Para retomar en una sesión nueva SIN re-explicar:
+**leer esta entrada + las 7 anteriores de hoy** (cubren todo el contexto).
+
+**Estado del código**: rama `licitaciones-fase-3`; main tiene TODO hasta
+e25aa14 (PRs #14-#20 mergeados y desplegados en producción, deploy verde).
+Un solo commit fuera de main: e7266c9 (middleware dejaba fuera al cron) →
+**PR #21 abierto, esperando merge de Pablo** (a Claude se lo bloquea el
+clasificador; Pablo: `gh pr merge 21 --merge`).
+
+**Pendientes INMEDIATOS (en orden)**:
+1. Mergear PR #21.
+2. En Vercel (adjudicado-app → Settings → Env Vars, Production):
+   agregar `CRON_SECRET` y `CREDENCIALES_SECRET` — los valores están SOLO
+   en el `.env.local` de la Mac vieja (últimas líneas). ⚠️ Sin
+   CREDENCIALES_SECRET producción no descifra la conexión de Odoo.
+3. Tras el deploy: probar el cron
+   `curl -H "Authorization: Bearer <CRON_SECRET>"
+   https://adjudicado-app.vercel.app/api/cron/odoo-facturas`
+   — debe responder `{ok, organizaciones:1, revisadas:N…}`.
+4. En producción: Configuración → Integraciones — verificar tarjeta verde
+   de Odoo (la conexión se hizo desde local; misma BD, debería estar).
+5. Pablo: cerrar sesión y volver a entrar en producción (pegó su cookie de
+   sesión completa en el chat el 23/7) y probar «Crear en Odoo» +
+   «Elegir factura de Odoo…» en una orden real.
+
+**⚠️ El `.env.local` NO viaja por git** — copiarlo a la PC nueva (o bajar
+las llaves de Vercel). Contiene: llaves de Supabase (anon + service role),
+OPENAI (OCR), GOTENBERG_URL/TOKEN, CRON_SECRET, CREDENCIALES_SECRET,
+SUPABASE_ACCESS_TOKEN (token personal de Supabase para migraciones vía
+Management API — Pablo pidió guardarlo ahí), allowedDevOrigins en
+next.config.ts tiene la IP de la Mac vieja (192.168.2.94) — actualizarla
+si se prueba el dev desde el teléfono en otra red/máquina.
+
+**Cómo se trabaja aquí (resumen para sesión nueva)**: reglas en
+docs/sistema-ui.md (§carga incluida) y AGENTS.md; migraciones SQL en
+archivos `supabase_*.sql` re-ejecutables (se corren con el token vía
+Management API o SQL Editor); mutaciones devuelven string|null; useAccion
+para todo el feedback; checkpoint de cada tramo AQUÍ (entradas al tope) —
+instrucción permanente de Pablo. Verificar siempre: tsc + eslint + vitest
+(97 tests hoy). Odoo del cliente: ventas.innovaciontecnologica.com.do,
+base itheskdev, Odoo 17 (credenciales cifradas en integracion_odoo).
+
+**Backlog vivo** (no urgente): Gotenberg a HTTPS; sección Configuración →
+Empresa para las tablas declarativas del F.040; margen markup vs real;
+planes SaaS (rama claude/missing-saas-code-1gdj9u); deuda eslint
+set-state-in-effect (5 archivos, anotada); cotizador móvil ya en tarjetas.
+
+---
+
 ## 2026-07-23 (7) — Cotizador lento con 18 líneas: optimista + fin de la tormenta de prefetch
 
 Pablo con una licitación real de 18 ítems: cambiar una cantidad tardaba una
