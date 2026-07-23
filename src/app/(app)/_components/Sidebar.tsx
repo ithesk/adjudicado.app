@@ -10,6 +10,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import {
   Activity,
@@ -451,7 +452,13 @@ export function MenuMovil({ datos }: { datos: DatosSidebar }) {
       >
         <Menu className="h-5 w-5" strokeWidth={2} aria-hidden />
       </button>
-      {abierto && (
+      {/* PORTAL al body: el botón vive dentro de la top bar sticky con
+          backdrop-blur, y un backdrop-filter convierte a ese header en el
+          contenedor de cualquier `fixed` descendiente — el drawer quedaba
+          posicionado contra la barra (fuera de pantalla) en vez del viewport.
+          `abierto` solo es true tras un clic, así que document.body existe. */}
+      {abierto &&
+        createPortal(
         <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
@@ -499,7 +506,8 @@ export function MenuMovil({ datos }: { datos: DatosSidebar }) {
               <PieUsuario datos={datos} rail={false} />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
