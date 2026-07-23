@@ -346,7 +346,7 @@ export default function BuscadorPrecios({
       {/* Resultados (atenuados mientras llega la búsqueda nueva) */}
       {resultados.length > 0 && (
         <div
-          className={`overflow-hidden rounded-lg border border-line bg-surface shadow-card transition-opacity ${
+          className={`overflow-x-auto rounded-lg border border-line bg-surface shadow-card transition-opacity ${
             cargando ? "opacity-60" : ""
           }`}
           aria-busy={cargando}

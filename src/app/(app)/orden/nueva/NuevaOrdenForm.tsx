@@ -257,7 +257,8 @@ export default function NuevaOrdenForm() {
           value={datos.fecha_oc}
           onChange={(v) => setDatos({ ...datos, fecha_oc: v })}
         />
-        <div className="grid grid-cols-3 gap-2">
+        {/* En móvil la moneda va sola arriba y el monto a lo ancho. */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <label className="col-span-1 block">
             <span className="mb-1 block text-sm font-medium text-ink">
               Moneda

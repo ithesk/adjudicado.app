@@ -670,7 +670,7 @@ export default function BitacoraPanel({
             className="w-full rounded-md border border-line bg-surface py-1.5 pl-8 pr-2 text-[12px] text-ink outline-none placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-[var(--ring)]"
           />
         </label>
-        <div className="flex items-center gap-0.5">
+        <div className="flex flex-wrap items-center gap-0.5">
           {(["todo", "llamada", "correo", "nota", "evento"] as const).map((f) => (
             <button
               key={f}

@@ -60,7 +60,7 @@ export default function DatosProceso({
           </select>
         </label>
 
-        <label className="w-48 text-[12.5px] text-muted">
+        <label className="w-full text-[12.5px] text-muted sm:w-48">
           Cierre (fecha y hora)
           <input
             type="datetime-local"

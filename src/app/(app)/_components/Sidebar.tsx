@@ -67,6 +67,7 @@ function ItemNav({
   label,
   Icono,
   rail,
+  tactil = false,
   extra,
   onNavegar,
 }: {
@@ -75,6 +76,9 @@ function ItemNav({
   label: string;
   Icono: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   rail: boolean;
+  // En el drawer móvil las filas crecen a ~44px (objetivo táctil); el
+  // sidebar desktop conserva su densidad.
+  tactil?: boolean;
   extra?: React.ReactNode;
   onNavegar?: () => void;
 }) {
@@ -85,9 +89,9 @@ function ItemNav({
       href={href}
       title={rail ? label : undefined}
       onClick={onNavegar}
-      className={`flex items-center gap-2.5 rounded-[11px] px-2.5 py-1.5 text-[13px] transition-colors ${
-        rail ? "justify-center px-0 py-2" : ""
-      } ${
+      className={`flex items-center gap-2.5 rounded-[11px] px-2.5 text-[13px] transition-colors ${
+        tactil ? "py-2.5" : "py-1.5"
+      } ${rail ? "justify-center px-0 py-2" : ""} ${
         activo
           ? "bg-primary/10 font-semibold text-primary"
           : "text-ink-soft hover:bg-surface-2"
@@ -104,12 +108,14 @@ function ItemNav({
 function CuerpoNav({
   datos,
   rail,
+  tactil = false,
   estadosAbierto,
   onToggleEstados,
   onNavegar,
 }: {
   datos: DatosSidebar;
   rail: boolean;
+  tactil?: boolean;
   estadosAbierto: boolean;
   onToggleEstados: () => void;
   onNavegar?: () => void;
@@ -121,17 +127,19 @@ function CuerpoNav({
         <ItemNav
           {...DESTINOS[0]}
           rail={rail}
+          tactil={tactil}
           onNavegar={onNavegar}
           extra={
             <span className="ml-auto font-mono text-[11px] text-muted">{datos.vivas}</span>
           }
         />
         {DESTINOS.slice(1, 6).map((d) => (
-          <ItemNav key={d.href} {...d} rail={rail} onNavegar={onNavegar} />
+          <ItemNav key={d.href} {...d} rail={rail} tactil={tactil} onNavegar={onNavegar} />
         ))}
         <ItemNav
           {...DESTINOS[6]}
           rail={rail}
+          tactil={tactil}
           onNavegar={onNavegar}
           extra={
             datos.alertaDocs.total > 0 ? (
@@ -157,7 +165,7 @@ function CuerpoNav({
             type="button"
             onClick={onToggleEstados}
             aria-expanded={estadosAbierto}
-            className="mt-[18px] mb-1 flex w-full items-center gap-1.5 rounded-md px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+            className={`mt-[18px] mb-1 flex w-full items-center gap-1.5 rounded-md px-2.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted transition-colors hover:bg-surface-2 hover:text-ink ${tactil ? "py-2" : "py-1"}`}
           >
             <ChevronDown
               className={`h-3 w-3 transition-transform ${estadosAbierto ? "" : "-rotate-90"}`}
@@ -178,7 +186,7 @@ function CuerpoNav({
                   key={e.key}
                   href={`/?estado=${e.key}`}
                   onClick={onNavegar}
-                  className="flex items-center gap-2.5 rounded-[11px] px-2.5 py-1.5 text-[12.5px] text-ink-soft transition-colors hover:bg-surface-2"
+                  className={`flex items-center gap-2.5 rounded-[11px] px-2.5 text-[12.5px] text-ink-soft transition-colors hover:bg-surface-2 ${tactil ? "py-2.5" : "py-1.5"}`}
                 >
                   <span className={`h-2 w-2 flex-none rounded-full ${e.dot}`} />
                   <span className="truncate">{e.label}</span>
@@ -189,6 +197,41 @@ function CuerpoNav({
           )}
         </>
       )}
+    </>
+  );
+}
+
+// La lista "Tus empresas" + crear otra — compartida entre el dropdown del
+// sidebar desktop y el drawer móvil (antes el cambio de org NO existía en
+// móvil: el usuario multi-empresa quedaba atrapado en la org activa).
+function OpcionesOrg({ datos, tactil = false }: { datos: DatosSidebar; tactil?: boolean }) {
+  const alto = tactil ? "py-2.5" : "py-1.5";
+  return (
+    <>
+      <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
+        Tus empresas
+      </p>
+      {datos.membresias.map((m) => (
+        <form key={m.org_id} action={cambiarOrg.bind(null, m.org_id)}>
+          <button
+            type="submit"
+            className={`flex w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-ink transition-colors hover:bg-surface-2 ${alto}`}
+          >
+            <span className="truncate">{m.nombre}</span>
+            {m.org_id === datos.orgActiva && (
+              <Check className="ml-auto h-3.5 w-3.5 text-primary" strokeWidth={2.5} aria-hidden />
+            )}
+          </button>
+        </form>
+      ))}
+      <div className="my-1 border-t border-line" />
+      <Link
+        href="/onboarding"
+        className={`flex items-center gap-2 rounded-md px-2 text-[13px] text-muted transition-colors hover:bg-surface-2 hover:text-ink ${alto}`}
+      >
+        <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        Crear otra empresa
+      </Link>
     </>
   );
 }
@@ -311,30 +354,7 @@ export default function Sidebar({ datos }: { datos: DatosSidebar }) {
               <ChevronsUpDown className="ml-auto h-3.5 w-3.5 flex-none text-muted" strokeWidth={2} aria-hidden />
             </summary>
             <div className="absolute left-0 right-0 z-30 mt-1 rounded-lg border border-line bg-surface p-1 shadow-raised">
-              <p className="px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted">
-                Tus empresas
-              </p>
-              {datos.membresias.map((m) => (
-                <form key={m.org_id} action={cambiarOrg.bind(null, m.org_id)}>
-                  <button
-                    type="submit"
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink transition-colors hover:bg-surface-2"
-                  >
-                    <span className="truncate">{m.nombre}</span>
-                    {m.org_id === datos.orgActiva && (
-                      <Check className="ml-auto h-3.5 w-3.5 text-primary" strokeWidth={2.5} aria-hidden />
-                    )}
-                  </button>
-                </form>
-              ))}
-              <div className="my-1 border-t border-line" />
-              <Link
-                href="/onboarding"
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-              >
-                <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-                Crear otra empresa
-              </Link>
+              <OpcionesOrg datos={datos} />
             </div>
           </details>
           <button
@@ -401,51 +421,82 @@ export default function Sidebar({ datos }: { datos: DatosSidebar }) {
 // ===== Menú móvil (drawer): antes la navegación no existía en móvil. =====
 export function MenuMovil({ datos }: { datos: DatosSidebar }) {
   const [abierto, setAbierto] = useState(false);
+  // Estados plegable DE VERDAD también en el drawer (antes el chevrón era
+  // un control muerto: onToggle era un no-op).
+  const [estadosAbierto, setEstadosAbierto] = useState(true);
   const cerrar = () => setAbierto(false);
+
+  // Con el drawer abierto: Escape cierra y el fondo NO scrollea.
+  useEffect(() => {
+    if (!abierto) return;
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAbierto(false);
+    };
+    document.addEventListener("keydown", alTeclear);
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", alTeclear);
+      document.body.style.overflow = previo;
+    };
+  }, [abierto]);
 
   return (
     <>
       <button
         type="button"
         onClick={() => setAbierto(true)}
-        className="grid h-9 w-9 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+        className="grid h-10 w-10 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-ink"
         aria-label="Abrir el menú"
       >
         <Menu className="h-5 w-5" strokeWidth={2} aria-hidden />
       </button>
       {abierto && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
             aria-label="Cerrar el menú"
             onClick={cerrar}
             className="absolute inset-0 bg-black/30"
           />
-          <div className="absolute inset-y-0 left-0 flex w-[260px] flex-col overflow-y-auto border-r border-line bg-canvas p-3 shadow-raised animate-slide-in-right">
+          <div className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col overflow-y-auto border-r border-line bg-canvas p-3 shadow-raised animate-slide-in-left">
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
-                <LogoMarca size={22} className="text-ink" />
-                {datos.orgNombre.split(",")[0]}
-              </span>
+              {/* La empresa activa ES el selector (igual que en desktop):
+                  tocar el nombre despliega "Tus empresas" en línea. */}
+              <details className="group min-w-0 flex-1">
+                <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-1 py-1.5 text-[13.5px] font-semibold text-ink transition-colors hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
+                  <LogoMarca size={22} className="flex-none text-ink" />
+                  <span className="min-w-0 truncate">{datos.orgNombre.split(",")[0]}</span>
+                  <ChevronsUpDown className="h-3.5 w-3.5 flex-none text-muted" strokeWidth={2} aria-hidden />
+                </summary>
+                <div className="mt-1 rounded-lg border border-line bg-surface p-1">
+                  <OpcionesOrg datos={datos} tactil />
+                </div>
+              </details>
               <button
                 type="button"
                 onClick={cerrar}
-                className="rounded-md p-1.5 text-muted transition-colors hover:bg-surface-2"
+                className="grid h-10 w-10 flex-none place-items-center rounded-md text-muted transition-colors hover:bg-surface-2"
                 aria-label="Cerrar"
               >
-                <X className="h-4 w-4" strokeWidth={2} aria-hidden />
+                <X className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
               </button>
             </div>
             <CuerpoNav
               datos={datos}
               rail={false}
-              estadosAbierto
-              onToggleEstados={() => {}}
+              tactil
+              estadosAbierto={estadosAbierto}
+              onToggleEstados={() => setEstadosAbierto((v) => !v)}
               onNavegar={cerrar}
             />
             <div className="mt-auto flex flex-col gap-px border-t border-line pt-2">
-              <ItemNav href="/configuracion/equipo" label="Equipo" Icono={Users} rail={false} onNavegar={cerrar} />
-              <ItemNav href="/configuracion" exact label="Configuración" Icono={Settings} rail={false} onNavegar={cerrar} />
+              <ItemNav href="/configuracion/equipo" label="Equipo" Icono={Users} rail={false} tactil onNavegar={cerrar} />
+              <ItemNav href="/configuracion" exact label="Configuración" Icono={Settings} rail={false} tactil onNavegar={cerrar} />
+            </div>
+            {/* Cuenta y CERRAR SESIÓN — antes no existían en móvil. */}
+            <div className="mt-1.5">
+              <PieUsuario datos={datos} rail={false} />
             </div>
           </div>
         </div>

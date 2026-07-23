@@ -17,14 +17,16 @@ const TABS = [
 export default function ConfigTabs() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 border-b border-line">
+    // 8 tabs no caben en un móvil: carrusel horizontal (en desktop no cambia
+    // nada — caben todos y no hay scroll).
+    <nav className="flex gap-1 overflow-x-auto border-b border-line">
       {TABS.map((t) => {
         const active = t.exact ? pathname === t.href : pathname.startsWith(t.href);
         return (
           <Link
             key={t.href}
             href={t.href}
-            className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-medium transition-colors ${
+            className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-medium transition-colors ${
               active
                 ? "border-primary text-ink"
                 : "border-transparent text-muted hover:text-ink"
