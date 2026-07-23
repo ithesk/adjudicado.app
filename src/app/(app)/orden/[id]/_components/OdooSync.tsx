@@ -1,8 +1,14 @@
 "use client";
 
 import { useTransition } from "react";
-import { RefreshCw, CheckCircle2, AlertCircle, Clock, Ban } from "lucide-react";
-import { sincronizarFacturaOdoo } from "@/lib/actions/odoo";
+import { RefreshCw, CheckCircle2, AlertCircle, Clock, Ban, Link2, Loader2, X } from "lucide-react";
+import {
+  listarFacturasOdoo,
+  sincronizarFacturaOdoo,
+  vincularFacturaOdoo,
+} from "@/lib/actions/odoo";
+import type { FacturaResumen } from "@/lib/odoo";
+import { formatRD } from "@/lib/types";
 import { useState } from "react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -90,26 +96,54 @@ export default function OdooSync({
   const [pending, startTransition] = useTransition();
   const [estado, setEstado] = useState<string | null>(estadoInicial);
   const [nombre, setNombre] = useState<string | null>(nombreInicial);
-  const [_facturaId] = useState<number | null>(idInicial);
+  const [facturaId, setFacturaId] = useState<number | null>(idInicial);
   const [mensaje, setMensaje] = useState<string | null>(null);
+  // El selector de facturas recientes (cuando la OC no aparece en Odoo).
+  const [candidatas, setCandidatas] = useState<FacturaResumen[] | null>(null);
+  const [cargandoLista, setCargandoLista] = useState(false);
+
+  function aplicar(res: Awaited<ReturnType<typeof sincronizarFacturaOdoo>>) {
+    if (!res) return; // modo demo
+    if (!res.ok) {
+      setMensaje(res.error ?? "Error al sincronizar.");
+      return;
+    }
+    if (!res.factura) {
+      setMensaje("Sin factura para esta OC en Odoo — vincúlala de la lista.");
+      return;
+    }
+    setEstado(res.factura.estado);
+    setNombre(res.factura.name);
+    setFacturaId(res.factura.id);
+    setMensaje(null);
+  }
 
   function sincronizar() {
     setMensaje(null);
+    startTransition(async () => aplicar(await sincronizarFacturaOdoo(ordenId)));
+  }
+
+  function abrirLista() {
+    setMensaje(null);
+    setCargandoLista(true);
     startTransition(async () => {
-      const res = await sincronizarFacturaOdoo(ordenId);
-      if (!res) return; // modo demo
-      if (!res.ok) {
-        setMensaje(res.error ?? "Error al sincronizar.");
+      const r = await listarFacturasOdoo();
+      setCargandoLista(false);
+      if (!r.ok) {
+        setMensaje(r.error);
         return;
       }
-      if (!res.factura) {
-        setMensaje("No se encontró factura para esta OC.");
+      if (r.facturas.length === 0) {
+        setMensaje("No hay facturas de cliente en tu Odoo todavía.");
         return;
       }
-      setEstado(res.factura.estado);
-      setNombre(res.factura.name);
-      setMensaje(null);
+      setCandidatas(r.facturas);
     });
+  }
+
+  function vincular(id: number) {
+    setCandidatas(null);
+    startTransition(async () => aplicar(await vincularFacturaOdoo(ordenId, id)));
   }
 
   return (
@@ -123,33 +157,81 @@ export default function OdooSync({
             {chipIcono(estado)}
             {etiquetaEstado(estado)}
           </span>
-          {nombre && (
-            <p className="text-[11px] text-muted">{nombre}</p>
-          )}
+          {nombre && <p className="text-[11px] text-muted">{nombre}</p>}
         </div>
       ) : (
-        <p className="text-[12px] text-muted">Sin factura sincronizada.</p>
+        <p className="text-[12px] text-muted">Sin factura vinculada.</p>
       )}
 
       {/* Mensaje de resultado */}
-      {mensaje && (
-        <p className="text-[12px] text-muted">{mensaje}</p>
+      {mensaje && <p className="text-[12px] text-muted">{mensaje}</p>}
+
+      {/* El selector de facturas recientes */}
+      {candidatas && (
+        <div className="overflow-hidden rounded-md border border-line">
+          <p className="flex items-center justify-between border-b border-line bg-surface-2 px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+            Elige la factura de esta orden
+            <button type="button" onClick={() => setCandidatas(null)} aria-label="Cerrar">
+              <X className="h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+          </p>
+          <ul className="max-h-56 divide-y divide-line overflow-y-auto">
+            {candidatas.map((f) => (
+              <li key={f.id}>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => vincular(f.id)}
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left transition-colors hover:bg-surface-2"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] font-medium text-ink">
+                      {f.name} · {formatRD(f.montoTotal)}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted">
+                      {f.cliente}
+                      {f.fecha ? ` · ${f.fecha.slice(8, 10)}/${f.fecha.slice(5, 7)}/${f.fecha.slice(0, 4)}` : ""}
+                      {" · "}
+                      {etiquetaEstado(f.estado)}
+                    </span>
+                  </span>
+                  <Link2 className="h-3.5 w-3.5 flex-none text-muted" strokeWidth={2} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
-      {/* Botón de sincronización */}
-      <button
-        type="button"
-        onClick={sincronizar}
-        disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink disabled:opacity-55"
-      >
-        <RefreshCw
-          className={`h-3.5 w-3.5 ${pending ? "animate-spin" : ""}`}
-          strokeWidth={2}
-          aria-hidden
-        />
-        {pending ? "Buscando..." : "Sincronizar con Odoo"}
-      </button>
+      {/* Acciones */}
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={sincronizar}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink disabled:opacity-55"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${pending && !cargandoLista ? "animate-spin" : ""}`}
+            strokeWidth={2}
+            aria-hidden
+          />
+          {facturaId ? "Actualizar estado" : "Buscar por número de OC"}
+        </button>
+        <button
+          type="button"
+          onClick={abrirLista}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-1.5 text-[12px] font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink disabled:opacity-55"
+        >
+          {cargandoLista ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
+          ) : (
+            <Link2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          )}
+          {facturaId ? "Cambiar factura…" : "Elegir factura de Odoo…"}
+        </button>
+      </div>
     </div>
   );
 }

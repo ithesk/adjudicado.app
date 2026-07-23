@@ -8,6 +8,27 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (5) — Odoo: VINCULAR factura (las facturas reales no llevan la OC)
+
+Pablo conectó su Odoo real (ventas.innovaciontecnologica.com.do, Odoo 17;
+el error de credenciales era la API key — entra con Google/2FA; la tabla la
+creé yo vía Management API con su token, guardado en .env.local a pedido
+suyo). Al probar con la orden OGTIC-2026-00057: la búsqueda por OC no
+encuentra NADA porque sus facturas en Odoo no llevan el número de OC
+(invoice_origin trae el nº de cotización tipo CS089…, o va vacío).
+
+Solución: **vincular una vez, seguir por id**:
+- `listarFacturasRecientes()` + `leerFacturasPorId()` en lib/odoo.ts.
+- Actions `listarFacturasOdoo()` y `vincularFacturaOdoo(ordenId, facturaId)`
+  (guarda id+estado+nombre, evento en bitácora); `sincronizarFacturaOdoo`
+  refresca por id si hay vínculo, si no intenta por OC como antes.
+- OdooSync UI: «Elegir factura de Odoo…» → lista de las 15 recientes
+  (INV/… · monto · cliente · fecha · estado) → clic vincula; vinculada
+  muestra chip + nombre + «Actualizar estado» + «Cambiar factura…».
+- Cron: las vinculadas se refrescan POR ID en una sola llamada; las sueltas
+  siguen intentando por OC. Columna nueva `orden.odoo_factura_nombre`
+  (migración corrida en prod y anexada a supabase_integraciones.sql).
+
 ## 2026-07-23 (4) — Odoo por EMPRESA: botón «Conectar con Odoo»
 
 **Iteración friendly (mismo día)**: Pablo quería flujo tipo OAuth (redirigir

@@ -29,3 +29,6 @@ alter table integracion_odoo enable row level security;
 drop policy if exists integracion_odoo_all on integracion_odoo;
 create policy integracion_odoo_all on integracion_odoo for all
   using (es_miembro(org_id)) with check (es_miembro(org_id));
+
+-- La factura VINCULADA muestra su nombre ("INV/2026/0035") sin ir a Odoo.
+alter table orden add column if not exists odoo_factura_nombre text;

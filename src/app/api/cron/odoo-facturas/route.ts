@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { descifrar } from "@/lib/cifrado";
-import { buscarFacturasLote, configDesdeEnv, type OdooConfig } from "@/lib/odoo";
+import { buscarFacturasLote, leerFacturasPorId, configDesdeEnv, type OdooConfig } from "@/lib/odoo";
 import type { Estado } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -35,6 +35,7 @@ type OrdenViva = {
   id: string;
   numero_oc: string | null;
   estado: Estado;
+  odoo_factura_id: number | null;
   odoo_factura_estado: string | null;
 };
 
@@ -93,7 +94,7 @@ export async function GET(req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let filtro: any = supabase
       .from("orden")
-      .select("id, numero_oc, estado, odoo_factura_estado")
+      .select("id, numero_oc, estado, odoo_factura_id, odoo_factura_estado")
       .not("numero_oc", "is", null)
       .in("estado", ESTADOS_FACTURABLES);
     if (tanda.orgId) {
@@ -114,18 +115,25 @@ export async function GET(req: Request) {
     if (vivas.length === 0) continue;
     revisadas += vivas.length;
 
-    const facturas = await buscarFacturasLote(tanda.config, vivas.map((o) => o.numero_oc as string));
-    conFactura += facturas.size;
+    // Las VINCULADAS se leen por id (una sola llamada, match exacto); el
+    // resto intenta por número de OC (solo funciona si la factura lo lleva).
+    const vinculadas = vivas.filter((o) => o.odoo_factura_id);
+    const sueltas = vivas.filter((o) => !o.odoo_factura_id);
+    const porId = await leerFacturasPorId(tanda.config, vinculadas.map((o) => o.odoo_factura_id as number));
+    const porOc = await buscarFacturasLote(tanda.config, sueltas.map((o) => o.numero_oc as string));
+    conFactura += porId.size + porOc.size;
 
     for (const orden of vivas) {
-      const factura = facturas.get(orden.numero_oc as string);
+      const factura = orden.odoo_factura_id
+        ? porId.get(orden.odoo_factura_id)
+        : porOc.get(orden.numero_oc as string);
       if (!factura) continue;
 
       // 1) El estado de la factura cambió → guardar + bitácora.
       if (factura.estado !== orden.odoo_factura_estado) {
         const { error: errUpd } = await supabase
           .from("orden")
-          .update({ odoo_factura_id: factura.id, odoo_factura_estado: factura.estado })
+          .update({ odoo_factura_id: factura.id, odoo_factura_estado: factura.estado, odoo_factura_nombre: factura.name })
           .eq("id", orden.id);
         if (errUpd) {
           console.error(`cron odoo: no se pudo guardar la orden ${orden.id}:`, errUpd.message);

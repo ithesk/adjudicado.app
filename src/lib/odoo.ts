@@ -239,6 +239,70 @@ export async function buscarFactura(
   }
 }
 
+// Una factura como aparece en el selector de vincular (con su cliente).
+export interface FacturaResumen extends FacturaOdoo {
+  cliente: string;
+  fecha: string | null;
+}
+
+/**
+ * Las facturas recientes del Odoo — para VINCULAR a mano cuando la búsqueda
+ * por OC no encuentra (caso típico: las facturas no llevan el número de OC).
+ */
+export async function listarFacturasRecientes(
+  config: OdooConfig,
+  limite = 15,
+): Promise<FacturaResumen[]> {
+  try {
+    const uid = await autenticar(config);
+    const registros = (await rpc(config, "object", "execute_kw", [
+      config.db,
+      uid,
+      config.apiKey,
+      "account.move",
+      "search_read",
+      [[["move_type", "=", "out_invoice"]]],
+      { fields: [...CAMPOS_FACTURA, "partner_id", "invoice_date"], limit: limite, order: "id desc" },
+    ])) as Array<RegistroFactura & { partner_id: [number, string] | false; invoice_date: string | false }>;
+    return (registros ?? []).map((r) => ({
+      ...aFactura(r),
+      cliente: Array.isArray(r.partner_id) ? r.partner_id[1] : "",
+      fecha: r.invoice_date || null,
+    }));
+  } catch (err) {
+    console.error("listarFacturasRecientes error:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+/**
+ * Lee facturas CONCRETAS por id (las ya vinculadas): una sola llamada para
+ * todas — es como el cron refresca el estado de pago.
+ */
+export async function leerFacturasPorId(
+  config: OdooConfig,
+  ids: number[],
+): Promise<Map<number, FacturaOdoo>> {
+  const resultado = new Map<number, FacturaOdoo>();
+  if (ids.length === 0) return resultado;
+  try {
+    const uid = await autenticar(config);
+    const registros = (await rpc(config, "object", "execute_kw", [
+      config.db,
+      uid,
+      config.apiKey,
+      "account.move",
+      "search_read",
+      [[["id", "in", ids]]],
+      { fields: CAMPOS_FACTURA },
+    ])) as RegistroFactura[];
+    for (const r of registros ?? []) resultado.set(r.id, aFactura(r));
+  } catch (err) {
+    console.error("leerFacturasPorId error:", err instanceof Error ? err.message : err);
+  }
+  return resultado;
+}
+
 /**
  * Versión por LOTE para el cron: autentica UNA vez y busca la factura de
  * cada OC en serie (gentil con el Odoo del VPS). Devuelve solo las

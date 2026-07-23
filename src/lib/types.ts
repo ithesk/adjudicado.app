@@ -59,6 +59,7 @@ export interface Orden {
   buzon?: string | null; // código del buzón de correo entrante (oc-<buzon>@dominio)
   odoo_factura_id?: number | null; // factura vinculada en Odoo
   odoo_factura_estado?: string | null; // payment_state de la factura en Odoo
+  odoo_factura_nombre?: string | null; // "INV/2026/0035" — para mostrar sin ir a Odoo
   etiquetas: string[];
   oc_archivo_url: string | null;
   ocr_raw: unknown;

@@ -10,8 +10,11 @@ import {
   probarConexion,
   buscarFactura,
   descubrirServidor,
+  listarFacturasRecientes,
+  leerFacturasPorId,
   type ResultadoConexion,
   type FacturaOdoo,
+  type FacturaResumen,
   type ServidorOdoo,
 } from "@/lib/odoo";
 
@@ -124,9 +127,9 @@ export interface ResultadoSincronizacion {
 }
 
 /**
- * Busca en Odoo (el de ESTA organización) la factura asociada al número de
- * OC de la orden y, si la encuentra, guarda odoo_factura_id y estado.
- * Devuelve null en modo demo.
+ * Sincroniza la factura de la orden con Odoo (el de ESTA organización):
+ * si ya hay una factura VINCULADA (odoo_factura_id) refresca su estado por
+ * id; si no, intenta encontrarla por número de OC. Devuelve null en demo.
  */
 export async function sincronizarFacturaOdoo(
   ordenId: string,
@@ -143,7 +146,7 @@ export async function sincronizarFacturaOdoo(
 
   const { data: orden, error: errOrden } = await supabase
     .from("orden")
-    .select("numero_oc")
+    .select("numero_oc, odoo_factura_id")
     .eq("id", ordenId)
     .eq("org_id", miembro.org_id)
     .single();
@@ -152,14 +155,17 @@ export async function sincronizarFacturaOdoo(
     return { ok: false, error: "No se encontró la orden." };
   }
 
-  const numeroOc: string = (orden as { numero_oc: string }).numero_oc;
-  if (!numeroOc) {
-    return { ok: false, error: "La orden no tiene número de OC." };
-  }
-
-  const factura = await buscarFactura(config, numeroOc);
-  if (!factura) {
-    return { ok: true }; // ok=true pero sin factura → "no encontrada"
+  let factura: FacturaOdoo | null = null;
+  if (orden.odoo_factura_id) {
+    factura = (await leerFacturasPorId(config, [orden.odoo_factura_id])).get(orden.odoo_factura_id) ?? null;
+    if (!factura) {
+      return { ok: false, error: "La factura vinculada ya no existe en Odoo — vincula otra." };
+    }
+  } else {
+    const numeroOc: string = (orden as { numero_oc: string }).numero_oc;
+    if (!numeroOc) return { ok: false, error: "La orden no tiene número de OC." };
+    factura = await buscarFactura(config, numeroOc);
+    if (!factura) return { ok: true }; // ok=true pero sin factura → "no encontrada"
   }
 
   const { error: errUpdate } = await supabase
@@ -167,6 +173,7 @@ export async function sincronizarFacturaOdoo(
     .update({
       odoo_factura_id: factura.id,
       odoo_factura_estado: factura.estado,
+      odoo_factura_nombre: factura.name,
     })
     .eq("id", ordenId)
     .eq("org_id", miembro.org_id);
@@ -175,6 +182,58 @@ export async function sincronizarFacturaOdoo(
     console.error("sincronizarFacturaOdoo: error al guardar:", errUpdate.message);
     return { ok: false, error: "Error al guardar la factura en la BD." };
   }
+
+  revalidatePath(`/orden/${ordenId}`);
+  return { ok: true, factura };
+}
+
+// ── Vincular a mano (cuando las facturas no llevan el número de OC) ──────────
+
+/** Las facturas recientes del Odoo de la org, para elegir cuál es la de la orden. */
+export async function listarFacturasOdoo(): Promise<
+  { ok: true; facturas: FacturaResumen[] } | { ok: false; error: string }
+> {
+  const miembro = await getMiembro();
+  if (!miembro) return { ok: false, error: "No autorizado." };
+  const supabase = await createClient();
+  const config = await obtenerConfigOdoo(supabase, miembro.org_id);
+  if (!config) return { ok: false, error: "Odoo no está conectado." };
+  const facturas = await listarFacturasRecientes(config, 15);
+  return { ok: true, facturas };
+}
+
+/** Vincula ESA factura de Odoo a la orden; el cron le sigue el pago solo. */
+export async function vincularFacturaOdoo(
+  ordenId: string,
+  facturaId: number,
+): Promise<ResultadoSincronizacion | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  if (!miembro) return { ok: false, error: "No autorizado." };
+  const supabase = await createClient();
+  const config = await obtenerConfigOdoo(supabase, miembro.org_id);
+  if (!config) return { ok: false, error: "Odoo no está conectado." };
+
+  const factura = (await leerFacturasPorId(config, [facturaId])).get(facturaId) ?? null;
+  if (!factura) return { ok: false, error: "Esa factura no existe en Odoo." };
+
+  const { error } = await supabase
+    .from("orden")
+    .update({
+      odoo_factura_id: factura.id,
+      odoo_factura_estado: factura.estado,
+      odoo_factura_nombre: factura.name,
+    })
+    .eq("id", ordenId)
+    .eq("org_id", miembro.org_id);
+  if (error) return { ok: false, error: `No se pudo guardar: ${error.message}` };
+
+  await supabase.from("bitacora").insert({
+    orden_id: ordenId,
+    autor_id: miembro.user_id,
+    tipo: "evento",
+    texto: `Factura de Odoo vinculada: ${factura.name} (${factura.montoTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })})`,
+  });
 
   revalidatePath(`/orden/${ordenId}`);
   return { ok: true, factura };
