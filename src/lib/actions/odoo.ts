@@ -9,12 +9,15 @@ import { obtenerConfigOdoo } from "@/lib/odoo-config";
 import {
   probarConexion,
   buscarFactura,
+  crearFlujoVenta,
   descubrirServidor,
   listarFacturasRecientes,
   leerFacturasPorId,
   type ResultadoConexion,
   type FacturaOdoo,
   type FacturaResumen,
+  type FlujoVentaCreado,
+  type LineaVenta,
   type ServidorOdoo,
 } from "@/lib/odoo";
 
@@ -185,6 +188,95 @@ export async function sincronizarFacturaOdoo(
 
   revalidatePath(`/orden/${ordenId}`);
   return { ok: true, factura };
+}
+
+// ── Crear el flujo de venta en Odoo desde la orden ───────────────────────────
+
+/**
+ * El botón «Crear en Odoo»: cliente + productos (se crean si faltan; los
+ * físicos con serie) + orden de venta CONFIRMADA → Odoo genera el conduce.
+ * Un clic reemplaza todo el tecleo manual; las series se ponen en Odoo al
+ * validar el conduce, y la factura se vincula después (o la halla el cron).
+ */
+export async function crearFlujoOdoo(
+  ordenId: string,
+): Promise<{ ok: true; flujo: FlujoVentaCreado } | { ok: false; error: string } | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  if (!miembro) return { ok: false, error: "No autorizado." };
+  const supabase = await createClient();
+  const config = await obtenerConfigOdoo(supabase, miembro.org_id);
+  if (!config) return { ok: false, error: "Odoo no está conectado — ve a Configuración → Integraciones." };
+
+  const { data: orden } = await supabase
+    .from("orden")
+    .select("numero_oc, institucion, institucion_id, odoo_orden_id, odoo_orden_nombre")
+    .eq("id", ordenId)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  if (!orden) return { ok: false, error: "No se encontró la orden." };
+  if (orden.odoo_orden_id) {
+    return { ok: false, error: `Esta orden ya está en Odoo (${orden.odoo_orden_nombre ?? orden.odoo_orden_id}).` };
+  }
+  if (!orden.institucion) return { ok: false, error: "La orden no tiene institución." };
+
+  const { data: items } = await supabase
+    .from("item")
+    .select("nombre, tipo, cantidad, precio")
+    .eq("orden_id", ordenId)
+    .order("orden_indice", { ascending: true });
+  if (!items?.length) return { ok: false, error: "La orden no tiene ítems que llevar a Odoo." };
+
+  // El RNC de la institución, si está en el catálogo (para el cliente).
+  let rnc: string | null = null;
+  if (orden.institucion_id) {
+    const { data: inst } = await supabase
+      .from("institucion")
+      .select("rnc")
+      .eq("id", orden.institucion_id)
+      .maybeSingle();
+    rnc = inst?.rnc ?? null;
+  }
+
+  const lineas: LineaVenta[] = items.map((i) => ({
+    nombre: i.nombre,
+    tipo: (i.tipo ?? "licencia") as LineaVenta["tipo"],
+    cantidad: Number(i.cantidad) || 1,
+    // item.precio es el TOTAL del ítem en la OC → unitario para Odoo.
+    precioUnitario:
+      i.precio != null && Number(i.cantidad) > 0
+        ? Math.round((Number(i.precio) / Number(i.cantidad)) * 100) / 100
+        : null,
+  }));
+
+  const r = await crearFlujoVenta(config, {
+    clienteNombre: orden.institucion,
+    clienteRnc: rnc,
+    referencia: orden.numero_oc ?? "",
+    lineas,
+  });
+  if (!r.ok) return r;
+
+  await supabase
+    .from("orden")
+    .update({ odoo_orden_id: r.flujo.ordenVentaId, odoo_orden_nombre: r.flujo.ordenVentaNombre })
+    .eq("id", ordenId)
+    .eq("org_id", miembro.org_id);
+
+  const detalles = [
+    r.flujo.clienteCreado ? "cliente creado" : null,
+    r.flujo.productosCreados.length ? `productos creados: ${r.flujo.productosCreados.join(", ")}` : null,
+    r.flujo.conduces.length ? `conduce ${r.flujo.conduces.join(", ")}` : null,
+  ].filter(Boolean);
+  await supabase.from("bitacora").insert({
+    orden_id: ordenId,
+    autor_id: miembro.user_id,
+    tipo: "evento",
+    texto: `Creada en Odoo la orden de venta ${r.flujo.ordenVentaNombre}${detalles.length ? ` (${detalles.join("; ")})` : ""}`,
+  });
+
+  revalidatePath(`/orden/${ordenId}`);
+  return r;
 }
 
 // ── Vincular a mano (cuando las facturas no llevan el número de OC) ──────────

@@ -3,6 +3,7 @@
 import { useTransition } from "react";
 import { RefreshCw, CheckCircle2, AlertCircle, Clock, Ban, Link2, Loader2, X } from "lucide-react";
 import {
+  crearFlujoOdoo,
   listarFacturasOdoo,
   sincronizarFacturaOdoo,
   vincularFacturaOdoo,
@@ -31,6 +32,9 @@ interface OdooSyncProps {
   facturaId: number | null;
   /** Nombre de la factura en Odoo (p. ej. "INV/2026/00042"). */
   facturaNombre: string | null;
+  /** Orden de venta creada en Odoo con «Crear en Odoo» (null si aún no). */
+  ordenVentaId: number | null;
+  ordenVentaNombre: string | null;
 }
 
 // ── Chip de estado ────────────────────────────────────────────────────────────
@@ -92,6 +96,8 @@ export default function OdooSync({
   facturaEstado: estadoInicial,
   facturaId: idInicial,
   facturaNombre: nombreInicial,
+  ordenVentaId: ventaIdInicial,
+  ordenVentaNombre: ventaNombreInicial,
 }: OdooSyncProps) {
   const [pending, startTransition] = useTransition();
   const [estado, setEstado] = useState<string | null>(estadoInicial);
@@ -101,6 +107,37 @@ export default function OdooSync({
   // El selector de facturas recientes (cuando la OC no aparece en Odoo).
   const [candidatas, setCandidatas] = useState<FacturaResumen[] | null>(null);
   const [cargandoLista, setCargandoLista] = useState(false);
+  // El flujo de VENTA (cliente → productos → orden → conduce) en Odoo.
+  const [venta, setVenta] = useState<{ id: number; nombre: string } | null>(
+    ventaIdInicial ? { id: ventaIdInicial, nombre: ventaNombreInicial ?? `#${ventaIdInicial}` } : null,
+  );
+  const [detalleVenta, setDetalleVenta] = useState<string | null>(null);
+  const [creandoVenta, setCreandoVenta] = useState(false);
+
+  function crearEnOdoo() {
+    if (!confirm("¿Crear en Odoo el flujo de esta orden? (cliente y productos si faltan, orden de venta confirmada y su conduce)")) return;
+    setMensaje(null);
+    setDetalleVenta(null);
+    setCreandoVenta(true);
+    startTransition(async () => {
+      const r = await crearFlujoOdoo(ordenId);
+      setCreandoVenta(false);
+      if (!r) return; // demo
+      if (!r.ok) {
+        setMensaje(r.error);
+        return;
+      }
+      setVenta({ id: r.flujo.ordenVentaId, nombre: r.flujo.ordenVentaNombre });
+      const partes = [
+        r.flujo.clienteCreado ? "cliente creado" : "cliente ya existía",
+        r.flujo.productosCreados.length
+          ? `${r.flujo.productosCreados.length} producto${r.flujo.productosCreados.length === 1 ? "" : "s"} creado${r.flujo.productosCreados.length === 1 ? "" : "s"}`
+          : "productos ya existían",
+        r.flujo.conduces.length ? `conduce ${r.flujo.conduces.join(", ")} listo para validar` : null,
+      ].filter(Boolean);
+      setDetalleVenta(partes.join(" · "));
+    });
+  }
 
   function aplicar(res: Awaited<ReturnType<typeof sincronizarFacturaOdoo>>) {
     if (!res) return; // modo demo
@@ -148,6 +185,30 @@ export default function OdooSync({
 
   return (
     <div className="space-y-2">
+      {/* El flujo de venta: crear una vez, referencia siempre */}
+      {venta ? (
+        <p className="flex items-center gap-1.5 text-[12px] text-ink">
+          <CheckCircle2 className="h-3.5 w-3.5 flex-none text-ok" strokeWidth={2} aria-hidden />
+          En Odoo: <span className="font-mono font-medium">{venta.nombre}</span>
+          <span className="text-muted">— series y conduce se validan allá</span>
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={crearEnOdoo}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-ink transition-colors hover:bg-primary-hover disabled:opacity-55"
+        >
+          {creandoVenta ? (
+            <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" strokeWidth={2.2} aria-hidden />
+          ) : (
+            <Link2 className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+          )}
+          {creandoVenta ? "Creando en Odoo…" : "Crear en Odoo"}
+        </button>
+      )}
+      {detalleVenta && <p className="text-[11.5px] text-ok">{detalleVenta}</p>}
+
       {/* Chip de estado actual */}
       {estado ? (
         <div className="flex flex-col gap-1">

@@ -8,6 +8,24 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-23 (6) — «Crear en Odoo»: el flujo manual de venta, en un clic
+
+Pablo describió su flujo manual al llegar una OC: crear producto si falta,
+serie si aplica, conduce de entrega, esperar recepción conforme, facturar.
+Ahora el botón **«Crear en Odoo»** en la ficha de la orden hace la parte
+tecleable: busca/crea el CLIENTE (por nombre exacto y por RNC del catálogo),
+busca/crea cada PRODUCTO (convención del Odoo del cliente: consumible para
+licencias/físico — visto en sus datos —, service para servicios; físico
+intenta tracking por serie con fallback), crea la ORDEN DE VENTA con las
+líneas (precio unitario = item.precio/cantidad; client_order_ref = nº OC) y
+la CONFIRMA → Odoo genera el conduce. Guarda odoo_orden_id/nombre (migración
+corrida en prod), evento en bitácora con el detalle, y el panel muestra
+«En Odoo: S00042». Lo físico queda en Odoo: series al validar el conduce,
+recepción conforme, factura (que se vincula con lo del checkpoint anterior).
+Verificado read-only contra su Odoo: acceso a res.partner/product/sale.order/
+stock.picking OK; el cliente OGTIC ya existe (vat 430019501). NO se creó
+nada en su ERP — el primer clic del botón es la prueba real.
+
 ## 2026-07-23 (5) — Odoo: VINCULAR factura (las facturas reales no llevan la OC)
 
 Pablo conectó su Odoo real (ventas.innovaciontecnologica.com.do, Odoo 17;

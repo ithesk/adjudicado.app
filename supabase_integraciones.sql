@@ -32,3 +32,7 @@ create policy integracion_odoo_all on integracion_odoo for all
 
 -- La factura VINCULADA muestra su nombre ("INV/2026/0035") sin ir a Odoo.
 alter table orden add column if not exists odoo_factura_nombre text;
+
+-- La orden de VENTA creada en Odoo desde la orden (botón «Crear en Odoo»).
+alter table orden add column if not exists odoo_orden_id bigint;
+alter table orden add column if not exists odoo_orden_nombre text;

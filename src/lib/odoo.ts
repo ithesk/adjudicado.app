@@ -239,6 +239,126 @@ export async function buscarFactura(
   }
 }
 
+// ── Crear el flujo de venta (cliente → productos → orden → conduce) ──────────
+
+export interface LineaVenta {
+  nombre: string;
+  tipo: "licencia" | "fisico" | "servicio";
+  cantidad: number;
+  /** Precio unitario en la OC (null = se deja en 0 y se ajusta en Odoo). */
+  precioUnitario: number | null;
+}
+
+export interface FlujoVentaCreado {
+  ordenVentaId: number;
+  ordenVentaNombre: string;
+  /** Los conduces (stock.picking) que Odoo generó al confirmar. */
+  conduces: string[];
+  /** Productos que hubo que crear (no existían). */
+  productosCreados: string[];
+  clienteCreado: boolean;
+}
+
+/**
+ * Reproduce en Odoo el flujo manual de una OC nueva: cliente (lo crea si no
+ * existe), productos (ídem — los físicos con seguimiento por serie), orden
+ * de venta con las líneas, y la CONFIRMA para que Odoo genere el conduce.
+ * Las series se ponen en Odoo al validar el conduce (mundo físico).
+ */
+export async function crearFlujoVenta(
+  config: OdooConfig,
+  datos: {
+    clienteNombre: string;
+    clienteRnc?: string | null;
+    /** El número de OC — queda como referencia del cliente en la orden. */
+    referencia: string;
+    lineas: LineaVenta[];
+  },
+): Promise<{ ok: true; flujo: FlujoVentaCreado } | { ok: false; error: string }> {
+  try {
+    const uid = await autenticar(config);
+    const kw = (modelo: string, metodo: string, args: unknown[], kwargs: Record<string, unknown> = {}) =>
+      rpc(config, "object", "execute_kw", [config.db, uid, config.apiKey, modelo, metodo, args, kwargs]);
+
+    // 1) El cliente: por nombre exacto (sin mayúsculas), luego por RNC.
+    let clienteCreado = false;
+    let clienteId: number | null = null;
+    const porNombre = (await kw("res.partner", "search", [[["name", "=ilike", datos.clienteNombre]]], { limit: 1 })) as number[];
+    clienteId = porNombre?.[0] ?? null;
+    if (!clienteId && datos.clienteRnc) {
+      const porRnc = (await kw("res.partner", "search", [[["vat", "=", datos.clienteRnc]]], { limit: 1 })) as number[];
+      clienteId = porRnc?.[0] ?? null;
+    }
+    if (!clienteId) {
+      clienteId = (await kw("res.partner", "create", [
+        { name: datos.clienteNombre, is_company: true, vat: datos.clienteRnc || false, customer_rank: 1 },
+      ])) as number;
+      clienteCreado = true;
+    }
+
+    // 2) Los productos: por nombre exacto; se crean los que falten.
+    const productosCreados: string[] = [];
+    const lineasOdoo: Array<[number, number, Record<string, unknown>]> = [];
+    for (const linea of datos.lineas) {
+      const existentes = (await kw("product.product", "search", [[["name", "=ilike", linea.nombre]]], { limit: 1 })) as number[];
+      let productoId = existentes?.[0] ?? null;
+      if (!productoId) {
+        // Se sigue la convención del Odoo del cliente (visto en sus datos):
+        // licencias y equipos como CONSUMIBLE, servicios como servicio.
+        const base: Record<string, unknown> = {
+          name: linea.nombre,
+          detailed_type: linea.tipo === "servicio" ? "service" : "consu",
+          list_price: linea.precioUnitario ?? 0,
+        };
+        try {
+          // Físico → seguimiento por número de serie (como el flujo manual).
+          productoId = (await kw("product.product", "create", [
+            linea.tipo === "fisico" ? { ...base, tracking: "serial" } : base,
+          ])) as number;
+        } catch {
+          // Sin lotes/series habilitados en ese Odoo: se crea sin tracking.
+          productoId = (await kw("product.product", "create", [base])) as number;
+        }
+        productosCreados.push(linea.nombre);
+      }
+      lineasOdoo.push([0, 0, {
+        product_id: productoId,
+        product_uom_qty: linea.cantidad,
+        price_unit: linea.precioUnitario ?? 0,
+      }]);
+    }
+
+    // 3) La orden de venta, confirmada → Odoo genera el conduce solo.
+    const ordenVentaId = (await kw("sale.order", "create", [
+      { partner_id: clienteId, client_order_ref: datos.referencia, order_line: lineasOdoo },
+    ])) as number;
+    await kw("sale.order", "action_confirm", [[ordenVentaId]]);
+
+    const [venta] = (await kw("sale.order", "read", [[ordenVentaId]], { fields: ["name", "picking_ids"] })) as Array<{
+      name: string;
+      picking_ids: number[];
+    }>;
+    let conduces: string[] = [];
+    if (venta?.picking_ids?.length) {
+      const pickings = (await kw("stock.picking", "read", [venta.picking_ids], { fields: ["name"] })) as Array<{ name: string }>;
+      conduces = pickings.map((p) => p.name);
+    }
+
+    return {
+      ok: true,
+      flujo: {
+        ordenVentaId,
+        ordenVentaNombre: venta?.name ?? `#${ordenVentaId}`,
+        conduces,
+        productosCreados,
+        clienteCreado,
+      },
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // Una factura como aparece en el selector de vincular (con su cliente).
 export interface FacturaResumen extends FacturaOdoo {
   cliente: string;
