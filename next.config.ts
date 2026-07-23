@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Probar el DEV server desde el teléfono (http://<ip-del-mac>:3000): sin
+  // esto, Next 16 bloquea los assets pedidos desde otro origen y la página
+  // carga SIN JavaScript — nada interactivo funciona. Solo afecta a dev.
+  // Si la IP del Mac cambia (DHCP), agregar la nueva aquí.
+  allowedDevOrigins: ["192.168.2.94"],
   // El generador lee las plantillas del disco con rutas dinámicas: sin esto,
   // funciona en dev y explota en Vercel con ENOENT (el tracer no las ve).
   outputFileTracingIncludes: {
