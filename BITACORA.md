@@ -8,6 +8,43 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-24 (4) — Subir documentos: el segundo tope de tamaño, el que nadie ve
+
+Pablo: error al subir un documento. En el log del dev:
+
+```
+Request body exceeded 10MB for /configuracion/empresa.
+⨯ Error: Unexpected end of form   → POST 500
+```
+
+Había DOS topes, no uno. `serverActions.bodySizeLimit: "20mb"` ya estaba
+puesto, pero **cuando hay proxy** (src/proxy.ts matchea todo salvo estáticos)
+Next copia el cuerpo a memoria para poder leerlo dos veces, y ese búfer son
+**10 MB por defecto** (`experimental.proxyClientMaxBodySize`). El PDF llegaba
+CORTADO a 10 MB: el multipart quedaba a medias, la action moría con
+"Unexpected end of form" y **nunca llegaba a la validación de tamaño**, así
+que en pantalla salía un 500 en vez de "pesa más de 15 MB". Peor: Next no
+falla ni avisa al cliente, solo trunca y escribe una línea en el log.
+
+Es decir, todo archivo **entre 10 y 15 MB** reventaba — en cualquier subida de
+la app (documentos de empresa, requisitos, plantillas, logo), y la lista de
+precios acepta hasta 30 MB.
+
+- `proxyClientMaxBodySize: "32mb"` en next.config.ts (cubre los 30 MB de la
+  importación de precios, que es lo más grande que acepta la app).
+- DocsEmpresa comprueba el tamaño ANTES de subir: «"X.pdf" pesa 18.2 MB y el
+  máximo son 15 MB» en vez de mandar 18 MB para que los rechacen.
+
+Comprobado con un A/B real (12 MB por POST): con el tope en 1mb sale el aviso
+de truncado, con 32mb no sale. tsc + eslint + 104 tests + build en verde.
+
+⚠️ Nota de entorno: **no correr `pnpm build` con `pnpm dev` levantado** —
+comparten `.next/` y el build deja a Turbopack en pánico ("Next.js package not
+found"); el HMR pierde la conexión y la página se recarga en bucle cada
+segundo. Se arregla matando el dev, `rm -rf .next` y arrancando de nuevo.
+
+---
+
 ## 2026-07-24 (3) — Barrido: quedaba UN formulario con el mismo fallo (y peor)
 
 Pablo pidió revisar si el descarte silencioso estaba en más sitios. Barrido de
