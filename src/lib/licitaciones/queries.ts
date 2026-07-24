@@ -80,16 +80,22 @@ export async function guardarPerfil(
     .eq("org_id", miembro.org_id)
     .maybeSingle();
 
-  const { error } = existe
-    ? await supabase
-        .from("empresa_perfil")
-        .update(conFecha)
-        .eq("org_id", miembro.org_id)
+  const actualizar = () =>
+    supabase.from("empresa_perfil").update(conFecha).eq("org_id", miembro.org_id);
+
+  let { error } = existe
+    ? await actualizar()
     : await supabase.from("empresa_perfil").insert({
         nombre_legal: miembro.organizacion?.nombre ?? "Mi empresa",
         ...conFecha,
         org_id: miembro.org_id,
       });
+
+  // El perfil es 1:1 con la organización: si otro guardado creó la fila entre
+  // el select y el insert, la clave duplicada (23505) no es un fallo — es que
+  // ya existe. Se convierte en update en vez de perder el campo.
+  if (error?.code === "23505") ({ error } = await actualizar());
+
   // La RLS exige rol admin para escribir el perfil (datos fiscales).
   return error ? `No se pudo guardar (¿eres admin?): ${error.message}` : null;
 }

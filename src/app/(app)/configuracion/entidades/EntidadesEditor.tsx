@@ -106,26 +106,26 @@ export default function EntidadesEditor({
               valor={e.nombre}
               placeholder="Nombre"
               ancho="min-w-48 flex-1"
-              onSave={(v) => v && correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { nombre: v }))}
+              onSave={(v) => v && correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { nombre: v }), { encolar: true })}
             />
             <CampoEntidad
               valor={e.siglas ?? ""}
               placeholder="Siglas"
               ancho="w-20"
-              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { siglas: v || null }))}
+              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { siglas: v || null }), { encolar: true })}
             />
             <CampoEntidad
               valor={e.rnc ?? ""}
               placeholder="RNC"
               ancho="w-32"
               mono
-              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { rnc: v || null }))}
+              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { rnc: v || null }), { encolar: true })}
             />
             <CampoEntidad
               valor={e.direccion ?? ""}
               placeholder="Dirección"
               ancho="w-56"
-              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { direccion: v || null }))}
+              onSave={(v) => correr(`ent-${e.id}`, () => actualizarEntidadAction(e.id, { direccion: v || null }), { encolar: true })}
             />
             <Link
               href={`/entidades/${e.id}`}

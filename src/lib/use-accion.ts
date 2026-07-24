@@ -8,6 +8,14 @@
 //   entero — solo lo que de verdad está ocupado. `ocupada(clave)` responde
 //   por control; `alguna` queda para lo poco que sí es global.
 // - Anti doble-clic de serie: la misma clave no corre dos veces a la vez.
+//   OJO: descartar la segunda llamada es correcto para un BOTÓN (dos clics =
+//   una sola línea creada) y es PÉRDIDA DE DATOS para un autosave, donde cada
+//   llamada trae un campo distinto. Rellenar el perfil de la empresa a golpe
+//   de Tab disparaba un guardado por campo con la MISMA clave: el primero
+//   corría y los demás se descartaban en silencio — el texto seguía en
+//   pantalla (los inputs son no controlados) y solo al recargar se veía que
+//   no estaba. Por eso existe `encolar`: en vez de tirar la llamada, la pone
+//   en una cola FIFO por clave y la corre cuando termina la anterior.
 // - El error SIEMPRE se ve: por defecto sale como aviso (toast); con
 //   `errorInline: true` queda en `error` para pintarlo junto al form.
 // - Un throw (red caída) no deja nada girando: se traduce a error legible.
@@ -20,6 +28,21 @@ import { avisoError } from "@/lib/avisos";
 
 export type EstadoAccion = "idle" | "guardando" | "ok";
 
+type OpcionesAccion = {
+  errorInline?: boolean;
+  /** No recargar la página al terminar — para autosave OPTIMISTA de
+   *  celdas (la UI ya muestra el valor; recargar todo por una celda es
+   *  lo que hacía lento el cotizador con 18 líneas). */
+  sinRefresh?: boolean;
+  /** Se llama al terminar con el error (o null): para revertir el
+   *  estado optimista si el servidor falló. */
+  alTerminar?: (err: string | null) => void;
+  /** Autosave: si la clave está ocupada, ESPERA su turno en vez de
+   *  descartarse. Obligatorio cuando varias llamadas comparten clave y cada
+   *  una trae datos distintos (un campo por llamada). */
+  encolar?: boolean;
+};
+
 export function useAccion() {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -29,25 +52,34 @@ export function useAccion() {
   // Última acción confirmada — para el check junto al campo que se editó.
   const [okClave, setOkClave] = useState<string | null>(null);
   const timerOk = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Quién corre AHORA. Va en ref, no en estado: dos blur seguidos (Tab, Tab)
+  // ocurren antes de que React vuelva a renderizar, y con el estado el
+  // segundo veía la clave libre.
+  const enCurso = useRef<Set<string>>(new Set());
+  const colas = useRef<Map<string, { fn: () => Promise<string | null>; opts: OpcionesAccion }[]>>(
+    new Map(),
+  );
 
   function correr(
     clave: string,
     fn: () => Promise<string | null>,
-    opts: {
-      errorInline?: boolean;
-      /** No recargar la página al terminar — para autosave OPTIMISTA de
-       *  celdas (la UI ya muestra el valor; recargar todo por una celda es
-       *  lo que hacía lento el cotizador con 18 líneas). */
-      sinRefresh?: boolean;
-      /** Se llama al terminar con el error (o null): para revertir el
-       *  estado optimista si el servidor falló. */
-      alTerminar?: (err: string | null) => void;
-    } = {},
+    opts: OpcionesAccion = {},
   ) {
-    if (ocupadas.has(clave)) return; // anti doble-clic
+    if (enCurso.current.has(clave)) {
+      if (!opts.encolar) return; // anti doble-clic (botones)
+      const cola = colas.current.get(clave) ?? [];
+      cola.push({ fn, opts });
+      colas.current.set(clave, cola);
+      return;
+    }
+    lanzar(clave, fn, opts);
+  }
+
+  function lanzar(clave: string, fn: () => Promise<string | null>, opts: OpcionesAccion) {
+    enCurso.current.add(clave);
+    setOcupadas(new Set(enCurso.current));
     setError(null);
     setEstado("guardando");
-    setOcupadas((prev) => new Set(prev).add(clave));
     startTransition(async () => {
       let err: string | null = null;
       try {
@@ -55,16 +87,27 @@ export function useAccion() {
       } catch {
         err = "No se pudo completar — revisa tu conexión e inténtalo de nuevo.";
       }
-      setOcupadas((prev) => {
-        const s = new Set(prev);
-        s.delete(clave);
-        return s;
-      });
       if (err) {
         setEstado("idle");
         if (opts.errorInline) setError(err);
         else avisoError(err);
-      } else {
+      }
+      opts.alTerminar?.(err);
+
+      // ¿Alguien esperaba turno en esta clave? Corre ahora, sin soltarla (así
+      // el indicador sigue en "guardando" y el refresh se hace una sola vez,
+      // al final de la tanda).
+      const cola = colas.current.get(clave);
+      const siguiente = cola?.shift();
+      if (cola && cola.length === 0) colas.current.delete(clave);
+      if (siguiente) {
+        lanzar(clave, siguiente.fn, siguiente.opts);
+        return;
+      }
+
+      enCurso.current.delete(clave);
+      setOcupadas(new Set(enCurso.current));
+      if (!err) {
         setEstado("ok");
         setOkClave(clave);
         if (timerOk.current) clearTimeout(timerOk.current);
@@ -73,7 +116,6 @@ export function useAccion() {
           setOkClave(null);
         }, 2000);
       }
-      opts.alTerminar?.(err);
       if (!opts.sinRefresh) router.refresh();
     });
   }

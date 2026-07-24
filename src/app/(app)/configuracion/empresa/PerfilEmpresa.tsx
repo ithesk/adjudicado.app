@@ -75,8 +75,11 @@ export default function PerfilEmpresa({
   );
   const [tasa, setTasa] = useState(perfil?.tasa_usd_dop ?? 0);
 
+  // `encolar`: todos los campos comparten la clave "perfil", así que rellenar
+  // el formulario a golpe de Tab encadena guardados. Sin cola, los que caían
+  // mientras corría el anterior se descartaban en silencio.
   function autosave(patch: Parameters<typeof guardarPerfilAction>[0]) {
-    correr("perfil", () => guardarPerfilAction(patch));
+    correr("perfil", () => guardarPerfilAction(patch), { encolar: true });
   }
 
   const ejemploCosto = 1000;
@@ -235,12 +238,15 @@ function FirmanteAutosave({
   function guardar() {
     const d = datos.current;
     if (!d.nombre.trim()) return; // sin nombre no hay firmante todavía
-    correr(`firmante-${rol}`, () =>
-      guardarFirmanteAction(rol, {
-        nombre: d.nombre.trim(),
-        cedula: d.cedula.trim() || null,
-        cargo: d.cargo.trim() || ROL_FIRMANTE_LABEL[rol],
-      }),
+    correr(
+      `firmante-${rol}`,
+      () =>
+        guardarFirmanteAction(rol, {
+          nombre: d.nombre.trim(),
+          cedula: d.cedula.trim() || null,
+          cargo: d.cargo.trim() || ROL_FIRMANTE_LABEL[rol],
+        }),
+      { encolar: true },
     );
   }
 

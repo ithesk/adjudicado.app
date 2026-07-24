@@ -8,6 +8,44 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-24 (2) — Los datos de la empresa nueva NO se perdieron: se descartaban en el navegador
+
+Pablo creó otra empresa con otro usuario, llenó Configuración → Empresa y al
+volver no había nada; los documentos que subió sí estaban. No era la RLS ni la
+empresa nueva: era `useAccion`.
+
+`correr(clave, fn)` traía un guard anti doble-clic — si la clave estaba
+ocupada, **descartaba la llamada y volvía**. Correcto para un botón (dos clics
+= una línea, no dos). Destructivo para un autosave, donde **cada llamada trae
+un campo distinto**: todos los campos del perfil comparten la clave `"perfil"`,
+así que llenar el formulario a golpe de Tab disparaba un guardado por campo y
+los que caían mientras corría el anterior se tiraban **en silencio**. Y como
+los inputs son no controlados (`defaultValue`), el texto seguía en pantalla:
+solo al recargar se veía el hueco. Los documentos se salvaron porque cada
+subida es su propia acción y entre archivo y archivo da tiempo de sobra.
+
+Fix en la raíz — `useAccion` gana `encolar`: si la clave está ocupada, la
+llamada **espera turno** en una cola FIFO por clave en vez de descartarse (los
+botones siguen igual, sin `encolar`). De paso el registro de "quién corre
+ahora" pasó de estado a `useRef`: dos blur seguidos ocurren antes del
+siguiente render y el segundo veía la clave libre.
+
+Marcados con `encolar` todos los autosave que comparten clave — que eran
+todos: PerfilEmpresa (`perfil` y `firmante-*`), DatosProceso (`proceso`),
+FichaEntidad (`perfil` y `ct-*`), EntidadesEditor (`ent-*`) y las celdas del
+cotizador (`it-*`, donde editar cantidad y precio seguidos perdía el segundo).
+
+`guardarPerfil` además convierte en update el error de clave duplicada
+(23505): el perfil es 1:1 con la organización, así que si otro guardado creó
+la fila entre el select y el insert, eso no es un fallo — es que ya existe.
+
+⚠️ Nada se había perdido en el servidor: lo que sí quedó guardado está bien.
+Pablo tiene que volver a llenar los campos que se descartaron.
+
+Verificado: tsc + eslint + 97 tests + build. Falta probarlo con sesión real.
+
+---
+
 ## 2026-07-24 — «El sistema corre pesado»: la sesión se pedía 6 veces por página
 
 Pablo: agregar una línea en el cotizador «parece que no hizo nada» y hay que

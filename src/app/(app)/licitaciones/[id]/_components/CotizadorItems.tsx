@@ -122,6 +122,9 @@ export default function CotizadorItems({
     setParches((m) => ({ ...m, [id]: { ...m[id], ...p } }));
     correr(`it-${id}`, () => actualizarItemAction(id, p), {
       sinRefresh: true,
+      // Las celdas de una misma línea comparten clave: sin cola, editar
+      // cantidad y precio seguidos descartaba el segundo guardado.
+      encolar: true,
       alTerminar: (err) => {
         if (err) setParches((m) => ({ ...m, [id]: previo ?? {} }));
       },
