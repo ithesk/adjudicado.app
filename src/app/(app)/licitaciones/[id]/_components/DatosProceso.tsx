@@ -18,8 +18,12 @@ export default function DatosProceso({
 }) {
   const { correr, estado } = useAccion();
 
+  // `encolar`: todos los campos comparten la clave "proceso" — sin cola, el
+  // campo que se guarda mientras corre el anterior se perdía sin avisar.
   function autosave(patch: Parameters<typeof actualizarProcesoAction>[1]) {
-    correr("proceso", () => actualizarProcesoAction(proceso.id, patch));
+    correr("proceso", () => actualizarProcesoAction(proceso.id, patch), {
+      encolar: true,
+    });
   }
 
   return (

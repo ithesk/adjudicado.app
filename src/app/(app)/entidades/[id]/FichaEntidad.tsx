@@ -152,10 +152,10 @@ export default function FichaEntidad({
                 }}
               />
               <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
-                <Campo valor={e.nombre} placeholder="Nombre" onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { nombre: v }))} />
-                <Campo valor={e.siglas ?? ""} placeholder="Siglas (MICM…)" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { siglas: v || null }))} />
+                <Campo valor={e.nombre} placeholder="Nombre" onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { nombre: v }), { encolar: true })} />
+                <Campo valor={e.siglas ?? ""} placeholder="Siglas (MICM…)" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { siglas: v || null }), { encolar: true })} />
                 <div className="flex items-center gap-1">
-                  <Campo valor={e.rnc ?? ""} placeholder="RNC" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { rnc: v || null }))} />
+                  <Campo valor={e.rnc ?? ""} placeholder="RNC" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { rnc: v || null }), { encolar: true })} />
                   {!e.rnc && (
                     <button
                       type="button"
@@ -169,9 +169,9 @@ export default function FichaEntidad({
                     </button>
                   )}
                 </div>
-                <Campo valor={e.telefono ?? ""} placeholder="Teléfono central" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { telefono: v || null }))} />
+                <Campo valor={e.telefono ?? ""} placeholder="Teléfono central" mono onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { telefono: v || null }), { encolar: true })} />
                 <div className="sm:col-span-2">
-                  <Campo valor={e.direccion ?? ""} placeholder="Dirección" onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { direccion: v || null }))} />
+                  <Campo valor={e.direccion ?? ""} placeholder="Dirección" onSave={(v) => correr("perfil", () => actualizarEntidadAction(e.id, { direccion: v || null }), { encolar: true })} />
                 </div>
                 <textarea
                   defaultValue={e.notas ?? ""}
@@ -179,7 +179,7 @@ export default function FichaEntidad({
                   rows={2}
                   onBlur={(ev) => {
                     const v = ev.target.value.trim();
-                    if (v !== (e.notas ?? "")) correr("perfil", () => actualizarEntidadAction(e.id, { notas: v || null }));
+                    if (v !== (e.notas ?? "")) correr("perfil", () => actualizarEntidadAction(e.id, { notas: v || null }), { encolar: true });
                   }}
                   className={`${inputSm} w-full resize-y sm:col-span-2`}
                 />
@@ -193,11 +193,11 @@ export default function FichaEntidad({
             <ul className="divide-y divide-line">
               {e.contactos.map((c) => (
                 <li key={c.id} className={`${gridContacto} px-4 py-2`}>
-                  <Campo valor={c.nombre} placeholder="Nombre" onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { nombre: v }))} />
-                  <Campo valor={c.rol ?? ""} placeholder="Cargo" onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { rol: v || null }))} />
-                  <Campo valor={c.email ?? ""} placeholder="Email" mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { email: v || null }))} />
-                  <Campo valor={c.telefono ?? ""} placeholder="Tel. directo" mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { telefono: v || null }))} />
-                  <Campo valor={c.extension ?? ""} placeholder="Ext." mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { extension: v || null }))} />
+                  <Campo valor={c.nombre} placeholder="Nombre" onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { nombre: v }), { encolar: true })} />
+                  <Campo valor={c.rol ?? ""} placeholder="Cargo" onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { rol: v || null }), { encolar: true })} />
+                  <Campo valor={c.email ?? ""} placeholder="Email" mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { email: v || null }), { encolar: true })} />
+                  <Campo valor={c.telefono ?? ""} placeholder="Tel. directo" mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { telefono: v || null }), { encolar: true })} />
+                  <Campo valor={c.extension ?? ""} placeholder="Ext." mono onSave={(v) => correr(`ct-${c.id}`, () => actualizarContactoEntidadAction(e.id, c.id, { extension: v || null }), { encolar: true })} />
                   <span className="flex items-center gap-1.5">
                     {c.email && (
                       <a href={`mailto:${c.email}`} className="text-muted hover:text-primary" title={`Escribir a ${c.email}`}>

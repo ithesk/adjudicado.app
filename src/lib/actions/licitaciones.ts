@@ -55,10 +55,12 @@ export async function eliminarProcesoAction(id: string): Promise<string | null> 
   return error;
 }
 
-export async function crearItemAction(procesoId: string): Promise<string | null> {
-  const error = await crearItem(procesoId);
-  if (!error) refrescar();
-  return error;
+// Devuelve la línea creada además del error: el cotizador la pinta al momento
+// (optimista) en vez de esperar el re-render del servidor.
+export async function crearItemAction(procesoId: string) {
+  const r = await crearItem(procesoId);
+  if (!r.error) refrescar();
+  return r;
 }
 
 export async function actualizarItemAction(

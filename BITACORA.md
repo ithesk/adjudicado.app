@@ -8,6 +8,134 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-24 (2) — Los datos de la empresa nueva NO se perdieron: se descartaban en el navegador
+
+Pablo creó otra empresa con otro usuario, llenó Configuración → Empresa y al
+volver no había nada; los documentos que subió sí estaban. No era la RLS ni la
+empresa nueva: era `useAccion`.
+
+`correr(clave, fn)` traía un guard anti doble-clic — si la clave estaba
+ocupada, **descartaba la llamada y volvía**. Correcto para un botón (dos clics
+= una línea, no dos). Destructivo para un autosave, donde **cada llamada trae
+un campo distinto**: todos los campos del perfil comparten la clave `"perfil"`,
+así que llenar el formulario a golpe de Tab disparaba un guardado por campo y
+los que caían mientras corría el anterior se tiraban **en silencio**. Y como
+los inputs son no controlados (`defaultValue`), el texto seguía en pantalla:
+solo al recargar se veía el hueco. Los documentos se salvaron porque cada
+subida es su propia acción y entre archivo y archivo da tiempo de sobra.
+
+Fix en la raíz — `useAccion` gana `encolar`: si la clave está ocupada, la
+llamada **espera turno** en una cola FIFO por clave en vez de descartarse (los
+botones siguen igual, sin `encolar`). De paso el registro de "quién corre
+ahora" pasó de estado a `useRef`: dos blur seguidos ocurren antes del
+siguiente render y el segundo veía la clave libre.
+
+Marcados con `encolar` todos los autosave que comparten clave — que eran
+todos: PerfilEmpresa (`perfil` y `firmante-*`), DatosProceso (`proceso`),
+FichaEntidad (`perfil` y `ct-*`), EntidadesEditor (`ent-*`) y las celdas del
+cotizador (`it-*`, donde editar cantidad y precio seguidos perdía el segundo).
+
+`guardarPerfil` además convierte en update el error de clave duplicada
+(23505): el perfil es 1:1 con la organización, así que si otro guardado creó
+la fila entre el select y el insert, eso no es un fallo — es que ya existe.
+
+⚠️ Nada se había perdido en el servidor: lo que sí quedó guardado está bien.
+Pablo tiene que volver a llenar los campos que se descartaron.
+
+Verificado: tsc + eslint + 97 tests + build. Falta probarlo con sesión real.
+
+---
+
+## 2026-07-24 — «El sistema corre pesado»: la sesión se pedía 6 veces por página
+
+Pablo: agregar una línea en el cotizador «parece que no hizo nada» y hay que
+hacer clic varias veces; y la app entera se siente lenta. Dos cosas distintas.
+
+**La causa de fondo (afecta a TODA la app).** `getMembresias()` no estaba
+memoizada, y `auth.getUser()` de Supabase **no es local**: es un viaje de red
+para validar el JWT. Cada consulta que pedía la membresía lo repetía. Solo el
+layout hacía cinco en fila —`requireMiembro` (que llama a `getUser` **y** a
+`getMiembro`), `getMembresias`, `listarOrdenes`, `listarDocsEmpresa`— más el
+de `listarInstituciones` en la página: ~6 viajes a Supabase Auth + 5 selects
+de `miembro` **antes del primer dato real**, y todo secuencial. Cada guardado
+que refresca la página los pagaba otra vez.
+Fix: `cache()` de React en `getUser`, `getMembresias`, `getMiembro` y
+`orgActivaLigera` (el patrón de DAL que recomienda la doc de Next 16) → 1 vez
+por request. Y el layout dejó de encadenar sus consultas: `requireMiembro`
+primero (decide el redirect) y `getMembresias`/`listarOrdenes`/`listarDocsEmpresa`
+en `Promise.all`.
+
+**«Agregar línea» sin indicador.** El botón de abajo —el que se usa— solo se
+ponía `disabled`, sin cambio visible, y la fila aparecía cuando terminaba el
+re-render completo del proceso. Se sentía muerto, se hacía clic de nuevo.
+Ahora: `crearItem` devuelve **la fila creada** (antes solo el error), el
+cotizador la pinta al instante en `nuevas[]` y le pone el cursor en la
+descripción; los tres botones muestran spinner + «Agregando…». Las líneas
+optimistas se descartan cuando el servidor las devuelve en `items` — y también
+al eliminarlas (si no, la copia local reaparecía cuando el id salía de `items`).
+`crearItem` pasó a `orgActivaLigera()` (0 viajes de red; el insert lo protege
+la RLS `with check (es_miembro(org_id))`) — la excepción está anotada en la
+cabecera de queries.ts.
+
+De paso: `allowedDevOrigins` suma la IP de la máquina nueva (192.168.2.107).
+
+Verificado: tsc + eslint + 97 tests + `next build` en verde. **Falta probarlo
+con sesión real** (todo lo tocado corre autenticado) — el dev server quedó
+levantado en localhost:3000.
+
+---
+
+## 2026-07-23 (8) — TRASPASO DE MÁQUINA: estado exacto y pendientes
+
+Pablo se mueve de PC. Para retomar en una sesión nueva SIN re-explicar:
+**leer esta entrada + las 7 anteriores de hoy** (cubren todo el contexto).
+
+**Estado del código**: rama `licitaciones-fase-3`; main tiene TODO hasta
+e25aa14 (PRs #14-#20 mergeados y desplegados en producción, deploy verde).
+Un solo commit fuera de main: e7266c9 (middleware dejaba fuera al cron) →
+**PR #21 abierto, esperando merge de Pablo** (a Claude se lo bloquea el
+clasificador; Pablo: `gh pr merge 21 --merge`).
+
+**Pendientes INMEDIATOS (en orden)**:
+1. Mergear PR #21.
+2. En Vercel (adjudicado-app → Settings → Env Vars, Production):
+   agregar `CRON_SECRET` y `CREDENCIALES_SECRET` — los valores están SOLO
+   en el `.env.local` de la Mac vieja (últimas líneas). ⚠️ Sin
+   CREDENCIALES_SECRET producción no descifra la conexión de Odoo.
+3. Tras el deploy: probar el cron
+   `curl -H "Authorization: Bearer <CRON_SECRET>"
+   https://adjudicado-app.vercel.app/api/cron/odoo-facturas`
+   — debe responder `{ok, organizaciones:1, revisadas:N…}`.
+4. En producción: Configuración → Integraciones — verificar tarjeta verde
+   de Odoo (la conexión se hizo desde local; misma BD, debería estar).
+5. Pablo: cerrar sesión y volver a entrar en producción (pegó su cookie de
+   sesión completa en el chat el 23/7) y probar «Crear en Odoo» +
+   «Elegir factura de Odoo…» en una orden real.
+
+**⚠️ El `.env.local` NO viaja por git** — copiarlo a la PC nueva (o bajar
+las llaves de Vercel). Contiene: llaves de Supabase (anon + service role),
+OPENAI (OCR), GOTENBERG_URL/TOKEN, CRON_SECRET, CREDENCIALES_SECRET,
+SUPABASE_ACCESS_TOKEN (token personal de Supabase para migraciones vía
+Management API — Pablo pidió guardarlo ahí), allowedDevOrigins en
+next.config.ts tiene la IP de la Mac vieja (192.168.2.94) — actualizarla
+si se prueba el dev desde el teléfono en otra red/máquina.
+
+**Cómo se trabaja aquí (resumen para sesión nueva)**: reglas en
+docs/sistema-ui.md (§carga incluida) y AGENTS.md; migraciones SQL en
+archivos `supabase_*.sql` re-ejecutables (se corren con el token vía
+Management API o SQL Editor); mutaciones devuelven string|null; useAccion
+para todo el feedback; checkpoint de cada tramo AQUÍ (entradas al tope) —
+instrucción permanente de Pablo. Verificar siempre: tsc + eslint + vitest
+(97 tests hoy). Odoo del cliente: ventas.innovaciontecnologica.com.do,
+base itheskdev, Odoo 17 (credenciales cifradas en integracion_odoo).
+
+**Backlog vivo** (no urgente): Gotenberg a HTTPS; sección Configuración →
+Empresa para las tablas declarativas del F.040; margen markup vs real;
+planes SaaS (rama claude/missing-saas-code-1gdj9u); deuda eslint
+set-state-in-effect (5 archivos, anotada); cotizador móvil ya en tarjetas.
+
+---
+
 ## 2026-07-23 (7) — Cotizador lento con 18 líneas: optimista + fin de la tormenta de prefetch
 
 Pablo con una licitación real de 18 ítems: cambiar una cantidad tardaba una

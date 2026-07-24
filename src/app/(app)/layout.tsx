@@ -25,14 +25,21 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // El layout se re-renderiza en CADA navegación y en cada router.refresh():
+  // en fila, sus cuatro consultas sumaban sus latencias antes de pintar nada.
+  // requireMiembro va primero porque decide el redirect; el resto va en
+  // paralelo (la sesión ya viene memoizada, así que no se repite el viaje).
   const miembro = await requireMiembro();
-  const membresias = await getMembresias();
-  const ordenes = await listarOrdenes();
+  const [membresias, ordenes, docs] = await Promise.all([
+    getMembresias(),
+    listarOrdenes(),
+    listarDocsEmpresa(),
+  ]);
   const cuenta = (e: Estado) => ordenes.filter((o) => o.estado === e).length;
 
   // Documentación de la empresa por vencer o vencida: la insignia solo aparece
   // si de verdad hay algo (el color de alarma es un recurso escaso).
-  const alertaDocs = alertasDocumentacion(await listarDocsEmpresa());
+  const alertaDocs = alertasDocumentacion(docs);
 
   const datos: DatosSidebar = {
     orgNombre: miembro.organizacion?.nombre ?? "Mi empresa",
