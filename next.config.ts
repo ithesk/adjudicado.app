@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   // esto, Next 16 bloquea los assets pedidos desde otro origen y la página
   // carga SIN JavaScript — nada interactivo funciona. Solo afecta a dev.
   // Si la IP del Mac cambia (DHCP), agregar la nueva aquí.
-  allowedDevOrigins: ["192.168.2.94"],
+  allowedDevOrigins: ["192.168.2.94", "192.168.2.107"],
   // El generador lee las plantillas del disco con rutas dinámicas: sin esto,
   // funciona en dev y explota en Vercel con ENOENT (el tracer no las ve).
   outputFileTracingIncludes: {

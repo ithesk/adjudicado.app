@@ -51,6 +51,32 @@ export default function CotizadorItems({
   // servidor falla, se revierte y sale el aviso.
   const [parches, setParches] = useState<Record<string, Partial<LicItem>>>({});
 
+  // Líneas recién creadas que el servidor todavía no devolvió en `items`: la
+  // action responde con la fila creada y se pinta YA. Antes el botón solo se
+  // deshabilitaba y la línea aparecía cuando terminaba el re-render completo
+  // de la página — se sentía como que no había pasado nada y se hacía clic
+  // otra vez. Se descartan en cuanto `items` las trae (o si se eliminan).
+  const [nuevas, setNuevas] = useState<LicItem[]>([]);
+  // Id de la última línea creada: su descripción recibe el cursor sola.
+  const [recienCreada, setRecienCreada] = useState<string | null>(null);
+
+  const agregando = ocupada("crear");
+
+  function agregarLinea() {
+    correr("crear", async () => {
+      const r = await crearItemAction(proceso.id);
+      if (r.item) {
+        setNuevas((n) => [...n, r.item as LicItem]);
+        setRecienCreada(r.item.id);
+      }
+      return r.error;
+    });
+  }
+
+  function olvidarNueva(id: string) {
+    setNuevas((n) => n.filter((x) => x.id !== id));
+  }
+
   // ARRASTRAR PARA REORDENAR: el orden local manda al instante (optimista)
   // mientras el servidor persiste; el orden en pantalla es el del F.033.
   const [ordenLocal, setOrdenLocal] = useState<string[] | null>(null);
@@ -59,14 +85,17 @@ export default function CotizadorItems({
 
   const mostrados = useMemo(() => {
     const conParche = items.map((i) => (parches[i.id] ? { ...i, ...parches[i.id] } : i));
-    if (!ordenLocal) return conParche;
-    const porId = new Map(conParche.map((i) => [i.id, i]));
+    // Las creadas que el servidor ya devolvió salen de la lista optimista.
+    const pendientes = nuevas.filter((n) => !items.some((i) => i.id === n.id));
+    const base = pendientes.length ? [...conParche, ...pendientes] : conParche;
+    if (!ordenLocal) return base;
+    const porId = new Map(base.map((i) => [i.id, i]));
     const enOrden = ordenLocal
       .map((id) => porId.get(id))
       .filter(Boolean) as LicItem[];
-    const nuevos = conParche.filter((i) => !ordenLocal.includes(i.id));
-    return [...enOrden, ...nuevos];
-  }, [items, ordenLocal, parches]);
+    const fuera = base.filter((i) => !ordenLocal.includes(i.id));
+    return [...enOrden, ...fuera];
+  }, [items, nuevas, ordenLocal, parches]);
 
   function soltarSobre(targetId: string) {
     const origen = arrastrando;
@@ -112,11 +141,11 @@ export default function CotizadorItems({
             )}
             <button
               type="button"
-              disabled={ocupada("crear")}
-              onClick={() => correr("crear", () => crearItemAction(proceso.id))}
+              disabled={agregando}
+              onClick={agregarLinea}
               className={btnPrimary("!px-2.5 !py-1 !text-[12.5px]")}
             >
-              {ocupada("crear") ? (
+              {agregando ? (
                 <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" strokeWidth={2.4} aria-hidden />
               ) : (
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
@@ -126,7 +155,7 @@ export default function CotizadorItems({
           </span>
         }
       >
-        Ítems ({items.length})
+        Ítems ({mostrados.length})
       </SectionTitle>
 
       {params.tasa === null && (
@@ -183,6 +212,7 @@ export default function CotizadorItems({
                 enDrag={arrastrando === item.id}
                 esDestino={sobre === item.id && arrastrando !== null && arrastrando !== item.id}
                 hayArrastre={arrastrando !== null}
+                enfocar={recienCreada === item.id}
                 buscando={buscandoEn === item.id}
                 setBuscando={(v) => setBuscandoEn(v ? item.id : null)}
                 onPatch={(p) => patch(item.id, p)}
@@ -198,28 +228,38 @@ export default function CotizadorItems({
                   correr(`it-${item.id}`, () => cotizarItemAction(item.id, o));
                 }}
                 onEliminar={() => {
-                  if (confirm(`¿Eliminar la línea ${item.numero}?`))
+                  if (confirm(`¿Eliminar la línea ${item.numero}?`)) {
+                    olvidarNueva(item.id);
                     correr(`it-${item.id}`, () => eliminarItemAction(item.id));
+                  }
                 }}
               />
             ))}
             {/* Agregar donde termina el ojo (patrón Odoo), no solo arriba. */}
-            {items.length > 0 && (
+            {mostrados.length > 0 && (
               <tr>
                 <td colSpan={8} className="px-2 py-1">
                   <button
                     type="button"
-                    disabled={ocupada("crear")}
-                    onClick={() => correr("crear", () => crearItemAction(proceso.id))}
-                    className="flex w-full items-center gap-1.5 rounded px-1.5 py-1.5 text-left text-[12.5px] font-medium text-primary transition-colors hover:bg-surface-2"
+                    disabled={agregando}
+                    onClick={agregarLinea}
+                    className="flex w-full items-center gap-1.5 rounded px-1.5 py-1.5 text-left text-[12.5px] font-medium text-primary transition-colors hover:bg-surface-2 disabled:cursor-wait disabled:text-muted"
                   >
-                    <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
-                    Agregar línea
+                    {agregando ? (
+                      <Loader2
+                        className="h-3.5 w-3.5 motion-safe:animate-spin"
+                        strokeWidth={2.4}
+                        aria-hidden
+                      />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" strokeWidth={2.4} aria-hidden />
+                    )}
+                    {agregando ? "Agregando…" : "Agregar línea"}
                   </button>
                 </td>
               </tr>
             )}
-            {items.length === 0 && (
+            {mostrados.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-8 text-center">
                   <p className="mb-3 text-sm text-muted">
@@ -228,11 +268,19 @@ export default function CotizadorItems({
                   </p>
                   <button
                     type="button"
-                    disabled={ocupada("crear")}
-                    onClick={() => correr("crear", () => crearItemAction(proceso.id))}
+                    disabled={agregando}
+                    onClick={agregarLinea}
                     className={btnPrimary()}
                   >
-                    <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                    {agregando ? (
+                      <Loader2
+                        className="h-4 w-4 motion-safe:animate-spin"
+                        strokeWidth={2.4}
+                        aria-hidden
+                      />
+                    ) : (
+                      <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+                    )}
                     Primera línea
                   </button>
                 </td>
@@ -251,6 +299,7 @@ export default function CotizadorItems({
             params={params}
             ocupada={ocupada(`it-${item.id}`)}
             ok={okClave === `it-${item.id}`}
+            enfocar={recienCreada === item.id}
             buscando={buscandoEn === item.id}
             setBuscando={(v) => setBuscandoEn(v ? item.id : null)}
             onPatch={(p) => patch(item.id, p)}
@@ -259,26 +308,36 @@ export default function CotizadorItems({
               correr(`it-${item.id}`, () => cotizarItemAction(item.id, o));
             }}
             onEliminar={() => {
-              if (confirm(`¿Eliminar la línea ${item.numero}?`))
+              if (confirm(`¿Eliminar la línea ${item.numero}?`)) {
+                olvidarNueva(item.id);
                 correr(`it-${item.id}`, () => eliminarItemAction(item.id));
+              }
             }}
           />
         ))}
         <div className="px-4 py-2">
           <button
             type="button"
-            disabled={ocupada("crear")}
-            onClick={() => correr("crear", () => crearItemAction(proceso.id))}
-            className="flex w-full items-center gap-1.5 rounded px-1.5 py-2 text-left text-[13px] font-medium text-primary transition-colors hover:bg-surface-2"
+            disabled={agregando}
+            onClick={agregarLinea}
+            className="flex w-full items-center gap-1.5 rounded px-1.5 py-2 text-left text-[13px] font-medium text-primary transition-colors hover:bg-surface-2 disabled:cursor-wait disabled:text-muted"
           >
-            <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
-            {items.length === 0 ? "Primera línea" : "Agregar línea"}
+            {agregando ? (
+              <Loader2 className="h-4 w-4 motion-safe:animate-spin" strokeWidth={2.4} aria-hidden />
+            ) : (
+              <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
+            )}
+            {agregando
+              ? "Agregando…"
+              : mostrados.length === 0
+                ? "Primera línea"
+                : "Agregar línea"}
           </button>
         </div>
       </div>
 
       {/* Totales, estilo cotización */}
-      {items.length > 0 && (
+      {mostrados.length > 0 && (
         <div className="flex justify-end border-t border-line px-4 py-3">
           <table className="text-right font-mono text-[13px]">
             <tbody>
@@ -316,6 +375,7 @@ function Linea({
   enDrag,
   esDestino,
   hayArrastre,
+  enfocar,
   buscando,
   setBuscando,
   onPatch,
@@ -334,6 +394,8 @@ function Linea({
   enDrag: boolean;
   esDestino: boolean;
   hayArrastre: boolean;
+  /** Recién creada: el cursor cae solo en la descripción (una vez). */
+  enfocar: boolean;
   buscando: boolean;
   setBuscando: (v: boolean) => void;
   onPatch: (p: Parameters<typeof actualizarItemAction>[1]) => void;
@@ -345,6 +407,9 @@ function Linea({
   onEliminar: () => void;
 }) {
   const filaRef = useRef<HTMLTableRowElement>(null);
+  // El ref del textarea corre en cada render: sin este candado, la línea nueva
+  // se robaría el cursor cada vez que la tabla se repinta (mientras tecleas).
+  const yaEnfocada = useRef(false);
   const t = totalesItem(item, params.itbisPct);
   const descartado = !item.ofertamos;
 
@@ -404,6 +469,10 @@ function Linea({
               if (el) {
                 el.style.height = "auto";
                 el.style.height = `${el.scrollHeight}px`;
+                if (enfocar && !yaEnfocada.current) {
+                  yaEnfocada.current = true;
+                  el.focus();
+                }
               }
             }}
             onInput={(e) => {
@@ -586,6 +655,7 @@ function TarjetaLinea({
   params,
   ocupada,
   ok,
+  enfocar,
   buscando,
   setBuscando,
   onPatch,
@@ -596,12 +666,15 @@ function TarjetaLinea({
   params: ParamsCotizacion;
   ocupada: boolean;
   ok: boolean;
+  /** Recién creada: el cursor cae solo en la descripción (una vez). */
+  enfocar: boolean;
   buscando: boolean;
   setBuscando: (v: boolean) => void;
   onPatch: (p: Parameters<typeof actualizarItemAction>[1]) => void;
   onCotizar: (o: { suplidor_id: string; sku: string; costo_usd: number }) => void;
   onEliminar: () => void;
 }) {
+  const yaEnfocada = useRef(false);
   const t = totalesItem(item, params.itbisPct);
   const descartado = !item.ofertamos;
 
@@ -632,6 +705,10 @@ function TarjetaLinea({
           if (el) {
             el.style.height = "auto";
             el.style.height = `${el.scrollHeight}px`;
+            if (enfocar && !yaEnfocada.current) {
+              yaEnfocada.current = true;
+              el.focus();
+            }
           }
         }}
         onInput={(e) => {

@@ -8,6 +8,45 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-24 — «El sistema corre pesado»: la sesión se pedía 6 veces por página
+
+Pablo: agregar una línea en el cotizador «parece que no hizo nada» y hay que
+hacer clic varias veces; y la app entera se siente lenta. Dos cosas distintas.
+
+**La causa de fondo (afecta a TODA la app).** `getMembresias()` no estaba
+memoizada, y `auth.getUser()` de Supabase **no es local**: es un viaje de red
+para validar el JWT. Cada consulta que pedía la membresía lo repetía. Solo el
+layout hacía cinco en fila —`requireMiembro` (que llama a `getUser` **y** a
+`getMiembro`), `getMembresias`, `listarOrdenes`, `listarDocsEmpresa`— más el
+de `listarInstituciones` en la página: ~6 viajes a Supabase Auth + 5 selects
+de `miembro` **antes del primer dato real**, y todo secuencial. Cada guardado
+que refresca la página los pagaba otra vez.
+Fix: `cache()` de React en `getUser`, `getMembresias`, `getMiembro` y
+`orgActivaLigera` (el patrón de DAL que recomienda la doc de Next 16) → 1 vez
+por request. Y el layout dejó de encadenar sus consultas: `requireMiembro`
+primero (decide el redirect) y `getMembresias`/`listarOrdenes`/`listarDocsEmpresa`
+en `Promise.all`.
+
+**«Agregar línea» sin indicador.** El botón de abajo —el que se usa— solo se
+ponía `disabled`, sin cambio visible, y la fila aparecía cuando terminaba el
+re-render completo del proceso. Se sentía muerto, se hacía clic de nuevo.
+Ahora: `crearItem` devuelve **la fila creada** (antes solo el error), el
+cotizador la pinta al instante en `nuevas[]` y le pone el cursor en la
+descripción; los tres botones muestran spinner + «Agregando…». Las líneas
+optimistas se descartan cuando el servidor las devuelve en `items` — y también
+al eliminarlas (si no, la copia local reaparecía cuando el id salía de `items`).
+`crearItem` pasó a `orgActivaLigera()` (0 viajes de red; el insert lo protege
+la RLS `with check (es_miembro(org_id))`) — la excepción está anotada en la
+cabecera de queries.ts.
+
+De paso: `allowedDevOrigins` suma la IP de la máquina nueva (192.168.2.107).
+
+Verificado: tsc + eslint + 97 tests + `next build` en verde. **Falta probarlo
+con sesión real** (todo lo tocado corre autenticado) — el dev server quedó
+levantado en localhost:3000.
+
+---
+
 ## 2026-07-23 (8) — TRASPASO DE MÁQUINA: estado exacto y pendientes
 
 Pablo se mueve de PC. Para retomar en una sesión nueva SIN re-explicar:

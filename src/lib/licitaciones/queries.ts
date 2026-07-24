@@ -1,6 +1,12 @@
 // Capa de datos del módulo de Licitaciones. Lecturas con orgActivaLigera()
 // (el guard real es la RLS es_miembro); mutaciones con getMiembro() y el
 // .eq("org_id") defensivo. Las mutaciones devuelven string | null (error).
+//
+// Excepción medida: crearItem() usa orgActivaLigera(). getMiembro() cuesta un
+// viaje de red a Supabase Auth, y en una server action nada lo tiene ya
+// resuelto — se pagaba entero en el clic de «Agregar línea». El insert lo
+// protege la RLS (`with check (es_miembro(org_id))`), así que un org_id
+// falsificado en la cookie lo rechaza SQL, no la cookie.
 
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
@@ -318,10 +324,14 @@ export async function eliminarProceso(id: string): Promise<string | null> {
 
 // ===== Ítems =====
 
-export async function crearItem(procesoId: string): Promise<string | null> {
-  if (isDemo()) return "En modo demo no se guardan cambios.";
-  const miembro = await getMiembro();
-  if (!miembro) return "No autorizado.";
+// Devuelve la línea CREADA (no solo el error): el cotizador la pinta al
+// instante en vez de esperar a que el servidor vuelva a renderizar la página.
+export async function crearItem(
+  procesoId: string,
+): Promise<{ item: LicItem | null; error: string | null }> {
+  if (isDemo()) return { item: null, error: "En modo demo no se guardan cambios." };
+  const orgId = await orgActivaLigera();
+  if (!orgId) return { item: null, error: "No autorizado." };
   const supabase = await createClient();
   const { data: max } = await supabase
     .from("lic_item")
@@ -330,14 +340,19 @@ export async function crearItem(procesoId: string): Promise<string | null> {
     .order("numero", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const { error } = await supabase.from("lic_item").insert({
-    org_id: miembro.org_id,
-    proceso_id: procesoId,
-    numero: (max?.numero ?? 0) + 1,
-    spec_cruda: "",
-    orden_indice: max?.numero ?? 0,
-  });
-  return error ? `No se pudo agregar el ítem: ${error.message}` : null;
+  const { data, error } = await supabase
+    .from("lic_item")
+    .insert({
+      org_id: orgId,
+      proceso_id: procesoId,
+      numero: (max?.numero ?? 0) + 1,
+      spec_cruda: "",
+      orden_indice: max?.numero ?? 0,
+    })
+    .select("*")
+    .single();
+  if (error) return { item: null, error: `No se pudo agregar el ítem: ${error.message}` };
+  return { item: data as LicItem, error: null };
 }
 
 export async function actualizarItem(
