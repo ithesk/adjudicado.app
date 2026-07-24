@@ -213,7 +213,13 @@ export default function RequisitosPanel({
                     toggleRequisitoSubsanacionAction(r.id, marcar ? subsanacionId : null),
                   )
                 }
-                onPatch={(patch) => correr(`req-${r.id}`, () => actualizarRequisitoAction(r.id, patch))}
+                onPatch={(patch) =>
+                  correr(`req-${r.id}`, () => actualizarRequisitoAction(r.id, patch), {
+                    // Las respuestas de la plantilla comparten la clave de la
+                    // fila: sin cola, la segunda se descartaba en silencio.
+                    encolar: true,
+                  })
+                }
                 onSubir={(fd) => correr(`subir-${r.id}`, () => subirArchivoRequisitoAction(r.id, fd))}
                 onGenerarSolo={() => generarSolo(r.codigo)}
                 generandoSolo={generandoSolo === r.codigo}
@@ -473,6 +479,13 @@ function FilaRequisito({
   generandoSolo: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  // Respuestas ya tecleadas que el servidor todavía no devolvió en `r.datos`.
+  // `datos` es UNA columna jsonb: cada guardado manda el objeto entero, así
+  // que si el segundo campo se arma con el `r.datos` viejo (el refresh aún no
+  // llegó) BORRA la respuesta del primero. Se merge sobre lo local, no sobre
+  // la prop.
+  const [respuestas, setRespuestas] = useState<Record<string, string>>({});
+  const datosVivos = { ...(r.datos ?? {}), ...respuestas };
   const critico = !r.subsanable;
   const pendienteEstado = r.estado === "pendiente";
   const estandar = requisitoEstandar(r.codigo);
@@ -659,7 +672,7 @@ function FilaRequisito({
       {preguntas.length > 0 && (
         <div className="ml-5 mt-1.5 grid gap-1.5 sm:grid-cols-2">
           {preguntas.map((p) => {
-            const valor = r.datos?.[p.clave] ?? "";
+            const valor = datosVivos[p.clave] ?? "";
             return (
               <label key={p.clave} className="block">
                 <span className={`text-[11px] ${valor ? "text-muted" : "font-semibold text-warn"}`}>
@@ -671,7 +684,9 @@ function FilaRequisito({
                   placeholder={p.etiqueta}
                   onBlur={(e) => {
                     const v = e.target.value.trim();
-                    if (v !== valor) onPatch({ datos: { ...r.datos, [p.clave]: v } });
+                    if (v === valor) return;
+                    setRespuestas((prev) => ({ ...prev, [p.clave]: v }));
+                    onPatch({ datos: { ...datosVivos, [p.clave]: v } });
                   }}
                   className={`${inputSm} w-full`}
                 />

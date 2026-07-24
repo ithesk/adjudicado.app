@@ -8,6 +8,36 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-24 (3) — Barrido: quedaba UN formulario con el mismo fallo (y peor)
+
+Pablo pidió revisar si el descarte silencioso estaba en más sitios. Barrido de
+los 21 componentes cliente que persisten campos:
+
+- **Los que usan `useAccion`** (7): todos tenían el fallo y ya llevan
+  `encolar`. Faltaba **RequisitosPanel** (`onPatch`, clave `req-<id>`), que
+  además traía una **trampa**: las respuestas de la plantilla viven en UNA
+  columna jsonb `datos`, y cada guardado manda el objeto entero armado con
+  `{...r.datos}` — la prop del servidor. Al contestar dos preguntas seguidas,
+  la segunda se armaba con el `r.datos` viejo (el refresh no había llegado) y
+  **borraba la primera**. Hoy no se veía porque el guard la descartaba: poner
+  la cola sin más lo habría empeorado, cambiando "se pierde la segunda" por
+  "se pierde la primera". Arreglado con respuestas locales (`datosVivos`), el
+  mismo patrón optimista del cotizador.
+- **Los que no usan `useAccion`** (ItemsPanel, PlazosPanel, BitacoraPanel,
+  GruposEditor, el Editor de plantillas, DocsEmpresa…): **ninguno descarta**.
+  Persisten con `startTransition` sin guard, o mandan el estado completo con
+  debounce (Editor). Sin bug de esta clase.
+
+El turnero salió de `useAccion` a `lib/cola-acciones.ts` (`TurnoPorClave`) y
+tiene 7 tests: descarta el 2.º clic de un botón, encola los campos de un
+autosave en orden, mantiene la clave ocupada mientras drena y libera al final.
+Total 104 tests. No hay infra para testear hooks (ni jsdom ni testing-library),
+así que la lógica se probó sacándola de React, no montando el hook.
+
+Anotado como regla: **clave compartida + autosave ⇒ `encolar: true`**.
+
+---
+
 ## 2026-07-24 (2) — Los datos de la empresa nueva NO se perdieron: se descartaban en el navegador
 
 Pablo creó otra empresa con otro usuario, llenó Configuración → Empresa y al
