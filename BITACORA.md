@@ -8,6 +8,38 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-28 — Correo en copia (CC) a la bitácora de la orden: ya existía, pero solo miraba el «Para»
+
+Pablo: mucha coordinación post-OC pasa por correo; quiere poner al sistema en
+copia y que eso alimente la bitácora de la orden. Resulta que **la función ya
+estaba construida** (commit 345fc78): cada orden tiene un buzón único
+`oc-<8 chars>@<INBOUND_DOMAIN>` (columna `orden.buzon`, trigger en la BD), la
+página de la orden lo muestra con botón de copiar (BuzonOrden.tsx), y
+`/api/correo-entrante` recibe el webhook (formato Resend Inbound o plano),
+valida `INBOUND_SECRET` y escribe la entrada tipo "correo" + adjuntos (máx 5,
+10 MB c/u) al bucket `documentos`.
+
+**El bug**: el endpoint solo miraba el PRIMER destinatario del «Para». En el
+caso de uso real —escribirle a la entidad con el buzón EN COPIA— el buzón va
+en `cc` (o segundo en `to`) y el correo se perdía con «Buzón no reconocido».
+
+- Ahora busca el patrón en TODAS las direcciones: `to` + `cc` + `bcc`.
+- `extraerEmail` acepta el formato string `"Nombre <email>"` (antes solo
+  objetos `{email}` o el email pelado).
+- Texto de la UI actualizado: «Ponla en copia (CC)… o reenvíale correos».
+
+Probado contra el dev con 3 payloads (buzón en cc como objeto, segundo en to
+como string con ángulos, y sin buzón): los dos primeros ya extraen el código,
+el tercero sigue en 404 «Buzón no reconocido». tsc + eslint + 104 tests OK.
+
+**Pendiente (lado Pablo, fuera del código)** para que funcione en producción:
+1. Resend Inbound configurado para el dominio (`INBOUND_DOMAIN`, hoy
+   `rkids.space` en .env.local — decidir si ese es el definitivo o un
+   subdominio de adjudica.do): registros MX del dominio apuntando a Resend.
+2. Webhook de Resend apuntando a
+   `https://adjudicado-app.vercel.app/api/correo-entrante?secret=<INBOUND_SECRET>`.
+3. `INBOUND_SECRET` e `INBOUND_DOMAIN` en las env vars de Vercel Production.
+
 ## 2026-07-24 (4) — Subir documentos: el segundo tope de tamaño, el que nadie ve
 
 Pablo: error al subir un documento. En el log del dev:
