@@ -10,6 +10,12 @@ oficial idéntico; solo cambia el texto de las instrucciones por los tags).
 Reproducible: cuando la DGCP actualice una plantilla, se re-descarga el
 original y se corre esto de nuevo.
 
+⚠️ OJO: las -tpl committeadas tienen ediciones POSTERIORES a este script que
+aquí no están reproducidas (e8635c2: {%logo_institucion} en los recuadros de
+logo y el bloque de firma/sello del F.042). Regenerar HOY pierde eso — los
+tests de generador.test.ts lo detectan. Antes de regenerar, portar esos pasos
+a este script.
+
 Detalles espinosos que este script resuelve:
 - Word parte el texto en "runs" arbitrarios; el reemplazo se hace sobre el
   texto reconstruido de cada párrafo, editando los runs quirúrgicamente
@@ -29,6 +35,9 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+WPS = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+V = "urn:schemas-microsoft-com:vml"
 NS = {"w": W}
 DIR = Path(__file__).resolve().parent.parent / "plantillas" / "dgcp"
 
@@ -249,6 +258,33 @@ def limpiar_formato_de_tags(root):
                 rpr.remove(el)
 
 
+def autoajustar_cajas_con_tags(root):
+    """Los formularios oficiales traen los datos de cabecera (institución,
+    fecha, expediente) en cuadros de texto FLOTANTES de tamaño fijo y con
+    <a:noAutofit> explícito: un nombre de institución más largo que el cuadro
+    (8,7 cm en el F.034/F.042) se recorta EN SILENCIO al rellenar. Todo cuadro
+    que contenga un marcador pasa a auto-ajustar su alto: con un dato largo el
+    cuadro crece hacia abajo en vez de tragarse el texto. El ancho no se toca
+    (regla de fidelidad: el formato oficial se respeta)."""
+    # Copia DrawingML (la que leen Word moderno y LibreOffice/Gotenberg).
+    for wsp in root.iter(f"{{{WPS}}}wsp"):
+        if "{" not in "".join(t.text or "" for t in wsp.iter(f"{{{W}}}t")):
+            continue
+        for body in wsp.iter(f"{{{WPS}}}bodyPr"):
+            for na in body.findall(f"{{{A}}}noAutofit"):
+                body.remove(na)
+            if body.find(f"{{{A}}}spAutoFit") is None:
+                ET.SubElement(body, f"{{{A}}}spAutoFit")
+    # Copia VML (el fallback para Word viejo que acompaña a cada cuadro).
+    for shape in root.iter(f"{{{V}}}shape"):
+        if "{" not in "".join(t.text or "" for t in shape.iter(f"{{{W}}}t")):
+            continue
+        for tb in shape.iter(f"{{{V}}}textbox"):
+            estilo = tb.get("style") or ""
+            if "mso-fit-shape-to-text" not in estilo:
+                tb.set("style", (estilo + ";" if estilo else "") + "mso-fit-shape-to-text:t")
+
+
 def taggear_compromiso(root):
     """El Compromiso Ético oficial trae los espacios en orden fijo: se
     reemplazan secuencialmente. El último subrayado (la firma) se queda."""
@@ -310,6 +346,7 @@ def procesar(nombre, fn):
         for objetivo, tag in TEXTO_GLOBAL:
             reemplazar(root, objetivo, tag, todas=True)
         limpiar_formato_de_tags(root)
+        autoajustar_cajas_con_tags(root)
         serializado = ET.tostring(root, encoding="unicode")
         partes[parte] = restaurar_xmlns(xml, serializado).encode("utf8")
 
