@@ -8,6 +8,38 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-31 — El nombre de la institución seguía cortado: eran los sdt y una fuente fantasma
+
+Tras el primer arreglo (spAutoFit), Pablo reportó que en el F.034 el membrete
+seguía mostrando solo «Instituto». Reproducido con Gotenberg + renders PNG
+(nombres de 22, 62 y 87 caracteres): hasta «Ministerio de Hacienda» perdía
+palabras. Dos causas reales, ninguna era el tamaño del cuadro:
+
+1. **El sdt (control de contenido) envolviendo el marcador.** LibreOffice
+   maquetea fatal un sdt dentro de un cuadro de texto: cortes de línea
+   absurdos («Ministerio de», «Instit»…). Por eso fecha y expediente nunca
+   se cortaron: sus sdt ya los sustituía el tagger por texto plano
+   (SDT_GLOBAL); los de TEXTO_GLOBAL (institución, unidad funcional)
+   conservaban el envoltorio. Fix: `desenvolver_sdt_con_tags()` — todo sdt
+   cuyo contenido tenga un marcador queda reducido a sus runs.
+2. **Fuente «Arial Bold»** en Style6 (el estilo del membrete): esa familia
+   no existe; Word la resuelve a Arial+negrita pero LibreOffice la sustituye
+   por una serif con otras métricas (por eso el membrete salía en serif).
+   Fix: `arreglar_fuente_fantasma()` — «Arial Bold» → «Arial» en styles.xml
+   (la negrita ya viene en w:b).
+
+Ambos pasos añadidos a taggear-plantillas.py Y aplicados a las -tpl
+committeadas sin regenerar (mismo motivo que ayer: e8635c2). Afectó a
+F.033/034/042/047 (sdt + fuente) y F.040 (solo fuente). Verificado con
+render PNG final: F.034 y F.042 muestran «Instituto Nacional de Aguas
+Potables y Alcantarillados (INAPA)» completo en dos líneas limpias; 104
+tests OK; probar-relleno OK. Nombres de +85 caracteres pueden rozar el
+título en el F.034 — caso raro, se acepta.
+
+Método que valió oro: rellenar la plantilla con nombres de prueba de varios
+largos, convertir con el Gotenberg de producción y MIRAR el PNG — tres
+hipótesis plausibles (alto de fila, ancho de cuadro, autofit) eran falsas.
+
 ## 2026-07-31 — Cierre del experimento Cloudflare: nos quedamos en Vercel
 
 Pablo probó la app real en https://adjudicado-prueba.pholguin.workers.dev y

@@ -258,6 +258,44 @@ def limpiar_formato_de_tags(root):
                 rpr.remove(el)
 
 
+def desenvolver_sdt_con_tags(root):
+    """Los sdt (controles de contenido de Word) que quedan envolviendo un
+    marcador rompen el render en LibreOffice/Gotenberg: dentro de un cuadro
+    de texto, LO maquetea el sdt con anchos absurdos y el dato sale cortado
+    en pedazos («Ministerio de», «Instit»…). Los sdt de SDT_GLOBAL ya se
+    sustituyen por texto plano — por eso fecha y expediente nunca se cortaron —
+    pero los de TEXTO_GLOBAL (nombre de la institución, unidad funcional)
+    conservaban el envoltorio. Aquí se desenvuelve TODO sdt cuyo contenido
+    tenga un marcador: quedan solo sus runs (sin los runs vacíos de relleno
+    que Word deja dentro del control). Word renderiza igual; LO deja de
+    romperse."""
+    for padre in root.iter():
+        for hijo in list(padre):
+            if hijo.tag != f"{{{W}}}sdt":
+                continue
+            if "{" not in "".join(t.text or "" for t in hijo.iter(f"{{{W}}}t")):
+                continue
+            contenido = hijo.find(f"{{{W}}}sdtContent")
+            if contenido is None:
+                continue
+            idx = list(padre).index(hijo)
+            padre.remove(hijo)
+            for el in list(contenido):
+                if el.tag == f"{{{W}}}r" and not "".join(t.text or "" for t in el.iter(f"{{{W}}}t")):
+                    continue  # run vacío de relleno del control
+                padre.insert(idx, el)
+                idx += 1
+
+
+def arreglar_fuente_fantasma(xml):
+    """Los formularios DGCP declaran la fuente «Arial Bold» — un nombre de
+    familia que no existe: Word lo resuelve a Arial+negrita, pero LibreOffice
+    lo sustituye por una serif con OTRAS métricas y el membrete sale en la
+    fuente equivocada y con cortes de línea absurdos. Se declara Arial (la
+    negrita ya viene en <w:b/>)."""
+    return xml.replace('"Arial Bold"', '"Arial"')
+
+
 def autoajustar_cajas_con_tags(root):
     """Los formularios oficiales traen los datos de cabecera (institución,
     fecha, expediente) en cuadros de texto FLOTANTES de tamaño fijo y con
@@ -346,9 +384,15 @@ def procesar(nombre, fn):
         for objetivo, tag in TEXTO_GLOBAL:
             reemplazar(root, objetivo, tag, todas=True)
         limpiar_formato_de_tags(root)
+        desenvolver_sdt_con_tags(root)
         autoajustar_cajas_con_tags(root)
         serializado = ET.tostring(root, encoding="unicode")
         partes[parte] = restaurar_xmlns(xml, serializado).encode("utf8")
+
+    if "word/styles.xml" in partes:
+        partes["word/styles.xml"] = arreglar_fuente_fantasma(
+            partes["word/styles.xml"].decode("utf8")
+        ).encode("utf8")
 
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
         for n, data in partes.items():
