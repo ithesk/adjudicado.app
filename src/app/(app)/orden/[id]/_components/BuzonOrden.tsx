@@ -65,7 +65,8 @@ export default function BuzonOrden({ buzon, dominio }: BuzonOrdenProps) {
 
       {/* Texto explicativo */}
       <p className="text-[11px] text-muted">
-        Reenvía correos a esta dirección y quedan en la bitácora.
+        Ponla en copia (CC) al escribir a la entidad — o reenvíale correos — y
+        quedan en la bitácora.
       </p>
     </div>
   );

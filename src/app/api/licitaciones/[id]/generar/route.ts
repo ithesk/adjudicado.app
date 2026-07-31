@@ -382,7 +382,10 @@ export async function GET(
         // cuando cambia cómo se imprimen los documentos (no solo qué datos).
         // v5: logo institucional en TODOS los formularios del sistema y
         // firma/sello al pie del F.042.
-        motor: 5,
+        // v6: plantillas DGCP corregidas (membrete sin sdt, fuente Arial
+        // real, autoajuste de cuadros) — el nombre de la institución salía
+        // cortado; los paquetes viejos deben regenerarse.
+        motor: 6,
         formato,
         unir,
         // El F.040 pinta el logo de la entidad y el historial adjudicado:

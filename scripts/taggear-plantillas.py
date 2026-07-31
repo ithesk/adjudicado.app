@@ -10,6 +10,12 @@ oficial idéntico; solo cambia el texto de las instrucciones por los tags).
 Reproducible: cuando la DGCP actualice una plantilla, se re-descarga el
 original y se corre esto de nuevo.
 
+⚠️ OJO: las -tpl committeadas tienen ediciones POSTERIORES a este script que
+aquí no están reproducidas (e8635c2: {%logo_institucion} en los recuadros de
+logo y el bloque de firma/sello del F.042). Regenerar HOY pierde eso — los
+tests de generador.test.ts lo detectan. Antes de regenerar, portar esos pasos
+a este script.
+
 Detalles espinosos que este script resuelve:
 - Word parte el texto en "runs" arbitrarios; el reemplazo se hace sobre el
   texto reconstruido de cada párrafo, editando los runs quirúrgicamente
@@ -29,6 +35,9 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+WPS = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+V = "urn:schemas-microsoft-com:vml"
 NS = {"w": W}
 DIR = Path(__file__).resolve().parent.parent / "plantillas" / "dgcp"
 
@@ -249,6 +258,71 @@ def limpiar_formato_de_tags(root):
                 rpr.remove(el)
 
 
+def desenvolver_sdt_con_tags(root):
+    """Los sdt (controles de contenido de Word) que quedan envolviendo un
+    marcador rompen el render en LibreOffice/Gotenberg: dentro de un cuadro
+    de texto, LO maquetea el sdt con anchos absurdos y el dato sale cortado
+    en pedazos («Ministerio de», «Instit»…). Los sdt de SDT_GLOBAL ya se
+    sustituyen por texto plano — por eso fecha y expediente nunca se cortaron —
+    pero los de TEXTO_GLOBAL (nombre de la institución, unidad funcional)
+    conservaban el envoltorio. Aquí se desenvuelve TODO sdt cuyo contenido
+    tenga un marcador: quedan solo sus runs (sin los runs vacíos de relleno
+    que Word deja dentro del control). Word renderiza igual; LO deja de
+    romperse."""
+    for padre in root.iter():
+        for hijo in list(padre):
+            if hijo.tag != f"{{{W}}}sdt":
+                continue
+            if "{" not in "".join(t.text or "" for t in hijo.iter(f"{{{W}}}t")):
+                continue
+            contenido = hijo.find(f"{{{W}}}sdtContent")
+            if contenido is None:
+                continue
+            idx = list(padre).index(hijo)
+            padre.remove(hijo)
+            for el in list(contenido):
+                if el.tag == f"{{{W}}}r" and not "".join(t.text or "" for t in el.iter(f"{{{W}}}t")):
+                    continue  # run vacío de relleno del control
+                padre.insert(idx, el)
+                idx += 1
+
+
+def arreglar_fuente_fantasma(xml):
+    """Los formularios DGCP declaran la fuente «Arial Bold» — un nombre de
+    familia que no existe: Word lo resuelve a Arial+negrita, pero LibreOffice
+    lo sustituye por una serif con OTRAS métricas y el membrete sale en la
+    fuente equivocada y con cortes de línea absurdos. Se declara Arial (la
+    negrita ya viene en <w:b/>)."""
+    return xml.replace('"Arial Bold"', '"Arial"')
+
+
+def autoajustar_cajas_con_tags(root):
+    """Los formularios oficiales traen los datos de cabecera (institución,
+    fecha, expediente) en cuadros de texto FLOTANTES de tamaño fijo y con
+    <a:noAutofit> explícito: un nombre de institución más largo que el cuadro
+    (8,7 cm en el F.034/F.042) se recorta EN SILENCIO al rellenar. Todo cuadro
+    que contenga un marcador pasa a auto-ajustar su alto: con un dato largo el
+    cuadro crece hacia abajo en vez de tragarse el texto. El ancho no se toca
+    (regla de fidelidad: el formato oficial se respeta)."""
+    # Copia DrawingML (la que leen Word moderno y LibreOffice/Gotenberg).
+    for wsp in root.iter(f"{{{WPS}}}wsp"):
+        if "{" not in "".join(t.text or "" for t in wsp.iter(f"{{{W}}}t")):
+            continue
+        for body in wsp.iter(f"{{{WPS}}}bodyPr"):
+            for na in body.findall(f"{{{A}}}noAutofit"):
+                body.remove(na)
+            if body.find(f"{{{A}}}spAutoFit") is None:
+                ET.SubElement(body, f"{{{A}}}spAutoFit")
+    # Copia VML (el fallback para Word viejo que acompaña a cada cuadro).
+    for shape in root.iter(f"{{{V}}}shape"):
+        if "{" not in "".join(t.text or "" for t in shape.iter(f"{{{W}}}t")):
+            continue
+        for tb in shape.iter(f"{{{V}}}textbox"):
+            estilo = tb.get("style") or ""
+            if "mso-fit-shape-to-text" not in estilo:
+                tb.set("style", (estilo + ";" if estilo else "") + "mso-fit-shape-to-text:t")
+
+
 def taggear_compromiso(root):
     """El Compromiso Ético oficial trae los espacios en orden fijo: se
     reemplazan secuencialmente. El último subrayado (la firma) se queda."""
@@ -310,8 +384,15 @@ def procesar(nombre, fn):
         for objetivo, tag in TEXTO_GLOBAL:
             reemplazar(root, objetivo, tag, todas=True)
         limpiar_formato_de_tags(root)
+        desenvolver_sdt_con_tags(root)
+        autoajustar_cajas_con_tags(root)
         serializado = ET.tostring(root, encoding="unicode")
         partes[parte] = restaurar_xmlns(xml, serializado).encode("utf8")
+
+    if "word/styles.xml" in partes:
+        partes["word/styles.xml"] = arreglar_fuente_fantasma(
+            partes["word/styles.xml"].decode("utf8")
+        ).encode("utf8")
 
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
         for n, data in partes.items():

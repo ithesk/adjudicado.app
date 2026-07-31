@@ -25,6 +25,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import { avisoError } from "@/lib/avisos";
+import { TurnoPorClave } from "@/lib/cola-acciones";
 
 export type EstadoAccion = "idle" | "guardando" | "ok";
 
@@ -43,6 +44,8 @@ type OpcionesAccion = {
   encolar?: boolean;
 };
 
+type Turno = { fn: () => Promise<string | null>; opts: OpcionesAccion };
+
 export function useAccion() {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -52,32 +55,24 @@ export function useAccion() {
   // Última acción confirmada — para el check junto al campo que se editó.
   const [okClave, setOkClave] = useState<string | null>(null);
   const timerOk = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Quién corre AHORA. Va en ref, no en estado: dos blur seguidos (Tab, Tab)
-  // ocurren antes de que React vuelva a renderizar, y con el estado el
-  // segundo veía la clave libre.
-  const enCurso = useRef<Set<string>>(new Set());
-  const colas = useRef<Map<string, { fn: () => Promise<string | null>; opts: OpcionesAccion }[]>>(
-    new Map(),
-  );
+  // Quién corre AHORA y quién espera. Va en ref, no en estado: dos blur
+  // seguidos (Tab, Tab) ocurren antes de que React vuelva a renderizar, y con
+  // el estado el segundo veía la clave libre. La lógica vive aparte y está
+  // probada en cola-acciones.test.ts.
+  const turnos = useRef(new TurnoPorClave<Turno>());
 
   function correr(
     clave: string,
     fn: () => Promise<string | null>,
     opts: OpcionesAccion = {},
   ) {
-    if (enCurso.current.has(clave)) {
-      if (!opts.encolar) return; // anti doble-clic (botones)
-      const cola = colas.current.get(clave) ?? [];
-      cola.push({ fn, opts });
-      colas.current.set(clave, cola);
-      return;
+    if (turnos.current.pedir(clave, { fn, opts }, opts.encolar === true) === "correr") {
+      lanzar(clave, fn, opts);
     }
-    lanzar(clave, fn, opts);
   }
 
   function lanzar(clave: string, fn: () => Promise<string | null>, opts: OpcionesAccion) {
-    enCurso.current.add(clave);
-    setOcupadas(new Set(enCurso.current));
+    setOcupadas(turnos.current.ocupadas());
     setError(null);
     setEstado("guardando");
     startTransition(async () => {
@@ -97,16 +92,13 @@ export function useAccion() {
       // ¿Alguien esperaba turno en esta clave? Corre ahora, sin soltarla (así
       // el indicador sigue en "guardando" y el refresh se hace una sola vez,
       // al final de la tanda).
-      const cola = colas.current.get(clave);
-      const siguiente = cola?.shift();
-      if (cola && cola.length === 0) colas.current.delete(clave);
+      const siguiente = turnos.current.siguiente(clave);
       if (siguiente) {
         lanzar(clave, siguiente.fn, siguiente.opts);
         return;
       }
 
-      enCurso.current.delete(clave);
-      setOcupadas(new Set(enCurso.current));
+      setOcupadas(turnos.current.ocupadas());
       if (!err) {
         setEstado("ok");
         setOkClave(clave);

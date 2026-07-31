@@ -8,6 +8,287 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-31 — Nombres largos de institución: la letra del membrete se encoge sola
+
+Pablo: «estas instituciones tienen la mayoría nombres largos, tienes que
+estar preparado para eso». Con razón: consultada la tabla `institucion`
+real (31 filas), la más larga es OGTIC con 71 caracteres — y el render
+mostró que a 12 pt su segunda línea chocaba con el título del F.034. No
+era un caso raro: 4 de 31 pasan de 53 chars (el máximo que cabe cómodo).
+
+Arreglo en `encogerNombreLargoEnMembrete()` (generador.ts, tras el render):
+como haría un humano llenando el formulario, la letra del membrete baja
+según el largo del nombre — ≤53 chars: 12 pt oficial; ≤84: 10 pt; ≤105:
+8 pt; más: 7 pt. Solo aplica DENTRO de cuadros de texto (w:txbxContent);
+el cuerpo («Señores …») envuelve bien y conserva su tamaño. Verificado con
+render PNG vía Gotenberg: OGTIC (71) en dos líneas limpias a 10 pt y un
+nombre de 87 chars en una línea a 8 pt, sin tocar el título. 107 tests
+(3 nuevos). La huella motor ya estaba en v6, así que los paquetes viejos
+se regeneran solos con esto.
+
+## 2026-07-31 — El nombre de la institución seguía cortado: eran los sdt y una fuente fantasma
+
+Tras el primer arreglo (spAutoFit), Pablo reportó que en el F.034 el membrete
+seguía mostrando solo «Instituto». Reproducido con Gotenberg + renders PNG
+(nombres de 22, 62 y 87 caracteres): hasta «Ministerio de Hacienda» perdía
+palabras. Dos causas reales, ninguna era el tamaño del cuadro:
+
+1. **El sdt (control de contenido) envolviendo el marcador.** LibreOffice
+   maquetea fatal un sdt dentro de un cuadro de texto: cortes de línea
+   absurdos («Ministerio de», «Instit»…). Por eso fecha y expediente nunca
+   se cortaron: sus sdt ya los sustituía el tagger por texto plano
+   (SDT_GLOBAL); los de TEXTO_GLOBAL (institución, unidad funcional)
+   conservaban el envoltorio. Fix: `desenvolver_sdt_con_tags()` — todo sdt
+   cuyo contenido tenga un marcador queda reducido a sus runs.
+2. **Fuente «Arial Bold»** en Style6 (el estilo del membrete): esa familia
+   no existe; Word la resuelve a Arial+negrita pero LibreOffice la sustituye
+   por una serif con otras métricas (por eso el membrete salía en serif).
+   Fix: `arreglar_fuente_fantasma()` — «Arial Bold» → «Arial» en styles.xml
+   (la negrita ya viene en w:b).
+
+Ambos pasos añadidos a taggear-plantillas.py Y aplicados a las -tpl
+committeadas sin regenerar (mismo motivo que ayer: e8635c2). Afectó a
+F.033/034/042/047 (sdt + fuente) y F.040 (solo fuente). Verificado con
+render PNG final: F.034 y F.042 muestran «Instituto Nacional de Aguas
+Potables y Alcantarillados (INAPA)» completo en dos líneas limpias; 104
+tests OK; probar-relleno OK. Nombres de +85 caracteres pueden rozar el
+título en el F.034 — caso raro, se acepta.
+
+Método que valió oro: rellenar la plantilla con nombres de prueba de varios
+largos, convertir con el Gotenberg de producción y MIRAR el PNG — tres
+hipótesis plausibles (alto de fila, ancho de cuadro, autofit) eran falsas.
+
+## 2026-07-31 — Cierre del experimento Cloudflare: nos quedamos en Vercel
+
+Pablo probó la app real en https://adjudicado-prueba.pholguin.workers.dev y
+paró la prueba: «la capacidad es muy limitada comparada con vercel». A los
+números (estáticas más lentas sin caché R2, dinámicas parejas) se sumó la
+operativa: límites del plan gratis (3 MiB de bundle — hubo que minificar para
+que cupieran las plantillas), sin cron nativo (habría que portar el de
+odoo-facturas a un Cron Trigger), y cada diferencia de runtime (fs virtual,
+middleware Edge) costó su adaptación. Sin ventaja clara de velocidad y con
+más fricción: se cierra.
+
+Queda: la rama `prueba-cloudflare` local como archivo (sin push, a propósito),
+y el worker `adjudicado-prueba` sigue desplegado — borrarlo cuando Pablo
+quiera con `pnpm exec wrangler delete` desde esa rama o en el dashboard. Las
+dos entradas de abajo (2026-07-29 y 07-30) vienen de esa rama y cuentan la
+historia completa. El fix de plantillas que destapó la prueba se trajo aquí
+por cherry-pick (entrada siguiente): pasaba igual en Vercel.
+
+## 2026-07-31 — F.034/F.042: el nombre de la institución salía cortado
+
+Segundo hallazgo de la prueba de Pablo (no es de Cloudflare: pasa igual en
+Vercel). Los formularios oficiales traen los datos de cabecera (institución,
+fecha, expediente) en **cuadros de texto flotantes de tamaño fijo** con
+`<a:noAutofit>` explícito — el de la institución mide 8,7 × 0,78 cm. Un nombre
+más largo que el cuadro se recorta EN SILENCIO al rellenar. Defecto heredado
+del .docx de la DGCP, visible ahora que se rellena automático.
+
+Arreglo: todo cuadro de texto que contenga un marcador `{…}` pasa a
+auto-ajustar su **alto** (`spAutoFit` en la copia DrawingML,
+`mso-fit-shape-to-text:t` en la VML): con un dato largo el cuadro crece hacia
+abajo en vez de tragarse el texto. El ancho no se toca (fidelidad al formato
+oficial). Afectó a F.034, F.042, F.033 y F.047 (estas dos últimas solo tienen
+la copia VML); las cajas de rótulos fijos («SNCC.F.034», «No. EXPEDIENTE»,
+numeración) quedan como estaban.
+
+Decisiones y trampas:
+- El paso vive en `autoajustar_cajas_con_tags()` dentro de
+  scripts/taggear-plantillas.py, pero se aplicó a las -tpl committeadas **sin
+  regenerar**: e8635c2 metió {%logo_institucion} y la firma del F.042 directo
+  en los .docx sin portarlo al tagger — regenerar hoy pierde eso (lo detectan
+  2 tests de generador.test.ts; me pasó y lo revertí). Advertencia añadida al
+  encabezado del script: antes de regenerar, portar esos pasos.
+- Verificado: 104 tests OK, probar-relleno.mjs rellena las 8 plantillas, el
+  .docx generado conserva el nombre completo y el spAutoFit.
+- Nació en la prueba de Cloudflare (rama prueba-cloudflare) y se trajo aquí
+  por cherry-pick al cerrar el experimento: el bug pasa igual en Vercel.
+
+## 2026-07-30 — Cloudflare: el generador no encontraba las plantillas .docx
+
+Primer bug real de la prueba manual de Pablo: al generar el expediente, el
+worker respondía «no such file or directory, readAll
+'/bundle/plantillas/dgcp/SNCC_F034_...-tpl.docx'».
+
+Causa: `generador.ts` lee las plantillas con `fs.readFileSync(process.cwd() +
+"/plantillas/...")`. En Vercel funciona porque `outputFileTracingIncludes` las
+mete en el paquete de la función. En workerd el «disco» es un sistema de
+archivos virtual donde `/bundle` contiene **solo los módulos subidos con el
+worker** — y wrangler solo subía JavaScript: los .docx que OpenNext copió a
+`.open-next/server-functions/.../plantillas/` nunca viajaron.
+
+Arreglo (cero cambios de código de la app):
+- wrangler.jsonc: `rules` tipo **Data** + `find_additional_modules` +
+  `base_dir: ".open-next"` → los .docx suben como módulos y quedan legibles
+  en `/bundle/plantillas/...`, la ruta exacta que arma el generador.
+- `pnpm cf:build` (script nuevo): build de OpenNext + copia de los `*-tpl.docx`
+  a `.open-next/plantillas/`. `pnpm cf:deploy` = build + deploy. **Siempre
+  desplegar con estos scripts**: un `opennextjs-cloudflare deploy` a secas tras
+  un build sin la copia vuelve a dar ENOENT.
+- La F047 (Autorización del fabricante) NO se copia: no está en GENERABLES
+  (es `via: "sube"`, la aporta el fabricante) y pesa 100 KiB.
+- Con las plantillas dentro, el bundle pasó del límite del plan gratis
+  (3196 KiB gzip > 3 MiB). `"minify": true` en wrangler.jsonc lo bajó a
+  **2794 KiB** — el bundle de OpenNext no venía minificado del todo.
+
+Desplegado (versión 5aa62e11, startup 25 ms), /login 200. Falta que Pablo
+repita «generar expediente» con sesión: eso confirma la lectura desde /bundle
+y de paso ejercita docxtemplater/pizzip en workerd.
+
+## 2026-07-29 — Experimento Cloudflare Workers (rama prueba-cloudflare, NO tocar Vercel)
+
+Pablo quiere probar si el front corre más rápido en Cloudflare, sin tocar el
+deploy de Vercel. Todo vive en la rama `prueba-cloudflare` (sin push: un push
+dispararía un preview deploy en Vercel, y la consigna era no tocarlo).
+
+Estado: **la app completa corre en workerd local** (el runtime real de
+Workers). Falta solo `wrangler login` (interactivo, lado Pablo) para el deploy
+a `adjudicado-prueba.<subdominio>.workers.dev`.
+
+Qué hizo falta:
+- `@opennextjs/cloudflare` 1.20.2 exige Next ≥16.2.11 → bump a 16.2.12.
+- pnpm 11 bloqueaba los binarios de esbuild/workerd → `allowBuilds` en
+  pnpm-workspace.yaml.
+- **proxy.ts → middleware.ts**: el proxy de Next 16 compila como función Node
+  y el adaptador solo soporta middleware Edge. El middleware.ts clásico
+  (deprecado pero funcional) compila a Edge. Mismo código, otro nombre.
+- wrangler.jsonc mínimo (sin R2: todo es force-dynamic, no hay ISR; sin
+  binding de imágenes: no se usa next/image) + open-next.config.ts default.
+- `.dev.vars` = copia de .env.local para el preview (gitignorado).
+
+Verificado en http://localhost:8787 (wrangler dev): /login 200 con HTML real,
+/ reescribe a /inicio, ruta privada → 307 /login (middleware + Supabase OK en
+workerd). Bundle: 2.7 MB gzip — cabe hasta en el plan GRATIS (límite 3 MB).
+
+Riesgos conocidos para funcionalidad completa (no para la prueba de velocidad):
+- cifrado.ts usa AES-256-GCM por node:crypto (Odoo) — soporte dudoso en workerd.
+- Rutas con CPU pesada (ZIP del generador, Excel 30 MB) vs límites de CPU.
+- El cron de vercel.json necesitaría un Cron Trigger de wrangler.
+
+Pasos para desplegar: `! pnpm exec wrangler login` y luego
+`pnpm exec opennextjs-cloudflare deploy` + `wrangler secret bulk` con las vars.
+Para volver al estado normal: `git checkout licitaciones-fase-3`.
+
+**DESPLEGADO** (mismo día): https://adjudicado-prueba.pholguin.workers.dev
+(cuenta pholguin@ithesk.com, plan gratis). Secretos subidos con `secret bulk`
+desde .env.local; se colaron 21 vars basura de Vercel/Turbo (incluido
+VERCEL_OIDC_TOKEN) — borradas del worker una a una.
+
+Primeras mediciones desde el Mac de Pablo (curl, /login y ruta con viaje a
+Supabase forzado con cookie sb- falsa):
+- El tráfico entra por ATL (cf-ray), no por el POP de Santo Domingo.
+- /login (estática): Vercel ~0.23s constante; CF 0.3–1.3s — sin R2 no hay
+  caché de prerender (`x-nextjs-cache: MISS` siempre, se renderiza cada vez).
+- Ruta dinámica con Supabase: parejos (CF mediana ~0.21s, Vercel ~0.27s) tras
+  activar `placement.mode: "smart"` (el worker se muda cerca de la BD; sin
+  esto el borde multiplica la latencia de cada consulta).
+- Un 404 transitorio durante el rollout de versiones (al borrar secretos);
+  después 10/10 en 200.
+
+Veredicto parcial: sin caché de estáticas Vercel gana en frío; en dinámicas
+van iguales. La prueba que vale: Pablo logueado desde su red/teléfono. Si el
+experimento avanza: R2 incremental cache + cache interception para estáticas.
+
+## 2026-07-28 — Correo en copia (CC) a la bitácora de la orden: ya existía, pero solo miraba el «Para»
+
+Pablo: mucha coordinación post-OC pasa por correo; quiere poner al sistema en
+copia y que eso alimente la bitácora de la orden. Resulta que **la función ya
+estaba construida** (commit 345fc78): cada orden tiene un buzón único
+`oc-<8 chars>@<INBOUND_DOMAIN>` (columna `orden.buzon`, trigger en la BD), la
+página de la orden lo muestra con botón de copiar (BuzonOrden.tsx), y
+`/api/correo-entrante` recibe el webhook (formato Resend Inbound o plano),
+valida `INBOUND_SECRET` y escribe la entrada tipo "correo" + adjuntos (máx 5,
+10 MB c/u) al bucket `documentos`.
+
+**El bug**: el endpoint solo miraba el PRIMER destinatario del «Para». En el
+caso de uso real —escribirle a la entidad con el buzón EN COPIA— el buzón va
+en `cc` (o segundo en `to`) y el correo se perdía con «Buzón no reconocido».
+
+- Ahora busca el patrón en TODAS las direcciones: `to` + `cc` + `bcc`.
+- `extraerEmail` acepta el formato string `"Nombre <email>"` (antes solo
+  objetos `{email}` o el email pelado).
+- Texto de la UI actualizado: «Ponla en copia (CC)… o reenvíale correos».
+
+Probado contra el dev con 3 payloads (buzón en cc como objeto, segundo en to
+como string con ángulos, y sin buzón): los dos primeros ya extraen el código,
+el tercero sigue en 404 «Buzón no reconocido». tsc + eslint + 104 tests OK.
+
+**Pendiente (lado Pablo, fuera del código)** para que funcione en producción:
+1. Resend Inbound configurado para el dominio (`INBOUND_DOMAIN`, hoy
+   `rkids.space` en .env.local — decidir si ese es el definitivo o un
+   subdominio de adjudica.do): registros MX del dominio apuntando a Resend.
+2. Webhook de Resend apuntando a
+   `https://adjudicado-app.vercel.app/api/correo-entrante?secret=<INBOUND_SECRET>`.
+3. `INBOUND_SECRET` e `INBOUND_DOMAIN` en las env vars de Vercel Production.
+
+## 2026-07-24 (4) — Subir documentos: el segundo tope de tamaño, el que nadie ve
+
+Pablo: error al subir un documento. En el log del dev:
+
+```
+Request body exceeded 10MB for /configuracion/empresa.
+⨯ Error: Unexpected end of form   → POST 500
+```
+
+Había DOS topes, no uno. `serverActions.bodySizeLimit: "20mb"` ya estaba
+puesto, pero **cuando hay proxy** (src/proxy.ts matchea todo salvo estáticos)
+Next copia el cuerpo a memoria para poder leerlo dos veces, y ese búfer son
+**10 MB por defecto** (`experimental.proxyClientMaxBodySize`). El PDF llegaba
+CORTADO a 10 MB: el multipart quedaba a medias, la action moría con
+"Unexpected end of form" y **nunca llegaba a la validación de tamaño**, así
+que en pantalla salía un 500 en vez de "pesa más de 15 MB". Peor: Next no
+falla ni avisa al cliente, solo trunca y escribe una línea en el log.
+
+Es decir, todo archivo **entre 10 y 15 MB** reventaba — en cualquier subida de
+la app (documentos de empresa, requisitos, plantillas, logo), y la lista de
+precios acepta hasta 30 MB.
+
+- `proxyClientMaxBodySize: "32mb"` en next.config.ts (cubre los 30 MB de la
+  importación de precios, que es lo más grande que acepta la app).
+- DocsEmpresa comprueba el tamaño ANTES de subir: «"X.pdf" pesa 18.2 MB y el
+  máximo son 15 MB» en vez de mandar 18 MB para que los rechacen.
+
+Comprobado con un A/B real (12 MB por POST): con el tope en 1mb sale el aviso
+de truncado, con 32mb no sale. tsc + eslint + 104 tests + build en verde.
+
+⚠️ Nota de entorno: **no correr `pnpm build` con `pnpm dev` levantado** —
+comparten `.next/` y el build deja a Turbopack en pánico ("Next.js package not
+found"); el HMR pierde la conexión y la página se recarga en bucle cada
+segundo. Se arregla matando el dev, `rm -rf .next` y arrancando de nuevo.
+
+---
+
+## 2026-07-24 (3) — Barrido: quedaba UN formulario con el mismo fallo (y peor)
+
+Pablo pidió revisar si el descarte silencioso estaba en más sitios. Barrido de
+los 21 componentes cliente que persisten campos:
+
+- **Los que usan `useAccion`** (7): todos tenían el fallo y ya llevan
+  `encolar`. Faltaba **RequisitosPanel** (`onPatch`, clave `req-<id>`), que
+  además traía una **trampa**: las respuestas de la plantilla viven en UNA
+  columna jsonb `datos`, y cada guardado manda el objeto entero armado con
+  `{...r.datos}` — la prop del servidor. Al contestar dos preguntas seguidas,
+  la segunda se armaba con el `r.datos` viejo (el refresh no había llegado) y
+  **borraba la primera**. Hoy no se veía porque el guard la descartaba: poner
+  la cola sin más lo habría empeorado, cambiando "se pierde la segunda" por
+  "se pierde la primera". Arreglado con respuestas locales (`datosVivos`), el
+  mismo patrón optimista del cotizador.
+- **Los que no usan `useAccion`** (ItemsPanel, PlazosPanel, BitacoraPanel,
+  GruposEditor, el Editor de plantillas, DocsEmpresa…): **ninguno descarta**.
+  Persisten con `startTransition` sin guard, o mandan el estado completo con
+  debounce (Editor). Sin bug de esta clase.
+
+El turnero salió de `useAccion` a `lib/cola-acciones.ts` (`TurnoPorClave`) y
+tiene 7 tests: descarta el 2.º clic de un botón, encola los campos de un
+autosave en orden, mantiene la clave ocupada mientras drena y libera al final.
+Total 104 tests. No hay infra para testear hooks (ni jsdom ni testing-library),
+así que la lógica se probó sacándola de React, no montando el hook.
+
+Anotado como regla: **clave compartida + autosave ⇒ `encolar: true`**.
+
+---
+
 ## 2026-07-24 (2) — Los datos de la empresa nueva NO se perdieron: se descartaban en el navegador
 
 Pablo creó otra empresa con otro usuario, llenó Configuración → Empresa y al

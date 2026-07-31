@@ -42,6 +42,9 @@ interface Borrador {
   archivo: File;
 }
 
+// Espejo del tope del servidor (MAX_MB en lib/actions/empresa.ts).
+const MAX_MB = 15;
+
 export default function DocsEmpresa({ docs }: { docs: DocumentoEmpresa[] }) {
   const [error, setError] = useState<string | null>(null);
   const [borrador, setBorrador] = useState<Borrador | null>(null);
@@ -64,6 +67,14 @@ export default function DocsEmpresa({ docs }: { docs: DocumentoEmpresa[] }) {
 
   function archivoElegido(f: File | undefined | null) {
     if (!f) return;
+    // El mismo tope que aplica el servidor, comprobado ANTES de subir: no
+    // tiene sentido esperar a que viajen 20 MB para que los rechacen.
+    if (f.size > MAX_MB * 1024 * 1024) {
+      setError(
+        `«${f.name}» pesa ${(f.size / 1024 / 1024).toFixed(1)} MB y el máximo son ${MAX_MB} MB.`,
+      );
+      return;
+    }
     setBorrador({ tipo: tipoElegidoRef.current, archivo: f });
   }
 

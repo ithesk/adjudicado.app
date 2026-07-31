@@ -317,6 +317,37 @@ export function separarTagsDeImagen(xml: string): string {
   );
 }
 
+// El membrete de los formularios DGCP tiene un cuadro fijo (~8,7 cm) para el
+// nombre de la institución, pensado para nombres cortos. La mayoría de las
+// entidades reales NO caben a 12 pt: el nombre envuelve y la segunda línea
+// choca con el título del formulario («OGTIC…», 71 chars, ya lo hacía). Se
+// hace lo que haría un humano llenando el formulario: letra más pequeña
+// cuanto más largo el nombre. Solo aplica DENTRO de cuadros de texto
+// (w:txbxContent) — el cuerpo («Señores …») envuelve bien y no se toca.
+function encogerNombreLargoEnMembrete(zip: PizZip, nombre: unknown): void {
+  if (typeof nombre !== "string") return;
+  const largo = nombre.length;
+  if (largo <= 53) return; // cabe a tamaño oficial (12 pt)
+  const sz = largo <= 84 ? 20 : largo <= 105 ? 16 : 14; // 10 / 8 / 7 pt
+  const escapado = nombre
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  for (const parte of Object.keys(zip.files)) {
+    if (!/^word\/(document|header\d*)\.xml$/.test(parte)) continue;
+    const xml = zip.file(parte)!.asText();
+    if (!xml.includes(escapado)) continue;
+    const nuevo = xml.replace(
+      /<w:txbxContent>[\s\S]*?<\/w:txbxContent>/g,
+      (caja) =>
+        caja.includes(escapado)
+          ? caja.replace(/<w:(sz|szCs) w:val="\d+" \/>/g, `<w:$1 w:val="${sz}" />`)
+          : caja,
+    );
+    if (nuevo !== xml) zip.file(parte, nuevo);
+  }
+}
+
 // Rellena CUALQUIER plantilla taggeada (del repo o del constructor de la
 // organización) con un objeto de datos.
 export function rellenarPlantilla(
@@ -344,6 +375,7 @@ export function rellenarPlantilla(
     logo_institucion: imagenes.logo_institucion ? "logo_institucion" : "",
   });
   corregirExtensionesDeMedia(doc.getZip() as PizZip);
+  encogerNombreLargoEnMembrete(doc.getZip() as PizZip, datos.entidad_nombre);
   return doc.toBuffer();
 }
 

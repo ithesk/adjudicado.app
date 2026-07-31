@@ -21,6 +21,14 @@ const nextConfig: NextConfig = {
       // PDF real ("Body exceeded 1 MB limit"); el tope de la app es 15 MB.
       bodySizeLimit: "20mb",
     },
+    // El SEGUNDO tope, y el que de verdad rompía las subidas: con un proxy
+    // (src/proxy.ts, que matchea todo salvo estáticos) Next copia el cuerpo a
+    // memoria para poder leerlo dos veces, y ese búfer son 10 MB por defecto.
+    // Un PDF de 12 MB llegaba CORTADO: el multipart quedaba a medias y la
+    // action moría con "Unexpected end of form" (500) sin llegar nunca a la
+    // validación de tamaño. Next no falla ni avisa al cliente — solo trunca.
+    // 32 MB cubre lo más grande que acepta la app (la lista de precios, 30 MB).
+    proxyClientMaxBodySize: "32mb",
   },
 };
 

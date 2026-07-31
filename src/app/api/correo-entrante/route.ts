@@ -28,10 +28,12 @@ interface AdjuntoResend {
   content_type?: string;
 }
 
-// Formato Resend: { data: { to, from, subject, text, html, attachments } }
+// Formato Resend: { data: { to, cc, from, subject, text, html, attachments } }
 interface ResendPayload {
   data?: {
     to?: DireccionEmail[] | string[];
+    cc?: DireccionEmail[] | string[];
+    bcc?: DireccionEmail[] | string[];
     from?: DireccionEmail | string;
     subject?: string;
     text?: string;
@@ -43,6 +45,8 @@ interface ResendPayload {
 // Formato genérico plano (fallback)
 interface PayloadPlano {
   to?: string | DireccionEmail | DireccionEmail[];
+  cc?: string | DireccionEmail | DireccionEmail[];
+  bcc?: string | DireccionEmail | DireccionEmail[];
   from?: string | DireccionEmail;
   subject?: string;
   text?: string;
@@ -52,10 +56,14 @@ interface PayloadPlano {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Extrae la dirección de correo de un campo que puede ser string u objeto. */
+/** Extrae la dirección de correo de un campo que puede ser string u objeto.
+ *  Acepta el formato "Nombre <email>" y devuelve solo el email. */
 function extraerEmail(campo: unknown): string {
   if (!campo) return "";
-  if (typeof campo === "string") return campo;
+  if (typeof campo === "string") {
+    const angulos = /<([^>]+)>/.exec(campo);
+    return (angulos ? angulos[1] : campo).trim();
+  }
   if (typeof campo === "object" && campo !== null) {
     const c = campo as DireccionEmail;
     return c.email ?? "";
@@ -63,14 +71,20 @@ function extraerEmail(campo: unknown): string {
   return "";
 }
 
-/** Extrae el primer email de un campo to que puede ser array o escalar. */
-function extraerDestinatario(to: unknown): string {
-  if (!to) return "";
-  if (Array.isArray(to)) {
-    const primero = to[0];
-    return extraerEmail(primero);
+/** Aplana to/cc/bcc (arrays, escalares o ausentes) a una lista de emails.
+ *  El buzón casi nunca es el destinatario principal: lo normal es ponerlo
+ *  EN COPIA al escribirle a la entidad — hay que mirar todas las direcciones,
+ *  no solo la primera del "Para". */
+function todasLasDirecciones(...campos: unknown[]): string[] {
+  const emails: string[] = [];
+  for (const campo of campos) {
+    const lista = Array.isArray(campo) ? campo : [campo];
+    for (const c of lista) {
+      const email = extraerEmail(c);
+      if (email) emails.push(email);
+    }
   }
-  return extraerEmail(to);
+  return emails;
 }
 
 /** Etiqueta legible del remitente: "Nombre <email>" o solo email. */
@@ -139,7 +153,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // 4. Normalizar campos: soporta formato Resend ({ data: {...} }) y plano.
   const datos = body.data ?? body;
-  const toRaw = datos.to;
   const fromRaw = datos.from;
   const subject = datos.subject ?? "(sin asunto)";
   const textRaw = datos.text ?? "";
@@ -148,16 +161,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     ? datos.attachments
     : [];
 
-  const direccionDestino = extraerDestinatario(toRaw);
   const remitente = etiquetaRemitente(fromRaw);
 
-  // 5. Extraer el código de buzón del destinatario.
-  const match = RE_BUZON.exec(direccionDestino);
-  if (!match) {
+  // 5. Buscar el código de buzón entre TODOS los destinatarios (Para, CC, CCO).
+  let codigoBuzon: string | null = null;
+  for (const direccion of todasLasDirecciones(datos.to, datos.cc, datos.bcc)) {
+    const match = RE_BUZON.exec(direccion);
+    if (match) {
+      codigoBuzon = match[1].toLowerCase();
+      break;
+    }
+  }
+  if (!codigoBuzon) {
     // Correo a una dirección no reconocida: no es un error, solo ignorar.
     return NextResponse.json({ ok: false, error: "Buzón no reconocido." }, { status: 404 });
   }
-  const codigoBuzon = match[1].toLowerCase();
 
   // 6. Buscar la orden por buzón usando el cliente admin (no hay sesión de usuario).
   const supabase = createAdminClient();
