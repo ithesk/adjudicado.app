@@ -48,3 +48,9 @@ skills-lock.json
 
 # credenciales de deploy (NO subir)
 .deploy.local
+
+# restos del experimento Cloudflare (rama prueba-cloudflare, cerrado
+# 2026-07-31): .dev.vars lleva los MISMOS secretos que .env.local
+.open-next/
+.wrangler/
+.dev.vars*
