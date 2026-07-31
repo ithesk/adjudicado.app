@@ -8,6 +8,24 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-07-31 — Nombres largos de institución: la letra del membrete se encoge sola
+
+Pablo: «estas instituciones tienen la mayoría nombres largos, tienes que
+estar preparado para eso». Con razón: consultada la tabla `institucion`
+real (31 filas), la más larga es OGTIC con 71 caracteres — y el render
+mostró que a 12 pt su segunda línea chocaba con el título del F.034. No
+era un caso raro: 4 de 31 pasan de 53 chars (el máximo que cabe cómodo).
+
+Arreglo en `encogerNombreLargoEnMembrete()` (generador.ts, tras el render):
+como haría un humano llenando el formulario, la letra del membrete baja
+según el largo del nombre — ≤53 chars: 12 pt oficial; ≤84: 10 pt; ≤105:
+8 pt; más: 7 pt. Solo aplica DENTRO de cuadros de texto (w:txbxContent);
+el cuerpo («Señores …») envuelve bien y conserva su tamaño. Verificado con
+render PNG vía Gotenberg: OGTIC (71) en dos líneas limpias a 10 pt y un
+nombre de 87 chars en una línea a 8 pt, sin tocar el título. 107 tests
+(3 nuevos). La huella motor ya estaba en v6, así que los paquetes viejos
+se regeneran solos con esto.
+
 ## 2026-07-31 — El nombre de la institución seguía cortado: eran los sdt y una fuente fantasma
 
 Tras el primer arreglo (spAutoFit), Pablo reportó que en el F.034 el membrete

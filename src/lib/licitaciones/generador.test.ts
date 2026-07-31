@@ -274,3 +274,56 @@ describe("el F.040 (debida diligencia y conflicto de interés)", () => {
     expect(new PizZip(out).file("word/document.xml")!.asText()).not.toContain("{%");
   });
 });
+
+describe("nombres de institución largos: la letra del membrete se encoge sola", () => {
+  // La mayoría de las entidades reales no caben a 12 pt en el cuadro del
+  // membrete (~8,7 cm): la segunda línea chocaba con el título del
+  // formulario. Como un humano llenando el formulario: letra más pequeña
+  // cuanto más largo el nombre — solo dentro del cuadro (el cuerpo envuelve
+  // bien y conserva su tamaño).
+  const tpl = () =>
+    fs.readFileSync(
+      path.join(process.cwd(), "plantillas/dgcp/SNCC_F034_Presentacion_de_Oferta-tpl.docx"),
+    );
+  const OGTIC = "Oficina Gubernamental de Tecnologia de la Informacion y la Comunicacion"; // 71 — real
+  const cajas = (xml: string) =>
+    (xml.match(/<w:txbxContent>[\s\S]*?<\/w:txbxContent>/g) ?? []).filter((c) =>
+      c.includes(OGTIC.slice(0, 20)),
+    );
+
+  it("nombre corto: el membrete queda al tamaño oficial (12 pt)", () => {
+    const xml = new PizZip(
+      rellenarPlantilla(tpl(), { entidad_nombre: "Ministerio de Hacienda" }, {}),
+    ).file("word/document.xml")!.asText();
+    for (const caja of (xml.match(/<w:txbxContent>[\s\S]*?<\/w:txbxContent>/g) ?? []).filter(
+      (c) => c.includes("Ministerio de Hacienda"),
+    )) {
+      expect(caja).toContain('<w:sz w:val="24" />');
+    }
+  });
+
+  it("OGTIC (71 chars, la más larga real): baja a 10 pt en el membrete, no en el cuerpo", () => {
+    const xml = new PizZip(rellenarPlantilla(tpl(), { entidad_nombre: OGTIC }, {}))
+      .file("word/document.xml")!
+      .asText();
+    const enCajas = cajas(xml);
+    expect(enCajas.length).toBeGreaterThan(0);
+    for (const caja of enCajas) expect(caja).toContain('<w:sz w:val="20" />');
+    // El cuerpo («Señores …») conserva su tamaño: fuera de cuadros no hay 10 pt.
+    const cuerpo = xml.replace(/<w:txbxContent>[\s\S]*?<\/w:txbxContent>/g, "");
+    expect(cuerpo).toContain(OGTIC); // sigue completo en el cuerpo
+    expect(cuerpo).not.toContain('<w:sz w:val="20" />');
+  });
+
+  it("nombres extremos: 8 pt hasta 105 chars, 7 pt más allá", () => {
+    const de = (n: number) => "Dirección General de Cosas Muy Largas ".repeat(4).slice(0, n);
+    const xml90 = new PizZip(rellenarPlantilla(tpl(), { entidad_nombre: de(90) }, {}))
+      .file("word/document.xml")!
+      .asText();
+    expect(xml90).toContain('<w:sz w:val="16" />');
+    const xml120 = new PizZip(rellenarPlantilla(tpl(), { entidad_nombre: de(120) }, {}))
+      .file("word/document.xml")!
+      .asText();
+    expect(xml120).toContain('<w:sz w:val="14" />');
+  });
+});
