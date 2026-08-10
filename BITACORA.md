@@ -8,6 +8,29 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-08-10 — Generar un formulario con la fecha que uno elija (subsanaciones)
+
+El caso real que lo pidió: llegó una subsanación por un precio errado en el
+F.033, y el formulario corregido debe salir con la MISMA fecha del documento
+original — no con la de hoy. Hasta ahora la fecha era siempre `new Date()`.
+
+Cómo quedó:
+- `datosDeFecha(d)` en generador.ts: los seis campos de fecha (fecha larga,
+  día/mes/año en número y letras) derivados de UN solo día, para que nunca
+  salgan incoherentes entre sí. `construirDatos` lo usa con hoy por defecto.
+- La ruta `/generar` acepta `?fecha=AAAA-MM-DD` en cualquier modo (suelto,
+  paquete, subsanación): valida que sea un día real, la parsea como fecha
+  LOCAL (con `new Date("AAAA-MM-DD")` en Santo Domingo restaría un día) y
+  la pisa sobre los datos de cada documento generado. Entra en la huella
+  del paquete: un ZIP con fecha propia nunca reusa el de una generación
+  normal.
+- UI: junto a «Generar este» en el checklist hay un botoncito de calendario
+  que abre el selector de fecha y genera con ella. El botón normal sigue
+  generando con hoy.
+
+109 tests (2 nuevos de datosDeFecha). Pendiente que Pablo lo pruebe con el
+caso real del F.033 subsanado.
+
 ## 2026-07-31 — Nombres largos de institución: la letra del membrete se encoge sola
 
 Pablo: «estas instituciones tienen la mayoría nombres largos, tienes que

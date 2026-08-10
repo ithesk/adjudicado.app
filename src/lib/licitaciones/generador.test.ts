@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import PizZip from "pizzip";
-import { rellenarPlantilla, separarTagsDeImagen } from "./generador";
+import { datosDeFecha, rellenarPlantilla, separarTagsDeImagen } from "./generador";
 
 // PNG real de w×h (gris): para probar que el logo escala PROPORCIONAL.
 function pngDe(w: number, h: number): Buffer {
@@ -325,5 +325,30 @@ describe("nombres de institución largos: la letra del membrete se encoge sola",
       .file("word/document.xml")!
       .asText();
     expect(xml120).toContain('<w:sz w:val="14" />');
+  });
+});
+
+describe("datosDeFecha: generar con la fecha elegida (subsanaciones)", () => {
+  it("deriva TODOS los campos de fecha del mismo día, coherentes entre sí", () => {
+    const d = datosDeFecha(new Date(2026, 6, 15)); // 15 de julio de 2026
+    expect(d.fecha).toBe("15 de julio de 2026");
+    expect(d.dia_numero).toBe("15");
+    expect(d.dia_letras).toBe("quince");
+    expect(d.mes_letras).toBe("julio");
+    expect(d.ano_numero).toBe("2026");
+    expect(d.ano_letras).toContain("veintis"); // dos mil veintiséis
+  });
+
+  it("como extra, pisa la fecha de hoy en el documento rellenado", () => {
+    const docx = docxMinimo(
+      "<w:p><w:r><w:t>{fecha} — {dia_letras} de {mes_letras}</w:t></w:r></w:p>",
+    );
+    const xml = new PizZip(
+      rellenarPlantilla(docx, { ...datosDeFecha(new Date(2025, 11, 3)) }, {}),
+    )
+      .file("word/document.xml")!
+      .asText();
+    expect(xml).toContain("3 de diciembre de 2025");
+    expect(xml).toContain("tres de diciembre");
   });
 });

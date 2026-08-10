@@ -203,6 +203,22 @@ function fechaLarga(d = new Date()): string {
   return `${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`;
 }
 
+// Todos los campos de fecha que llevan los formularios (la fecha «de firma»),
+// derivados de UN solo día para que nunca salgan incoherentes entre sí.
+// Exportado para poder generar con una fecha ELEGIDA: el caso real es una
+// subsanación — se corrige un precio del F.033 pero el formulario corregido
+// debe conservar la fecha del documento original.
+export function datosDeFecha(d: Date): Record<string, string> {
+  return {
+    fecha: fechaLarga(d),
+    dia_numero: String(d.getDate()),
+    dia_letras: enteroALetras(d.getDate()).toLowerCase(),
+    mes_letras: MESES[d.getMonth()],
+    ano_letras: enteroALetras(d.getFullYear()).toLowerCase(),
+    ano_numero: String(d.getFullYear()),
+  };
+}
+
 // Formato es-DO (1,234.56) determinista, sin depender del ICU del entorno.
 function num(n: number): string {
   const [ent, dec] = n.toFixed(2).split(".");
@@ -243,7 +259,7 @@ export function construirDatos(canonico: ProcesoCanonico): Record<string, unknow
   return {
     // Identidad del proceso
     expediente: canonico.proceso.codigo,
-    fecha: fechaLarga(),
+    ...datosDeFecha(new Date()),
     entidad_nombre: canonico.proceso.entidad.nombre,
     unidad_funcional: "",
     // La empresa (snapshot del canónico)
@@ -264,11 +280,6 @@ export function construirDatos(canonico: ProcesoCanonico): Record<string, unknow
     ciudad: "Santo Domingo",
     provincia: "Distrito Nacional",
     objeto: canonico.proceso.objeto,
-    dia_numero: String(new Date().getDate()),
-    dia_letras: enteroALetras(new Date().getDate()).toLowerCase(),
-    mes_letras: MESES[new Date().getMonth()],
-    ano_letras: enteroALetras(new Date().getFullYear()).toLowerCase(),
-    ano_numero: String(new Date().getFullYear()),
     // Cuerpo del F.034
     consorcio: "No aplica",
     enmiendas: "No aplica",
