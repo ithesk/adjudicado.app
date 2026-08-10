@@ -9,6 +9,7 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CalendarDays,
   FileDown,
   FileWarning,
   ListPlus,
@@ -90,12 +91,14 @@ export default function RequisitosPanel({
   // Genera SOLO este formulario y lo baja directo (sin armar el paquete).
   // Con tope de tiempo: un fallo de red no deja el botón girando ni se
   // cancela en silencio — el error SIEMPRE se ve.
-  function generarSolo(codigo: string) {
+  // Con `fecha` (AAAA-MM-DD), el documento sale con ESA fecha de firma: para
+  // subsanar un formulario conservando la fecha del original.
+  function generarSolo(codigo: string, fecha?: string) {
     setGenerandoSolo(codigo);
     startTransition(async () => {
       try {
         const res = await fetchLargo(
-          `/api/licitaciones/${procesoId}/generar?solo=${encodeURIComponent(codigo)}${pdfListo ? "&formato=pdf" : ""}`,
+          `/api/licitaciones/${procesoId}/generar?solo=${encodeURIComponent(codigo)}${pdfListo ? "&formato=pdf" : ""}${fecha ? `&fecha=${fecha}` : ""}`,
         );
         if (!res.ok) {
           const j = await res.json().catch(() => null);
@@ -221,7 +224,7 @@ export default function RequisitosPanel({
                   })
                 }
                 onSubir={(fd) => correr(`subir-${r.id}`, () => subirArchivoRequisitoAction(r.id, fd))}
-                onGenerarSolo={() => generarSolo(r.codigo)}
+                onGenerarSolo={(fecha) => generarSolo(r.codigo, fecha)}
                 generandoSolo={generandoSolo === r.codigo}
                 onEliminar={() => {
                   if (confirm(`¿Eliminar el requisito ${r.codigo}?`))
@@ -475,10 +478,17 @@ function FilaRequisito({
   onPatch: (patch: Parameters<typeof actualizarRequisitoAction>[1]) => void;
   onSubir: (fd: FormData) => void;
   onEliminar: () => void;
-  onGenerarSolo: () => void;
+  onGenerarSolo: (fecha?: string) => void;
   generandoSolo: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  // Selector de fecha para generar CON OTRA FECHA (subsanación: el documento
+  // corregido conserva la fecha del original). Cerrado no estorba a nadie.
+  const [fechaAbierta, setFechaAbierta] = useState(false);
+  const [fechaElegida, setFechaElegida] = useState(() => {
+    const hoy = new Date();
+    return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+  });
   // Respuestas ya tecleadas que el servidor todavía no devolvió en `r.datos`.
   // `datos` es UNA columna jsonb: cada guardado manda el objeto entero, así
   // que si el segundo campo se arma con el `r.datos` viejo (el refresh aún no
@@ -537,20 +547,34 @@ function FilaRequisito({
         {/* La VÍA del documento: no todo se sube. Lo generable se puede
             bajar SUELTO desde aquí — sin armar el paquete completo. */}
         {via === "genera" && (
-          <button
-            type="button"
-            onClick={onGenerarSolo}
-            disabled={ocupada || generandoSolo}
-            className="flex items-center gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:opacity-60"
-            title="Genera SOLO este formulario y lo descarga — el expediente completo sigue saliendo con «Generar paquete» arriba"
-          >
-            {generandoSolo ? (
-              <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2.4} aria-hidden />
-            ) : (
-              <FileDown className="h-3 w-3" strokeWidth={2.4} aria-hidden />
-            )}
-            {generandoSolo ? "Generando…" : "Generar este"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => onGenerarSolo()}
+              disabled={ocupada || generandoSolo}
+              className="flex items-center gap-1 whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white disabled:opacity-60"
+              title="Genera SOLO este formulario y lo descarga — el expediente completo sigue saliendo con «Generar paquete» arriba"
+            >
+              {generandoSolo ? (
+                <Loader2 className="h-3 w-3 motion-safe:animate-spin" strokeWidth={2.4} aria-hidden />
+              ) : (
+                <FileDown className="h-3 w-3" strokeWidth={2.4} aria-hidden />
+              )}
+              {generandoSolo ? "Generando…" : "Generar este"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFechaAbierta((v) => !v)}
+              disabled={ocupada || generandoSolo}
+              className={`rounded p-1 transition-colors disabled:opacity-60 ${
+                fechaAbierta ? "bg-primary/10 text-primary" : "text-muted hover:text-ink"
+              }`}
+              title="Generar con OTRA fecha — para subsanar conservando la fecha del documento original"
+              aria-label="Generar con otra fecha"
+            >
+              <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+            </button>
+          </>
         )}
         {via === "linea" && (
           <span
@@ -666,6 +690,31 @@ function FilaRequisito({
           <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
         </button>
       </div>
+
+      {/* Generar con la fecha elegida: el formulario sale como si se hubiera
+          firmado ese día (fecha larga y día/mes/año en letras, coherentes). */}
+      {fechaAbierta && via === "genera" && (
+        <div className="ml-5 mt-1.5 flex flex-wrap items-center gap-2">
+          <span className="text-[11.5px] text-muted">Fecha del documento:</span>
+          <input
+            type="date"
+            value={fechaElegida}
+            onChange={(e) => setFechaElegida(e.target.value)}
+            className={inputSm}
+          />
+          <button
+            type="button"
+            disabled={ocupada || generandoSolo || !fechaElegida}
+            onClick={() => {
+              setFechaAbierta(false);
+              onGenerarSolo(fechaElegida);
+            }}
+            className={btnPrimary("!px-2.5 !py-1 !text-[11.5px]")}
+          >
+            Generar con esa fecha
+          </button>
+        </div>
+      )}
 
       {/* Los datos que la plantilla pregunta en cada proceso. Autosave al
           salir del campo; sin todos completos, Generar paquete avisa. */}

@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 import { construirCanonico } from "@/lib/licitaciones/queries";
 import {
   GENERABLES,
+  datosDeFecha,
   generarDesdeBuffer,
   generarDocumento,
   type DocGenerado,
@@ -77,6 +78,24 @@ export async function GET(
   // Con ?unir=1 (solo PDF): UN solo PDF por sobre — los portales piden subir
   // 2-3 archivos, no 15. Lo que no se pueda unir viaja suelto y declarado.
   const unir = formato === "pdf" && new URL(req.url).searchParams.get("unir") === "1";
+  // Con ?fecha=YYYY-MM-DD lo generado sale con ESA fecha de firma en vez de
+  // la de hoy. El caso real: la entidad subsana un precio del F.033, y el
+  // formulario corregido debe conservar la fecha del documento original.
+  const fechaParam = new URL(req.url).searchParams.get("fecha");
+  let fechaElegida: Date | null = null;
+  if (fechaParam) {
+    const m = fechaParam.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    // Se arma como fecha LOCAL (new Date("YYYY-MM-DD") sería UTC y en
+    // Santo Domingo restaría un día), y se rechaza el 31 de febrero.
+    const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+    if (!m || !d || d.getMonth() !== +m[2] - 1 || d.getDate() !== +m[3]) {
+      return NextResponse.json(
+        { error: "La fecha debe ser un día real en formato AAAA-MM-DD." },
+        { status: 422 },
+      );
+    }
+    fechaElegida = d;
+  }
   if (formato === "pdf" && !pdfDisponible()) {
     return NextResponse.json(
       { error: "El convertidor PDF no está configurado todavía (ver infra/gotenberg)." },
@@ -296,8 +315,12 @@ export async function GET(
   // (variante de la entidad o genérica de la org) GANA sobre el formulario
   // del sistema — si MITUR exige su propia versión del F.033, sale la de MITUR.
   const generarUno = async (codigo: string): Promise<DocGenerado> => {
+    // La fecha elegida pisa la de hoy en TODOS los campos de fecha (larga,
+    // día/mes/año en letras) para que el documento salga coherente.
+    const conFecha = fechaElegida ? datosDeFecha(fechaElegida) : {};
     const plantilla = plantillaPorCodigo.get(codigo);
-    if (!plantilla) return generarDocumento(codigo, canonico, imagenes, { adjudicados });
+    if (!plantilla)
+      return generarDocumento(codigo, canonico, imagenes, { adjudicados, ...conFecha });
     const { data: tpl } = await supabase.storage
       .from("documentos")
       .download(plantilla.archivo_tpl ?? plantilla.archivo_original);
@@ -319,7 +342,7 @@ export async function GET(
       Buffer.from(await tpl.arrayBuffer()),
       canonico,
       imagenes,
-      { ...fijos, ...capturados, adjudicados },
+      { ...fijos, ...capturados, adjudicados, ...conFecha },
     );
   };
 
@@ -388,6 +411,9 @@ export async function GET(
         motor: 6,
         formato,
         unir,
+        // La fecha elegida cambia lo impreso: un paquete con fecha propia
+        // nunca debe reusar el ZIP de una generación con la fecha de hoy.
+        fecha: fechaParam ?? null,
         // El F.040 pinta el logo de la entidad y el historial adjudicado:
         // cambiar cualquiera de los dos debe regenerar.
         logo_institucion: instLogo?.logo_url ?? null,
