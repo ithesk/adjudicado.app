@@ -8,6 +8,92 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-08-13 — Centro de alertas: lo que pide atención, desde cualquier pantalla
+
+Pablo: «necesito sistema de alerta y notificaciones en general que notifique
+si doc está vencido, actividades pendientes etc., no importa en la opción
+que esté en sistema». Lo último es el requisito de verdad: tenía que verse
+en TODA la app, no en una pantalla que hay que ir a buscar.
+
+**Decisión de diseño (la importante): una alerta es estado DERIVADO, no un
+mensaje guardado.** No hay tabla `notificacion`, no hay cron que las cree y
+no se «marcan como leídas». Se calculan de los datos que la app ya carga y
+se apagan solas cuando el problema se resuelve: el RPE vencido deja de
+alertar cuando se sube el nuevo, no cuando alguien lo descarta. Así nunca
+puede haber una alerta que mienta porque quedó desincronizada. `PRODUCT.md`
+ya lo pedía: «si todo alerta, nada alerta».
+
+**Dos vueltas más, misma sesión.** El primer intento puso las alertas en una
+CAMPANITA del menú lateral. Pablo lo rechazó — «no como otro menú, debe ser
+algo como footer». Tenía razón, y el rediseño lo hizo un agente de UX/UI:
+las alertas no son un destino de navegación, son el ESTADO DEL NEGOCIO, y
+eso se pinta en una barra de estado, no en una lista de secciones. La
+campanita (`CentroAlertas.tsx`) se borró; la reemplaza `BarraAlertas.tsx`.
+
+Segundo ajuste, también de Pablo: «la posición mejor en header». La barra
+subió del pie a la cabecera, y eso **simplificó el diseño en vez de
+complicarlo**, porque arriba puede ir en FLUJO NORMAL (`sticky top-0`) en
+lugar de `fixed`. Al ocupar su propio alto, se cayeron de golpe los tres
+parches de espacio reservado que exigía abajo:
+- el `padding-bottom` de `<main>` (ya no hace falta: nada tapa el contenido);
+- los toasts de `Avisos.tsx`, que en `bottom-4` habrían nacido DETRÁS de una
+  barra inferior de 32 px — vuelven a su `bottom-4` de siempre;
+- el `h-screen` del sidebar, que dejaba «Cerrar sesión» debajo de la barra e
+  inalcanzable.
+De la variable `--h-alertas` solo quedan los que se pegan al viewport y
+deben empezar bajo la barra: el sidebar (`sticky top-[var(--h-alertas)]`),
+la barra superior de móvil y el propio panel desplegable. De propina, la
+sombra `shadow-raised` (que cae hacia abajo) por fin apunta hacia donde el
+panel se abre; abajo apuntaba al revés.
+
+Decisiones del rediseño que conviene no revertir sin pensar:
+- **La barra nunca cambia de color de fondo.** El color entra solo en el
+  punto de 6 px, la palabra del nivel y los contadores. Una barra roja a lo
+  ancho de la pantalla es una alarma de incendio permanente: al tercer día
+  deja de verse, y con ella deja de verse lo que sí importaba.
+- **Con cero alertas la barra NO desaparece**, se queda neutra con un punto
+  verde. Si desapareciera, «todo al día» y «esto dejó de calcular alertas»
+  se verían igual, y la confianza en la vigilancia ES la funcionalidad.
+- **No se puede ocultar ni silenciar.** La barra colapsada YA es el estado
+  minimizado (32 px). Un botón de ocultar sería el interruptor que apaga
+  justo aquello por lo que existe el módulo.
+- Sin `aria-live`: el layout se re-renderiza en cada navegación y le
+  recitaría el resumen entero a un lector de pantalla en cada página. Los
+  eventos de verdad ya los narra `Avisos.tsx`.
+- Nada de `backdrop-blur` en la barra: convertiría a la barra en contenedor
+  de su propio panel `fixed` (la trampa que ya pagamos con el drawer). Por
+  eso el panel es HERMANO de la barra, no descendiente, y no hace falta
+  portal — a diferencia de la campanita, que vivía dentro del header móvil.
+- Es un `<section aria-label="Alertas">`, no un `<header>`: el landmark
+  `banner` ya lo ocupa la barra superior de móvil y dos se estorban.
+
+Piezas:
+- `src/lib/alertas.ts` — módulo puro (sin Supabase, testeable) con las tres
+  familias: documentos de la empresa (vencidos, ≤15 d urgente, ≤30 d aviso,
+  y los que faltan por cargar AGRUPADOS en una sola línea), órdenes (plazo
+  dominante vencido/≤2/≤5, más «entregada sin facturar hace +15 días», que
+  es trabajo hecho sin cobrar) y licitaciones (cierre encima mientras la
+  oferta se arma, y subsanación abierta, que avisa aunque falte una semana
+  porque perderla es perder algo ya ganado). Tres niveles y no cinco:
+  vencido / urgente / aviso — más matices no cambian qué hace la persona.
+- `_components/CentroAlertas.tsx` — la campanita con su panel. Va en el
+  layout, o sea en el menú de escritorio, en el drawer móvil y en la barra
+  superior de móvil: no hay opción del sistema donde no se vea. El panel se
+  monta por PORTAL al body por la misma trampa del drawer (la barra móvil
+  tiene backdrop-blur y atrapa a los `fixed` descendientes).
+- El contador NO se apaga al abrirlo, a propósito.
+
+El layout suma dos consultas (`listarProcesos` + `subsanacionesAbiertas`)
+dentro del `Promise.all` que ya existía, así que no añade latencia en serie.
+El nombre de la institución no se resuelve a propósito: sería otra consulta
+en cada navegación y el código del proceso ya dice de quién es.
+
+134 tests (25 nuevos). Uno destapó un caso real de estreno: una org sin
+NINGÚN documento debe recibir el aviso agrupado de qué cargar, no silencio.
+
+Pendiente natural (ya estaba en el roadmap, `docs/doc.md` v1.5): el resumen
+diario por correo, que puede colgar del cron que ya existe en `vercel.json`.
+
 ## 2026-08-10 — Generar un formulario con la fecha que uno elija (subsanaciones)
 
 El caso real que lo pidió: llegó una subsanación por un precio errado en el
