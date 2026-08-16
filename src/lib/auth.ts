@@ -43,26 +43,37 @@ export const getMembresias = cache(async (): Promise<Miembro[]> => {
   return (data as Miembro[] | null) ?? [];
 });
 
-// Solo el org_id activo, SIN viajes de red: lee la cookie. Para lecturas cuyo
-// guard real es es_miembro() dentro del RPC/RLS — un org_id falsificado o ajeno
-// devuelve vacío en SQL, la cookie no es la frontera de seguridad. Sin cookie
-// (primer login) cae a getMiembro() y la deja fijada para las siguientes.
+// El org_id activo para las LECTURAS de los módulos (licitaciones, entidades,
+// precios). Delega en getMiembro(), así que la empresa que resuelve es SIEMPRE
+// la misma que ven las órdenes.
+//
+// Antes devolvía la cookie tal cual, sin comprobar que fuera una empresa del
+// usuario. La RLS impedía que eso fuera un agujero de seguridad (un org_id
+// ajeno no devuelve filas), pero sí era un agujero de CORRECCIÓN: con una
+// cookie vieja —de una empresa de la que ya no se es miembro, o que nunca lo
+// fue— el usuario veía Licitaciones, Entidades y Precios en blanco mientras
+// las órdenes le funcionaban, porque cada mitad resolvía una empresa distinta.
+// Silencioso e imposible de entender desde la pantalla.
+//
+// No cuesta viajes de red extra: getMembresias() va memoizado con cache() y el
+// layout de (app) ya lo resuelve en requireMiembro() antes de pintar nada, así
+// que aquí sale gratis. Además, la cookie inválida se corrige sola.
 export const orgActivaLigera = cache(async (): Promise<string | null> => {
   if (isDemo()) return demoMiembro().org_id;
-  const cookieStore = await cookies();
-  const activa = cookieStore.get(ORG_COOKIE)?.value;
-  if (activa) return activa;
-
   const miembro = await getMiembro();
   if (!miembro) return null;
-  try {
-    // Solo es posible desde una Server Action / route handler; durante el
-    // render de una página no se puede escribir cookies y no pasa nada.
-    cookieStore.set(ORG_COOKIE, miembro.org_id, {
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-    });
-  } catch {}
+
+  const cookieStore = await cookies();
+  if (cookieStore.get(ORG_COOKIE)?.value !== miembro.org_id) {
+    try {
+      // Solo es posible desde una Server Action / route handler; durante el
+      // render de una página no se puede escribir cookies y no pasa nada.
+      cookieStore.set(ORG_COOKIE, miembro.org_id, {
+        path: "/",
+        maxAge: 60 * 60 * 24 * 365,
+      });
+    } catch {}
+  }
   return miembro.org_id;
 });
 
