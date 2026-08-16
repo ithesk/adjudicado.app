@@ -2,11 +2,13 @@
 // (el guard real es la RLS es_miembro); mutaciones con getMiembro() y el
 // .eq("org_id") defensivo. Las mutaciones devuelven string | null (error).
 //
-// Excepción medida: crearItem() usa orgActivaLigera(). getMiembro() cuesta un
-// viaje de red a Supabase Auth, y en una server action nada lo tiene ya
-// resuelto — se pagaba entero en el clic de «Agregar línea». El insert lo
-// protege la RLS (`with check (es_miembro(org_id))`), así que un org_id
-// falsificado en la cookie lo rechaza SQL, no la cookie.
+// orgActivaLigera() ya NO es «leer la cookie a pelo»: valida la empresa contra
+// las membresías reales (ver el porqué en auth.ts — una cookie vieja dejaba
+// este módulo entero en blanco mientras las órdenes funcionaban). En las
+// lecturas sale gratis, porque el layout ya resolvió la membresía. En una
+// server action suelta —crearItem(), el clic de «Agregar línea»— sí cuesta el
+// viaje a Supabase Auth que antes nos ahorrábamos: se paga a propósito, porque
+// insertar con la empresa equivocada no fallaba de forma entendible.
 
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";

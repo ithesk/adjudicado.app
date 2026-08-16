@@ -8,6 +8,39 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-08-16 — Un colaborador veía Licitaciones en blanco: la cookie de empresa no se validaba
+
+Pablo: un segundo usuario de su empresa (colaborador) veía las órdenes con
+normalidad, pero al entrar a Licitaciones le salía «configura primero los
+datos de la empresa» — con el perfil de la empresa existiendo y él siendo
+miembro de esa misma empresa.
+
+Diagnóstico: **las dos mitades de la app resolvían la empresa activa de
+formas distintas.** Las órdenes usan `getMiembro()`, que valida la cookie
+`org_activa` contra las membresías reales y, si no cuadra, cae a la primera
+empresa del usuario. Licitaciones, entidades y precios usaban
+`orgActivaLigera()`, que devolvía la cookie **tal cual, sin comprobar que
+fuera una empresa suya**. La RLS impedía que eso fuera un agujero de
+seguridad (un org_id ajeno no devuelve filas), pero era un agujero de
+CORRECCIÓN: con una cookie vieja, medio sistema salía en blanco y la otra
+mitad funcionaba, sin ningún mensaje que lo explicara.
+
+`orgActivaLigera()` ahora delega en `getMiembro()`, así que ambas mitades
+resuelven SIEMPRE la misma empresa, y de paso reescribe la cookie mala para
+que se corrija sola. No cuesta viajes de red en las lecturas: `getMembresias()`
+va memoizado y el layout de (app) ya lo resolvió antes de pintar. Donde sí
+cuesta es en `crearItem()` («Agregar línea» del cotizador), que era una
+excepción medida justo para ahorrarse ese viaje; se paga a propósito, porque
+insertar con la empresa equivocada no fallaba de forma entendible. Los dos
+comentarios que documentaban lo viejo quedaron actualizados.
+
+Queda pendiente confirmar con el usuario si era esto. Si no, la otra causa
+candidata es que la política de lectura de `empresa_perfil` en producción
+exija admin (él es colaborador). Dato suelto del diagnóstico: fue invitado
+como admin (`invite_rol: admin` en su metadata) pero su fila dice
+colaborador — su cuenta ya existía al invitarlo, así que entró por la rama
+«ya existe» de `invitarOAgregar`, que usa el rol del formulario.
+
 ## 2026-08-13 — Centro de alertas: lo que pide atención, desde cualquier pantalla
 
 Pablo: «necesito sistema de alerta y notificaciones en general que notifique
