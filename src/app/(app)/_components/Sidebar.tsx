@@ -327,7 +327,10 @@ export default function Sidebar({ datos }: { datos: DatosSidebar }) {
 
   return (
     <aside
-      className={`sticky top-0 hidden h-screen flex-none flex-col border-r border-line bg-canvas p-2.5 transition-[width] duration-150 md:flex ${
+      // Se pega DEBAJO de la barra de alertas y descuenta su alto
+      // (--h-alertas, en globals.css); si no, su pie —«Cerrar sesión»—
+      // se saldría por abajo de la pantalla.
+      className={`sticky top-[var(--h-alertas)] hidden h-[calc(100vh-var(--h-alertas))] flex-none flex-col border-r border-line bg-canvas p-2.5 transition-[width] duration-150 md:flex ${
         rail ? "w-[60px]" : "w-[216px]"
       }`}
     >
