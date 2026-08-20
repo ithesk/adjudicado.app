@@ -317,6 +317,174 @@ export async function actualizarProceso(
   return error ? `No se pudo guardar: ${error.message}` : null;
 }
 
+// Duplicar un proceso: el pliego nuevo nace con TODO el trabajo ya hecho del
+// viejo (cabecera, lotes, ítems y su costeo, y el checklist de requisitos) y
+// solo cambia el código. Muchos pliegos de la misma entidad se repiten casi
+// idénticos; volver a teclearlos era el trabajo más tonto del módulo.
+//
+// Lo que NO se copia, y el porqué:
+// - El ESTADO y la fecha de cierre: la copia nace en Captura, sin cierre. Es
+//   un proceso nuevo, no una foto del avance del otro.
+// - Los paquetes generados y las subsanaciones: pertenecen al expediente que
+//   se presentó, no a este.
+// - Los ARCHIVOS de los requisitos (storage_path): un F.034 generado lleva
+//   impreso el código del proceso viejo. Heredarlo sería someter el papel
+//   equivocado, así que esos requisitos entran como pendientes.
+// - Sí se conserva el enlace a los documentos de Configuración → Empresa
+//   (RPE, DGII, TSS…): esos son de la empresa y valen para cualquier proceso.
+export async function duplicarProceso(
+  id: string,
+  nuevoCodigo: string,
+): Promise<{ id?: string; error?: string }> {
+  if (isDemo()) return { error: "En modo demo no se duplican procesos." };
+  const codigo = nuevoCodigo.trim();
+  if (!codigo) return { error: "El código del proceso nuevo es obligatorio." };
+  const miembro = await getMiembro();
+  if (!miembro) return { error: "No autorizado." };
+  const user = await getUser();
+  const supabase = await createClient();
+
+  // El .eq("org_id") es defensivo: la RLS ya lo impide, pero así un id de
+  // otra empresa no se lee ni por error.
+  const { data: origen } = await supabase
+    .from("lic_proceso")
+    .select("*")
+    .eq("id", id)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  if (!origen) return { error: "No se encontró el proceso que quieres duplicar." };
+
+  const { data: nuevo, error: errProceso } = await supabase
+    .from("lic_proceso")
+    .insert({
+      org_id: miembro.org_id,
+      codigo,
+      institucion_id: origen.institucion_id,
+      modalidad: origen.modalidad,
+      objeto: origen.objeto,
+      moneda: origen.moneda,
+      adjudicacion: origen.adjudicacion,
+      criterio: origen.criterio,
+      plazo_pago_dias: origen.plazo_pago_dias,
+      tasa_usd_dop: origen.tasa_usd_dop,
+      margen_pct: origen.margen_pct,
+      itbis_pct: origen.itbis_pct,
+      notas: origen.notas,
+      estado: "captura",
+      cierre: null,
+      creado_por: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (errProceso || !nuevo) {
+    if (errProceso?.code === "23505")
+      return { error: `Ya existe un proceso con el código ${codigo}.` };
+    return { error: `No se pudo duplicar: ${errProceso?.message ?? "error desconocido"}` };
+  }
+
+  // A partir de aquí, si algo falla la copia queda a medias: se borra el
+  // proceso nuevo (las hijas caen por ON DELETE CASCADE) y se avisa. Más vale
+  // no crear nada que dejar un pliego incompleto que parece bueno.
+  const abortar = async (mensaje: string) => {
+    await supabase.from("lic_proceso").delete().eq("id", nuevo.id).eq("org_id", miembro.org_id);
+    return { error: mensaje };
+  };
+
+  const [{ data: lotes }, { data: items }, { data: requisitos }] = await Promise.all([
+    supabase.from("lic_lote").select("*").eq("proceso_id", id).order("numero"),
+    supabase.from("lic_item").select("*").eq("proceso_id", id).order("orden_indice"),
+    supabase.from("lic_requisito").select("*").eq("proceso_id", id).order("orden_indice"),
+  ]);
+
+  // Los lotes primero: los ítems apuntan a ellos y hay que reapuntarlos a los
+  // NUEVOS (si no, quedarían colgando del proceso original).
+  const loteNuevoPorViejo = new Map<string, string>();
+  if (lotes && lotes.length > 0) {
+    const { data: creados, error } = await supabase
+      .from("lic_lote")
+      .insert(
+        lotes.map((l) => ({
+          org_id: miembro.org_id,
+          proceso_id: nuevo.id,
+          numero: l.numero,
+          nombre: l.nombre,
+        })),
+      )
+      .select("id, numero");
+    if (error || !creados) return abortar(`No se pudieron copiar los lotes: ${error?.message}`);
+    // El par (proceso, número) es único, así que el número identifica al lote.
+    for (const l of lotes) {
+      const nuevoLote = creados.find((c) => c.numero === l.numero);
+      if (nuevoLote) loteNuevoPorViejo.set(l.id, nuevoLote.id);
+    }
+  }
+
+  if (items && items.length > 0) {
+    const { error } = await supabase.from("lic_item").insert(
+      items.map((it) => ({
+        org_id: miembro.org_id,
+        proceso_id: nuevo.id,
+        lote_id: it.lote_id ? loteNuevoPorViejo.get(it.lote_id) ?? null : null,
+        numero: it.numero,
+        spec_cruda: it.spec_cruda,
+        cantidad: it.cantidad,
+        unidad: it.unidad,
+        marca: it.marca,
+        modelo: it.modelo,
+        parte: it.parte,
+        descripcion: it.descripcion,
+        ofertamos: it.ofertamos,
+        motivo_descarte: it.motivo_descarte,
+        suplidor_id: it.suplidor_id,
+        sku: it.sku,
+        // El costeo viaja entero: rehacerlo es lo más lento del módulo. Queda
+        // como punto de partida — hay que revisarlo antes de someter.
+        costo_usd: it.costo_usd,
+        tasa: it.tasa,
+        margen_pct: it.margen_pct,
+        margen_modo: it.margen_modo,
+        precio_unitario: it.precio_unitario,
+        itbis_modo: it.itbis_modo,
+        // itbis_aplica NO es una columna generada: es normal, con default
+        // true, y la app la mantiene en sync con el modo (igual que hace
+        // actualizarItem). Sin copiarla, un ítem exento renacía gravado y el
+        // F.033 del proceso nuevo saldría con un ITBIS que no toca.
+        itbis_aplica: it.itbis_modo !== "exento",
+        orden_indice: it.orden_indice,
+      })),
+    );
+    if (error) return abortar(`No se pudieron copiar los ítems: ${error.message}`);
+  }
+
+  if (requisitos && requisitos.length > 0) {
+    const { error } = await supabase.from("lic_requisito").insert(
+      requisitos.map((q) => {
+        // Lo que cubre un documento de la EMPRESA sigue cubierto y listo; lo
+        // que se generó o se subió para el proceso viejo vuelve a pendiente.
+        const deEmpresa = q.origen === "documento_empresa" && q.documento_empresa_id;
+        return {
+          org_id: miembro.org_id,
+          proceso_id: nuevo.id,
+          codigo: q.codigo,
+          nombre: q.nombre,
+          subsanable: q.subsanable,
+          fuente: q.fuente,
+          firmante_rol: q.firmante_rol,
+          origen: q.origen,
+          estado: deEmpresa ? q.estado : "pendiente",
+          documento_empresa_id: q.documento_empresa_id,
+          storage_path: null,
+          datos: q.datos ?? {},
+          orden_indice: q.orden_indice,
+        };
+      }),
+    );
+    if (error) return abortar(`No se pudieron copiar los requisitos: ${error.message}`);
+  }
+
+  return { id: nuevo.id };
+}
+
 export async function eliminarProceso(id: string): Promise<string | null> {
   if (isDemo()) return "En modo demo no se borra.";
   const miembro = await getMiembro();

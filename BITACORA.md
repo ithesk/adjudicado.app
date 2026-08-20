@@ -8,6 +8,47 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-08-20 — Duplicar una licitación: el pliego nuevo nace con todo hecho
+
+Pablo: «una opción que permita duplicar una licitación, luego con otro código
+de proceso, como un borrador con todos los datos». Los pliegos de una misma
+entidad se repiten casi idénticos y volver a teclearlos era el trabajo más
+tonto del módulo.
+
+`duplicarProceso(id, nuevoCodigo)` copia la cabecera (entidad, modalidad,
+objeto, moneda, criterio, plazos, tasa, margen, ITBIS, notas), los lotes, los
+ítems **con su costeo completo** y el checklist de requisitos. Solo pide el
+código nuevo: es lo único que de verdad cambia entre dos pliegos parecidos.
+
+Qué NO se copia, y por qué (esto es el diseño, no un recorte):
+- **Estado y cierre**: la copia nace en Captura y sin fecha. Es un proceso
+  nuevo, no una foto del avance del otro.
+- **Paquetes y subsanaciones**: pertenecen al expediente que se presentó.
+- **Los archivos de los requisitos** (`storage_path`): un F.034 generado lleva
+  impreso el código del proceso VIEJO. Heredarlo sería someter el papel
+  equivocado, así que esos requisitos vuelven a pendiente. Los que cubre un
+  documento de Configuración → Empresa (RPE, DGII, TSS…) sí siguen enlazados
+  y listos: esos son de la empresa y valen para cualquier proceso.
+
+Decisión de Pablo sobre el costeo: **se copia entero**. Rehacerlo es lo más
+lento del módulo y la copia es el punto de partida. El diálogo lo avisa antes
+de crear nada («revísala antes de someter»), que es donde toca decirlo.
+
+**Un fallo cazado antes de producción:** `itbis_aplica` NO es una columna
+generada — es normal, con `default true`, y la app la mantiene en sync con
+`itbis_modo`. Sin copiarla, un ítem exento renacía gravado y el F.033 del
+proceso nuevo habría salido con un ITBIS que no toca. Ahora se deriva igual
+que en `actualizarItem`.
+
+Si algo falla a media copia se borra el proceso nuevo (las hijas caen por
+ON DELETE CASCADE): más vale no crear nada que dejar un pliego incompleto
+que parece bueno. Probado contra datos reales con el proceso más cargado
+(Defensor del Pueblo, 22 ítems y 13 requisitos): copia fiel en precios,
+costos e ITBIS, cero archivos heredados, y el borrado en cascada limpio.
+
+El botón está en los dos sitios que pidió: la cabecera de la ficha y cada
+fila de la lista (ahí solo el icono, para no ensanchar la tabla).
+
 ## 2026-08-16 — Un colaborador veía Licitaciones en blanco: la cookie de empresa no se validaba
 
 Pablo: un segundo usuario de su empresa (colaborador) veía las órdenes con

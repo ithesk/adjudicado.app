@@ -11,6 +11,7 @@ import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { diasRestantes, nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, urgenciaDot, textoDias } from "@/lib/ui";
 import { coincideTexto } from "@/lib/buscar-texto";
+import DuplicarProceso from "./_components/DuplicarProceso";
 import {
   ESTADO_LIC_CHIP,
   ESTADO_LIC_LABEL,
@@ -230,6 +231,9 @@ export default function ProcesosLista({
                 <th className="w-[130px] px-3 py-2 font-medium">
                   <Cabecera col="estado" orden={orden} onOrdenar={ordenarPor}>Estado</Cabecera>
                 </th>
+                <th className="w-[44px] px-3 py-2 font-medium">
+                  <span className="sr-only">Acciones</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -282,6 +286,15 @@ export default function ProcesosLista({
                         />
                         {ESTADO_LIC_LABEL[p.estado]}
                       </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {/* Duplicar sin tener que abrir el proceso: útil cuando
+                          se arman varios pliegos parecidos de una sentada. */}
+                      <DuplicarProceso
+                        procesoId={p.id}
+                        codigoActual={p.codigo}
+                        variante="icono"
+                      />
                     </td>
                   </tr>
                 );
