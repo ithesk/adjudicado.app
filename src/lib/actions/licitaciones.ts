@@ -16,6 +16,7 @@ import {
   crearRequisito,
   crearRequisitosLote,
   crearSubsanacion,
+  duplicarProceso,
   eliminarItem,
   eliminarProceso,
   eliminarRequisito,
@@ -47,6 +48,12 @@ export async function actualizarProcesoAction(
   const error = await actualizarProceso(id, patch);
   if (!error) refrescar();
   return error;
+}
+
+export async function duplicarProcesoAction(id: string, nuevoCodigo: string) {
+  const r = await duplicarProceso(id, nuevoCodigo);
+  if (r.id) refrescar();
+  return r;
 }
 
 export async function eliminarProcesoAction(id: string): Promise<string | null> {

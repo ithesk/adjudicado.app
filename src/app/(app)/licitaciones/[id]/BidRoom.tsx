@@ -43,6 +43,7 @@ import {
   actualizarProcesoAction,
   validarCanonicoAction,
 } from "@/lib/actions/licitaciones";
+import DuplicarProceso from "../_components/DuplicarProceso";
 import LineaTiempo from "./_components/LineaTiempo";
 import DatosProceso from "./_components/DatosProceso";
 import CotizadorItems from "./_components/CotizadorItems";
@@ -371,6 +372,9 @@ export default function BidRoom({
                 >
                   {pdfListo ? "Word" : "PDF"}
                 </button>
+                {/* Duplicar: los pliegos de una misma entidad se repiten casi
+                    idénticos y volver a teclearlos era el trabajo más tonto. */}
+                <DuplicarProceso procesoId={proceso.id} codigoActual={proceso.codigo} />
               </>
             )}
           </span>
