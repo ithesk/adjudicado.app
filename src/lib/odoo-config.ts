@@ -21,6 +21,24 @@ type FilaIntegracion = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Cliente = SupabaseClient<any, any, any>;
 
+// Solo la URL del Odoo conectado, para poder ENLAZAR los registros desde la
+// interfaz. Va aparte de obtenerConfigOdoo a propósito: esto sí viaja al
+// cliente, así que aquí no puede salir ninguna credencial.
+export async function urlOdoo(
+  supabase: Cliente,
+  orgId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("integracion_odoo")
+    .select("url, activo")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  const fila = data as { url: string; activo: boolean } | null;
+  if (fila?.activo && fila.url) return fila.url.replace(/\/+$/, "");
+  // Modo legado por env: la URL vive ahí.
+  return configDesdeEnv()?.url.replace(/\/+$/, "") ?? null;
+}
+
 export async function obtenerConfigOdoo(
   supabase: Cliente,
   orgId: string,

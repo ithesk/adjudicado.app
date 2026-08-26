@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { RefreshCw, CheckCircle2, AlertCircle, Clock, Ban, Link2, Loader2, X } from "lucide-react";
+import { RefreshCw, CheckCircle2, AlertCircle, Clock, Ban, ExternalLink, Link2, Loader2, X } from "lucide-react";
 import {
   crearFlujoOdoo,
   listarFacturasOdoo,
@@ -9,6 +9,7 @@ import {
   vincularFacturaOdoo,
 } from "@/lib/actions/odoo";
 import type { FacturaResumen } from "@/lib/odoo";
+import { avisoError } from "@/lib/avisos";
 import { formatRD } from "@/lib/types";
 import { useState } from "react";
 
@@ -32,6 +33,8 @@ interface OdooSyncProps {
   facturaId: number | null;
   /** Nombre de la factura en Odoo (p. ej. "INV/2026/00042"). */
   facturaNombre: string | null;
+  /** URL del Odoo conectado, para enlazar los registros. Null si no hay. */
+  odooUrl?: string | null;
   /** Orden de venta creada en Odoo con «Crear en Odoo» (null si aún no). */
   ordenVentaId: number | null;
   ordenVentaNombre: string | null;
@@ -93,11 +96,13 @@ function etiquetaEstado(estado: EstadoOdoo): string {
 
 export default function OdooSync({
   ordenId,
+  numeroOc,
   facturaEstado: estadoInicial,
   facturaId: idInicial,
   facturaNombre: nombreInicial,
   ordenVentaId: ventaIdInicial,
   ordenVentaNombre: ventaNombreInicial,
+  odooUrl,
 }: OdooSyncProps) {
   const [pending, startTransition] = useTransition();
   const [estado, setEstado] = useState<string | null>(estadoInicial);
@@ -114,8 +119,12 @@ export default function OdooSync({
   const [detalleVenta, setDetalleVenta] = useState<string | null>(null);
   const [creandoVenta, setCreandoVenta] = useState(false);
 
+  // Enlace directo a un registro de Odoo. Odoo 17 entiende esta forma clásica.
+  const enlaceOdoo = (modelo: string, id: number) =>
+    odooUrl ? `${odooUrl}/web#id=${id}&model=${modelo}&view_type=form` : null;
+
   function crearEnOdoo() {
-    if (!confirm("¿Crear en Odoo el flujo de esta orden? (cliente y productos si faltan, orden de venta confirmada y su conduce)")) return;
+    if (!confirm("¿Crear en Odoo la ORDEN DE VENTA de esta orden de compra? (se crean también el cliente y los productos que falten, y Odoo genera el conduce)")) return;
     setMensaje(null);
     setDetalleVenta(null);
     setCreandoVenta(true);
@@ -124,6 +133,9 @@ export default function OdooSync({
       setCreandoVenta(false);
       if (!r) return; // demo
       if (!r.ok) {
+        // El error va al aviso ROJO de la casa, no a una línea gris al pie:
+        // así se leía como una nota y parecía que no había pasado nada.
+        avisoError(r.error);
         setMensaje(r.error);
         return;
       }
@@ -142,6 +154,7 @@ export default function OdooSync({
   function aplicar(res: Awaited<ReturnType<typeof sincronizarFacturaOdoo>>) {
     if (!res) return; // modo demo
     if (!res.ok) {
+      avisoError(res.error ?? "Error al sincronizar.");
       setMensaje(res.error ?? "Error al sincronizar.");
       return;
     }
@@ -167,6 +180,7 @@ export default function OdooSync({
       const r = await listarFacturasOdoo();
       setCargandoLista(false);
       if (!r.ok) {
+        avisoError(r.error);
         setMensaje(r.error);
         return;
       }
@@ -187,16 +201,43 @@ export default function OdooSync({
     <div className="space-y-2">
       {/* El flujo de venta: crear una vez, referencia siempre */}
       {venta ? (
-        <p className="flex items-center gap-1.5 text-[12px] text-ink">
-          <CheckCircle2 className="h-3.5 w-3.5 flex-none text-ok" strokeWidth={2} aria-hidden />
-          En Odoo: <span className="font-mono font-medium">{venta.nombre}</span>
-          <span className="text-muted">— series y conduce se validan allá</span>
-        </p>
+        <div className="space-y-1">
+          <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-ink">
+            <CheckCircle2 className="h-3.5 w-3.5 flex-none text-ok" strokeWidth={2} aria-hidden />
+            Orden de venta en Odoo:
+            {enlaceOdoo("sale.order", venta.id) ? (
+              <a
+                href={enlaceOdoo("sale.order", venta.id)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-mono font-medium text-primary hover:underline"
+              >
+                {venta.nombre}
+                <ExternalLink className="h-3 w-3" strokeWidth={2.2} aria-hidden />
+              </a>
+            ) : (
+              <span className="font-mono font-medium">{venta.nombre}</span>
+            )}
+          </p>
+          {/* El nombre en Odoo NO es el número de OC: cada Odoo tiene su
+              numeración. Buscar por la OC ahí solo funciona por este campo,
+              y no saberlo cuesta media hora buscando algo que sí existe. */}
+          <p className="text-[11px] leading-snug text-muted">
+            En Odoo está en <span className="text-ink-soft">Ventas → Órdenes de venta</span>.
+            {numeroOc && (
+              <>
+                {" "}Tu número de OC (<span className="font-mono">{numeroOc}</span>) va allá
+                en «Referencia del cliente», no en el nombre.
+              </>
+            )}
+          </p>
+        </div>
       ) : (
         <button
           type="button"
           onClick={crearEnOdoo}
           disabled={pending}
+          title="Crea en Odoo la orden de VENTA de esta orden de compra (no una factura)"
           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-ink transition-colors hover:bg-primary-hover disabled:opacity-55"
         >
           {creandoVenta ? (
@@ -204,7 +245,7 @@ export default function OdooSync({
           ) : (
             <Link2 className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
           )}
-          {creandoVenta ? "Creando en Odoo…" : "Crear en Odoo"}
+          {creandoVenta ? "Creando en Odoo…" : "Crear orden de venta en Odoo"}
         </button>
       )}
       {detalleVenta && <p className="text-[11.5px] text-ok">{detalleVenta}</p>}
@@ -218,7 +259,20 @@ export default function OdooSync({
             {chipIcono(estado)}
             {etiquetaEstado(estado)}
           </span>
-          {nombre && <p className="text-[11px] text-muted">{nombre}</p>}
+          {nombre &&
+            (facturaId && enlaceOdoo("account.move", facturaId) ? (
+              <a
+                href={enlaceOdoo("account.move", facturaId)!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex w-fit items-center gap-1 text-[11px] text-primary hover:underline"
+              >
+                {nombre}
+                <ExternalLink className="h-3 w-3" strokeWidth={2.2} aria-hidden />
+              </a>
+            ) : (
+              <p className="text-[11px] text-muted">{nombre}</p>
+            ))}
         </div>
       ) : (
         <p className="text-[12px] text-muted">Sin factura vinculada.</p>

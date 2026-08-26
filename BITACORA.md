@@ -8,6 +8,50 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-08-26 — «Le di a crear en Odoo y no encuentro la orden»
+
+Pablo probó «Crear en Odoo» y no encontró nada. Diagnóstico completo, incluida
+una conexión REAL de solo lectura a su Odoo con las credenciales guardadas.
+
+**La integración funciona y la orden que creó SÍ está allá.** Autentica bien
+contra `ventas.innovaciontecnologica.com.do` (uid 2, con permiso de creación en
+`sale.order`, `res.partner` y `product.product`), y la orden de venta existe:
+`CS089100083`, cliente «Instituto Dominicano de Meteorología», confirmada,
+988,706.66, del 23 de julio. La creó la app: lleva `client_order_ref =
+INDOMET-2026-00041`.
+
+**Por qué no la encontraba — dos cosas que el sistema no contaba:**
+1. **No crea una factura, crea una ORDEN DE VENTA.** Buscándola en Facturación
+   no aparece: vive en Ventas → Órdenes de venta.
+2. **El nombre en Odoo no es el número de OC.** Su Odoo tiene numeración propia
+   (`CS0891000xx`); la OC va en «Referencia del cliente». Buscar por la OC en el
+   buscador de Odoo puede no devolver nada según qué campos mire.
+
+**Y su intento reciente no llegó a crear nada** — no hay registro posterior al
+23 de julio ni en la base ni en Odoo. Descartadas las dos causas de datos:
+ninguna de las 30 órdenes está sin ítems ni sin institución.
+
+Lo que queda, y es el defecto real: **el error se pintaba en gris al pie del
+panel** (`text-[12px] text-muted`), sin icono ni color, indistinguible de una
+nota. Toda la app usa avisos rojos para esto; ese componente no. Un fallo se
+leía como «no pasó nada». Segundo camino silencioso: el `confirm()` del
+navegador — si se cancela, no ocurre nada y tampoco se dice nada.
+
+Arreglos:
+- Los tres errores del panel van al **aviso rojo** de la casa (`avisoError`),
+  además de al texto.
+- **Enlace directo** a la orden de venta y a la factura en Odoo
+  (`/web#id=…&model=…&view_type=form`, la forma clásica que entiende Odoo 17;
+  comprobado que responde). Antes solo se veía un nombre suelto que había que
+  ir a buscar a mano.
+- Debajo del enlace, dónde está en Odoo y **que la OC va en «Referencia del
+  cliente»** — el dato que faltaba para poder buscarla.
+- El botón dice «Crear orden de venta en Odoo», no un genérico «Crear en Odoo»;
+  y el `confirm` explica que es la orden de venta, no una factura.
+
+`urlOdoo()` va aparte de `obtenerConfigOdoo()` a propósito: esa URL sí viaja al
+cliente, así que por ahí no puede escaparse ninguna credencial.
+
 ## 2026-08-25 — La bandeja también es tablero (y `fijarEstado` gana candado)
 
 Tras el tablero de licitaciones, Pablo pidió analizar dónde más encajaría. El
