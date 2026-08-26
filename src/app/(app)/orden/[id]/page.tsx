@@ -9,6 +9,8 @@ import {
   institucionPorNombre,
 } from "@/lib/queries";
 import { getMiembro } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/server";
+import { urlOdoo } from "@/lib/odoo-config";
 import { Panel, SectionTitle } from "@/components/ui";
 import { ContactList } from "@/components/contacts";
 import {
@@ -72,6 +74,14 @@ export default async function OrdenDetallePage({
     id: miembro?.user_id ?? "yo",
     nombre: miembro?.nombre ? nombreLegible(miembro.nombre) : "Tú",
   };
+
+  // La URL del Odoo conectado, para enlazar la orden de venta y la factura.
+  // Se pedía «dónde quedó eso» y la respuesta era un nombre suelto que había
+  // que ir a buscar a mano — y con una numeración propia que no se parece al
+  // número de OC, buscarlo era el problema.
+  const odooUrl = miembro
+    ? await urlOdoo(await createClient(), miembro.org_id)
+    : null;
 
   return (
     <ActividadProvider
@@ -234,6 +244,7 @@ export default async function OrdenDetallePage({
             facturaNombre={orden.odoo_factura_nombre ?? null}
             ordenVentaId={orden.odoo_orden_id ?? null}
             ordenVentaNombre={orden.odoo_orden_nombre ?? null}
+            odooUrl={odooUrl}
           />
           <BuzonOrden
             buzon={orden.buzon ?? null}

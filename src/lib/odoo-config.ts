@@ -21,6 +21,54 @@ type FilaIntegracion = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Cliente = SupabaseClient<any, any, any>;
 
+// POR QUÉ no hay config utilizable. Sin esto, «no hay cuenta guardada» y «hay
+// cuenta pero este entorno no puede descifrar su clave» dan exactamente el
+// mismo mensaje — y esa es justo la diferencia entre local y producción
+// cuando CREDENCIALES_SECRET no está puesta (o es otra) en el despliegue.
+// Con el mensaje genérico, el síntoma es «en local funciona y en Vercel no»
+// sin ninguna pista de por dónde mirar.
+export async function motivoSinOdoo(
+  supabase: Cliente,
+  orgId: string,
+): Promise<string> {
+  const SIN_CUENTA = "Odoo no está conectado — ve a Configuración → Integraciones.";
+  const { data } = await supabase
+    .from("integracion_odoo")
+    .select("activo, api_key_cifrada")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  const fila = data as { activo: boolean; api_key_cifrada: string } | null;
+  if (!fila?.activo) return SIN_CUENTA;
+  try {
+    descifrar(fila.api_key_cifrada);
+  } catch {
+    return (
+      "Hay una cuenta de Odoo guardada, pero este entorno no puede descifrar su clave: " +
+      "falta CREDENCIALES_SECRET o no es la misma con la que se guardó. " +
+      "Revísala en las variables de entorno del despliegue."
+    );
+  }
+  return SIN_CUENTA;
+}
+
+// Solo la URL del Odoo conectado, para poder ENLAZAR los registros desde la
+// interfaz. Va aparte de obtenerConfigOdoo a propósito: esto sí viaja al
+// cliente, así que aquí no puede salir ninguna credencial.
+export async function urlOdoo(
+  supabase: Cliente,
+  orgId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("integracion_odoo")
+    .select("url, activo")
+    .eq("org_id", orgId)
+    .maybeSingle();
+  const fila = data as { url: string; activo: boolean } | null;
+  if (fila?.activo && fila.url) return fila.url.replace(/\/+$/, "");
+  // Modo legado por env: la URL vive ahí.
+  return configDesdeEnv()?.url.replace(/\/+$/, "") ?? null;
+}
+
 export async function obtenerConfigOdoo(
   supabase: Cliente,
   orgId: string,
