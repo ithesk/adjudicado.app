@@ -109,13 +109,20 @@ export function CabeceraPagina({
   );
 }
 
-// Ancho máximo por tipo de página. Las tablas densas NO usan Hoja (van a
-// todo lo ancho); todo lo demás se capa para no verse "estirado" en desktop.
+// Ancho máximo por tipo de página. Todo se capa para no verse "estirado" en
+// desktop, porque una línea de prosa de 1500px obliga a un retorno de carro
+// en el que el ojo se pierde. Esa regla gobierna el TEXTO, no el escaneo de
+// una tabla: en una celda de una línea no hay retorno de carro y el ojo baja
+// por columnas — por eso "mesa" existe y llega más lejos.
 const ANCHO_HOJA = {
   form: "max-w-2xl", // creación con pocos campos
   feed: "max-w-3xl", // hilos de actividad
   lista: "max-w-4xl", // listas simples y buscadores
   ficha: "max-w-[1200px]", // detalle con riel (sheet estilo Odoo)
+  // Mesa de trabajo: la tabla donde se vive el día. Llega al techo que ya
+  // pone el <main> (1600px) en vez de capar por debajo de él — el espacio
+  // aquí ES la función: ver el objeto del pliego entero sin abrir el proceso.
+  mesa: "max-w-[1600px]",
 } as const;
 
 export function Hoja({

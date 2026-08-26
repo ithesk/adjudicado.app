@@ -8,6 +8,73 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-08-25 — La lista de licitaciones: se acabó el scroll horizontal, y ahora también es tablero
+
+Pablo: «hay espacio pero está en una tabla, entonces para ver el estado u
+otras opciones tengo que hacer scroll». Y después, con una captura de un
+competidor: «quiero hacer algo así» — un Kanban.
+
+**El scroll no lo causaba el ancho de la página, como pensé al principio.**
+Eran dos problemas independientes, y el agente de UX corrigió mi diagnóstico:
+a 1600px la tabla habría desbordado igual, porque el desbordamiento no
+depende del espacio disponible sino del ancho MÍNIMO que la tabla exige.
+
+La mecánica: `truncate` es `overflow:hidden` + `text-overflow:ellipsis` +
+`white-space:nowrap`. En una tabla de layout automático, ese `nowrap` hace
+que el ancho mínimo de la celda sea **el texto entero**, y `overflow:hidden`
+no reduce ese mínimo — solo recorta al pintar. Los `w-[120px]` de los `th`
+son sugerencias que el algoritmo ignora cuando el mínimo las supera. Y había
+**tres** focos, no uno: el objeto del pliego (hay uno de 130 caracteres), el
+código (que ni siquiera llevaba `truncate`) y la celda Cierre, cuyo mínimo es
+la SUMA de sus hijos — punto + chip de días + chip «subsana» ≈ 170px contra
+los 120 declarados. Justo las filas con subsanación abierta, las críticas.
+
+Arreglo: `table-fixed` con **una sola columna sin ancho declarado** (Proceso),
+que se queda con toda la holgura. Reparto determinista en cualquier navegador,
+a diferencia de los porcentajes de `TriageTable`, que funcionan por casualidad
+(al ocultar una columna su porcentaje desaparece y la spec deja el reparto del
+sobrante a criterio del navegador). Fuera el `overflow-x-auto`: con `table-fixed`
+desbordar es imposible, y sin él el menú «⋯» puede desplegarse fuera de la fila.
+
+Lo demás del rediseño:
+- **Modalidad deja de ser columna** y pasa a sigla (`CM`, `CP`, `LPN`) junto al
+  código. Ocupaba 150px con «Licitación pública nacional» y encima desaparecía
+  por debajo de `md`, justo donde más falta hacía. Ahora se ve siempre.
+- **Por debajo de `lg`, tarjetas apiladas.** Cinco columnas no caben en 375px
+  con ninguna técnica; el `overflow-x-auto` que había era el parche que causó
+  la queja.
+- **Menú «⋯» por fila**: abrir, mover de etapa y duplicar. NO lleva eliminar:
+  hoy no existe ninguna UI de borrado en toda la app y el borrado arrastra en
+  cascada ítems y requisitos — estrenar eso tras un clic en un desplegable
+  sería regalar una forma fácil de perder trabajo. Y solo ofrece etapas de
+  trabajo temprano: para «Listo» o «Sometido» hay que ver el gate de requisitos
+  críticos, y eso solo se ve dentro del expediente.
+- **Ancho `mesa` (1600px)**, un cuarto valor en `ANCHO_HOJA`. El comentario que
+  decía «las tablas densas NO usan Hoja» era falso: la bandeja también usaba
+  `ficha`. La regla de no estirar gobierna la PROSA, no el escaneo tabular —
+  en una celda de una línea no hay retorno de carro. La bandeja va al mismo
+  ancho (dos anchos distintos en las dos tablas principales se ve peor que uno
+  estrecho en las dos) y su actividad reciente se capa a `max-w-3xl`, que eso
+  sí es prosa.
+
+**El tablero** (`TableroLicitaciones.tsx`) es la segunda vista de los mismos
+datos: la tabla dice qué corre prisa, el tablero dice cómo va el embudo. Y
+resuelve de paso la queja de hace unos días de que las etapas «parecían no
+tener funcionalidad»: aquí **arrastrar una tarjeta ES avanzarla**, el cambio
+se ve al instante y no hay que buscar nada. Sin librería de drag and drop —
+HTML5 nativo, igual que el reordenado del cotizador.
+
+Detalles del tablero: el camino feliz + Adjudicada y Perdida siempre se
+pintan (una columna vacía informa, y hace falta como destino); Subsanación y
+Descartado solo si tienen algo. Movimiento optimista con reversión si el
+guardado falla. El buscador funciona en las dos vistas; los filtros por etapa
+se ocultan en el tablero porque las columnas ya son las etapas. La vista se
+recuerda. Aquí el scroll horizontal SÍ es correcto: es el idioma del tablero.
+
+Sin prioridad ALTA/MEDIA/BAJA como en la captura del competidor: ese campo no
+existe en el modelo e inventarlo sería pedirle a Pablo mantener un dato más a
+mano. El reloj de días con su color ya sale solo de la fecha de cierre.
+
 ## 2026-08-20 — Duplicar una licitación: el pliego nuevo nace con todo hecho
 
 Pablo: «una opción que permita duplicar una licitación, luego con otro código
