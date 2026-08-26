@@ -19,7 +19,7 @@ export default async function LicitacionesPage() {
   );
 
   return (
-    <Hoja ancho="ficha" className="space-y-4">
+    <Hoja ancho="mesa" className="space-y-4">
       <CabeceraPagina
         titulo="Licitaciones"
         descripcion={

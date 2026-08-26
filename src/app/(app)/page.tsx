@@ -7,6 +7,7 @@ import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
 import { metricaPorKey } from "@/lib/metricas";
 import MetricBar from "./_components/MetricBar";
 import TriageTable from "./_components/TriageTable";
+import VistaBandeja from "./_components/VistaBandeja";
 import ActividadReciente from "./_components/ActividadReciente";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,10 @@ export default async function TableroPage({
   const cerradas = hayFiltro ? [] : ordenes.filter((o) => !esViva(o.estado));
 
   return (
-    <Hoja ancho="ficha" className="space-y-6">
+    // "mesa": las dos tablas donde se vive el día (bandeja y licitaciones)
+    // comparten ancho a propósito — dos anchos distintos se ven peor que uno
+    // estrecho en las dos.
+    <Hoja ancho="mesa" className="space-y-6">
       <CabeceraPagina
         titulo="Bandeja"
         descripcion={`${lista.length} orden${lista.length === 1 ? "" : "es"} ${hayFiltro ? `en ${titulo.toLowerCase()}` : "vivas"} — el trabajo del día, ordenado por urgencia.`}
@@ -70,9 +74,12 @@ export default async function TableroPage({
                 {hayFiltro ? "No hay órdenes en este filtro." : "No hay órdenes vivas."}
               </p>
             ) : (
-              <TriageTable
-                ordenes={lista}
-                controls
+              // El tablero recibe TODAS las órdenes, no la lista filtrada: sus
+              // columnas ya son los estados, y un filtro por estado lo dejaría
+              // con una sola columna con algo dentro.
+              <VistaBandeja
+                lista={lista}
+                todas={ordenes}
                 currentUserId={miembro?.user_id}
                 filtroActivo={hayFiltro ? titulo : undefined}
               />
@@ -80,8 +87,14 @@ export default async function TableroPage({
           </section>
 
           {/* La actividad va DESPUÉS de la mesa de trabajo: es contexto,
-              no la tarea — antes empujaba la tabla de órdenes abajo. */}
-          {!hayFiltro && <ActividadReciente actividad={actividad} />}
+              no la tarea — antes empujaba la tabla de órdenes abajo. Se capa
+              a ancho de feed: es prosa, y a 1600px la línea sería ilegible
+              aunque la tabla de arriba sí aproveche todo el ancho. */}
+          {!hayFiltro && (
+            <div className="max-w-3xl">
+              <ActividadReciente actividad={actividad} />
+            </div>
+          )}
 
           {cerradas.length > 0 && (
             <section className="space-y-2.5">

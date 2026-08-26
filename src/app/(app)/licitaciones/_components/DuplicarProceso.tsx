@@ -22,12 +22,17 @@ export default function DuplicarProceso({
   procesoId,
   codigoActual,
   // "boton" = con texto, para la cabecera de la ficha.
-  // "icono" = solo el icono, para no ensanchar las filas de la lista.
+  // "icono" = solo el icono, suelto.
+  // "menu"  = fila de ancho completo dentro del desplegable «⋯» de la lista.
   variante = "boton",
+  // El menú que lo contiene tiene que cerrarse al abrirse este diálogo, o se
+  // queda flotando por detrás.
+  onAbrir,
 }: {
   procesoId: string;
   codigoActual: string;
-  variante?: "boton" | "icono";
+  variante?: "boton" | "icono" | "menu";
+  onAbrir?: () => void;
 }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -76,17 +81,27 @@ export default function DuplicarProceso({
     <>
       <button
         type="button"
-        onClick={() => setAbierto(true)}
+        onClick={() => {
+          onAbrir?.();
+          setAbierto(true);
+        }}
         title={`Duplicar ${codigoActual} en un proceso nuevo`}
         className={
           variante === "icono"
             ? "rounded p-1 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
-            : btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")
+            : variante === "menu"
+              ? "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] text-ink transition-colors hover:bg-surface-2"
+              : btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")
         }
         aria-label={variante === "icono" ? `Duplicar ${codigoActual}` : undefined}
       >
-        <Copy className={variante === "icono" ? "h-3.5 w-3.5" : "h-4 w-4"} strokeWidth={2.2} aria-hidden />
+        <Copy
+          className={`shrink-0 ${variante === "boton" ? "h-4 w-4" : "h-3.5 w-3.5"} ${variante === "menu" ? "text-muted" : ""}`}
+          strokeWidth={2.2}
+          aria-hidden
+        />
         {variante === "boton" && "Duplicar"}
+        {variante === "menu" && "Duplicar…"}
       </button>
 
       {abierto && (
