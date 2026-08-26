@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMiembro } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { cifrar } from "@/lib/cifrado";
-import { obtenerConfigOdoo } from "@/lib/odoo-config";
+import { motivoSinOdoo, obtenerConfigOdoo } from "@/lib/odoo-config";
 import {
   probarConexion,
   buscarFactura,
@@ -106,7 +106,7 @@ export async function probarOdoo(): Promise<ResultadoConexion> {
   const supabase = await createClient();
 
   const config = await obtenerConfigOdoo(supabase, miembro.org_id);
-  if (!config) return { ok: false, error: "Odoo no está conectado." };
+  if (!config) return { ok: false, error: await motivoSinOdoo(supabase, miembro.org_id) };
 
   const resultado = await probarConexion(config);
   // Si la conexión viene de la cuenta guardada, anotar la prueba.
@@ -144,7 +144,7 @@ export async function sincronizarFacturaOdoo(
   const supabase = await createClient();
   const config = await obtenerConfigOdoo(supabase, miembro.org_id);
   if (!config) {
-    return { ok: false, error: "Odoo no está conectado — ve a Configuración → Integraciones." };
+    return { ok: false, error: await motivoSinOdoo(supabase, miembro.org_id) };
   }
 
   const { data: orden, error: errOrden } = await supabase
@@ -206,7 +206,7 @@ export async function crearFlujoOdoo(
   if (!miembro) return { ok: false, error: "No autorizado." };
   const supabase = await createClient();
   const config = await obtenerConfigOdoo(supabase, miembro.org_id);
-  if (!config) return { ok: false, error: "Odoo no está conectado — ve a Configuración → Integraciones." };
+  if (!config) return { ok: false, error: await motivoSinOdoo(supabase, miembro.org_id) };
 
   const { data: orden } = await supabase
     .from("orden")
@@ -289,7 +289,7 @@ export async function listarFacturasOdoo(): Promise<
   if (!miembro) return { ok: false, error: "No autorizado." };
   const supabase = await createClient();
   const config = await obtenerConfigOdoo(supabase, miembro.org_id);
-  if (!config) return { ok: false, error: "Odoo no está conectado." };
+  if (!config) return { ok: false, error: await motivoSinOdoo(supabase, miembro.org_id) };
   const facturas = await listarFacturasRecientes(config, 15);
   return { ok: true, facturas };
 }
@@ -304,7 +304,7 @@ export async function vincularFacturaOdoo(
   if (!miembro) return { ok: false, error: "No autorizado." };
   const supabase = await createClient();
   const config = await obtenerConfigOdoo(supabase, miembro.org_id);
-  if (!config) return { ok: false, error: "Odoo no está conectado." };
+  if (!config) return { ok: false, error: await motivoSinOdoo(supabase, miembro.org_id) };
 
   const factura = (await leerFacturasPorId(config, [facturaId])).get(facturaId) ?? null;
   if (!factura) return { ok: false, error: "Esa factura no existe en Odoo." };
