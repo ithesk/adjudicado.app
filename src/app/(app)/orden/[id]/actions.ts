@@ -44,17 +44,27 @@ export async function avanzarEstado(
 }
 
 // Permite fijar un estado puntual (p. ej. retroceder o marcar cobrado).
+//
+// Con `desde` se activa el mismo candado optimista que avanzarEstado: el
+// update solo entra si la orden sigue donde el usuario la vio. Lo necesita el
+// TABLERO, donde el estado de partida es el de la columna de la que se
+// arrastró: entre que se pinta el tablero y se suelta la tarjeta pueden haber
+// pasado minutos, y el cron nocturno de Odoo también mueve órdenes solo. Sin
+// candado, arrastrar pisaría ese cambio sin que nadie se entere.
 export async function fijarEstado(
   ordenId: string,
   estado: Estado,
+  desde?: Estado,
 ): Promise<string | null> {
   if (isDemo()) return null;
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("orden")
-    .update({ estado })
-    .eq("id", ordenId);
+  let consulta = supabase.from("orden").update({ estado }).eq("id", ordenId);
+  if (desde) consulta = consulta.eq("estado", desde);
+  const { data, error } = await consulta.select("id");
   if (error) return `No se pudo guardar: ${error.message}`;
+  if (desde && (data?.length ?? 0) === 0) {
+    return "Esta orden ya cambió de estado en otra parte — actualiza la página.";
+  }
   refrescar(ordenId);
   return null;
 }

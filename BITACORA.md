@@ -8,6 +8,41 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-08-25 — La bandeja también es tablero (y `fijarEstado` gana candado)
+
+Tras el tablero de licitaciones, Pablo pidió analizar dónde más encajaría. El
+análisis dio una regla: **una columna tiene que ser algo que TÚ decides, no
+algo que decide el calendario.** Arrastrar debe significar «he decidido que
+esto está aquí». Por eso quedan fuera los documentos de empresa y las alertas
+(su estado lo calcula una fecha: no puedes arrastrar nada a «vigente») y los
+requisitos (dos estados, y «listo» es consecuencia de adjuntar un archivo).
+
+El candidato claro era la bandeja: ocho estados en fila, es la pantalla de
+inicio, y cada estado es una decisión de una persona. El segundo candidato
+—los ítems en coordinación, agrupados por su estado en todas las órdenes
+vivas— es el que más trabajo ahorraría, pero tiene un obstáculo real: cada
+tipo de ítem tiene un flujo distinto (servicio 3 estados, físico 4, licencia
+6), así que no hay un juego de columnas único. Queda pendiente con esa nota.
+
+**El arreglo que destapó el tablero:** `fijarEstado` no tenía el candado
+optimista que sí tiene `avanzarEstado` (`.eq("estado", desde)`). En la ficha
+no se notaba —acabas de ver el estado en pantalla—, pero en un tablero pueden
+pasar minutos entre que se pinta y se suelta la tarjeta, y **el cron nocturno
+de Odoo también mueve órdenes solo**. Sin candado, arrastrar pisaba ese cambio
+en silencio. Ahora `fijarEstado(id, estado, desde?)` rechaza el guardado si la
+orden ya no está donde el usuario la vio, y lo dice.
+
+Otra trampa evitada: la bandeja trae un RESUMEN de cada ítem (sin componentes
+ni reparto, y con `tipo` opcional), así que `itemEntregado()` no sirve ahí —
+con el tipo ausente ni siquiera puede resolver su flujo y reventaría. El
+conteo va por el flag `entregado`, igual que hace `TriageTable`.
+
+**Se copió el tablero en vez de extraer un componente común, a propósito.**
+Con dos tableros ya se ve qué es de verdad idéntico (la mecánica de arrastre y
+el estado optimista, media pantalla) y qué es de cada dominio (columnas,
+tarjeta y guardado). Extraer desde un solo ejemplo habría sido adivinar la
+forma; cuando aparezca el tercero se extrae con la forma ya conocida.
+
 ## 2026-08-25 — La lista de licitaciones: se acabó el scroll horizontal, y ahora también es tablero
 
 Pablo: «hay espacio pero está en una tabla, entonces para ver el estado u

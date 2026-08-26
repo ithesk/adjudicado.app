@@ -7,6 +7,7 @@ import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
 import { metricaPorKey } from "@/lib/metricas";
 import MetricBar from "./_components/MetricBar";
 import TriageTable from "./_components/TriageTable";
+import VistaBandeja from "./_components/VistaBandeja";
 import ActividadReciente from "./_components/ActividadReciente";
 
 export const dynamic = "force-dynamic";
@@ -73,9 +74,12 @@ export default async function TableroPage({
                 {hayFiltro ? "No hay órdenes en este filtro." : "No hay órdenes vivas."}
               </p>
             ) : (
-              <TriageTable
-                ordenes={lista}
-                controls
+              // El tablero recibe TODAS las órdenes, no la lista filtrada: sus
+              // columnas ya son los estados, y un filtro por estado lo dejaría
+              // con una sola columna con algo dentro.
+              <VistaBandeja
+                lista={lista}
+                todas={ordenes}
                 currentUserId={miembro?.user_id}
                 filtroActivo={hayFiltro ? titulo : undefined}
               />
