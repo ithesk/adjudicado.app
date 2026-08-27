@@ -32,6 +32,7 @@ import { fetchLargo } from "@/lib/fetch-cliente";
 import { diasRestantes, formatRD, nivelUrgencia } from "@/lib/types";
 import { urgenciaChip, textoDias } from "@/lib/ui";
 import {
+  ESTADO_LIC_LABEL,
   MODALIDAD_LABEL,
   noSubsanablesPendientes,
   type EstadoLicitacion,
@@ -45,6 +46,10 @@ import {
 } from "@/lib/actions/licitaciones";
 import DuplicarProceso from "../_components/DuplicarProceso";
 import LineaTiempo from "./_components/LineaTiempo";
+import OrdenesDelProceso, {
+  type OrdenDelProceso,
+} from "./_components/OrdenesDelProceso";
+import { proponerAdjudicar } from "@/lib/licitaciones/enlace";
 import DatosProceso from "./_components/DatosProceso";
 import CotizadorItems from "./_components/CotizadorItems";
 import RequisitosPanel from "./_components/RequisitosPanel";
@@ -145,6 +150,7 @@ export default function BidRoom({
   tienePerfil,
   pdfListo = false,
   paquetes = [],
+  ordenes = [],
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
@@ -161,6 +167,9 @@ export default function BidRoom({
   pdfListo?: boolean;
   // Lo ya generado, para descargar directo sin regenerar.
   paquetes?: PaqueteGenerado[];
+  // Las órdenes de compra que salieron de este proceso (enlazadas por el
+  // código de expediente). El otro extremo del hilo.
+  ordenes?: OrdenDelProceso[];
 }) {
   const router = useRouter();
   const { proceso, items, requisitos, institucion, subsanacion } = detalle;
@@ -388,6 +397,17 @@ export default function BidRoom({
           onCambiar={cambiarEstado}
         />
       </Panel>
+
+      {/* Arriba del todo a propósito: si llegó la orden de compra y el
+          proceso no se da por ganado, esa contradicción manda sobre
+          cualquier otra cosa de esta pantalla. */}
+      <OrdenesDelProceso
+        procesoId={proceso.id}
+        codigo={proceso.codigo}
+        estadoProceso={ESTADO_LIC_LABEL[proceso.estado]}
+        ordenes={ordenes}
+        proponer={ordenes.length > 0 && proponerAdjudicar(proceso.estado)}
+      />
 
       <DisposicionFicha
         principal={

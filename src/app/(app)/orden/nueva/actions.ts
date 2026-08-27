@@ -4,7 +4,27 @@ import { redirect } from "next/navigation";
 import { getMiembro, getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarEntidad, type TipoItem } from "@/lib/types";
+import { buscarProcesoPorExpediente } from "@/lib/licitaciones/enlace";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+// A qué LICITACIÓN pertenece esta orden, si es que alguna. El hilo es el
+// código de expediente: lo pone el Estado y viaja del pliego a la orden de
+// compra que llega por correo semanas después.
+//
+// Devuelve null sin drama cuando no cruza: la licitación se pudo trabajar
+// fuera de este sistema y la orden llega igual. Es el caso mayoritario.
+export async function enlazarProceso(
+  supabase: SupabaseClient,
+  orgId: string,
+  codigoExpediente: string | null,
+): Promise<string | null> {
+  if (!codigoExpediente?.trim()) return null;
+  const { data: procesos } = await supabase
+    .from("lic_proceso")
+    .select("id, codigo, estado")
+    .eq("org_id", orgId);
+  return buscarProcesoPorExpediente(codigoExpediente, procesos ?? [])?.id ?? null;
+}
 
 // La entidad convocante es LA MISMA cuando se licita y cuando llega la OC:
 // el texto que extrae el OCR se empareja contra el catálogo `institucion`
@@ -84,11 +104,10 @@ export async function crearOrden(
   }
 
   const supabase = await createClient();
-  const institucion_id = await enlazarInstitucion(
-    supabase,
-    miembro.org_id,
-    institucion,
-  );
+  const [institucion_id, proceso_id] = await Promise.all([
+    enlazarInstitucion(supabase, miembro.org_id, institucion),
+    enlazarProceso(supabase, miembro.org_id, codigo_expediente),
+  ]);
 
   const { data: orden, error } = await supabase
     .from("orden")
@@ -97,6 +116,7 @@ export async function crearOrden(
       numero_oc,
       institucion,
       institucion_id,
+      proceso_id,
       codigo_expediente,
       fecha_oc,
       moneda,
