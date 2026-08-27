@@ -301,6 +301,19 @@ export function componentesListos(item: Item): number {
   return (item.componentes ?? []).filter((c) => itemEntregado(c)).length;
 }
 
+// TODOS los componentes que cuelgan por debajo, a cualquier profundidad.
+//
+// La fila plegada mostraba solo los hijos DIRECTOS, y eso llegó a parecer
+// pérdida de datos: seis componentes anidados un nivel más abajo se
+// resumían como «1 comp.», así que el usuario los dio por perdidos cuando
+// estaban todos guardados. Un contador que no cuenta lo que hay miente.
+export function componentesTotales(item: Item): number {
+  return (item.componentes ?? []).reduce(
+    (n, c) => n + 1 + componentesTotales(c),
+    0,
+  );
+}
+
 // "1× Amazon · 4× eBay" — resumen legible del reparto.
 export function resumenReparto(item: Item): string {
   return (item.asignaciones ?? [])
