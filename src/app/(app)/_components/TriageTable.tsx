@@ -19,9 +19,11 @@ import {
   diasRestantes,
   ESTADO_LABEL,
   ESTADOS,
+  formatFecha,
   formatRD,
   nivelUrgencia,
   plazoDominante,
+  tiempoRelativo,
 } from "@/lib/types";
 import { estadoChip, textoDias, urgenciaChip, urgenciaDot } from "@/lib/ui";
 import type { OrdenConItems } from "@/lib/queries";
@@ -35,6 +37,7 @@ type ColKey =
   | "estado"
   | "items"
   | "suplidor"
+  | "creada"
   | "monto";
 
 interface ColDef {
@@ -104,6 +107,17 @@ const COLS: ColDef[] = [
     sort: (o) => suplidoresDistintos(o).length,
   },
   {
+    // Cuándo ENTRÓ la orden. La bandeja se ordena por urgencia —una orden
+    // nueva con entrega lejana aterriza al fondo—, así que sin esta columna
+    // no había forma de encontrar lo que acabas de agregar ni de saber
+    // cuánto lleva una orden en casa. Ordena por fecha, no por el texto.
+    key: "creada",
+    label: "Creada",
+    defaultOn: true,
+    peso: 1.2,
+    sort: (o) => o.created_at ?? "",
+  },
+  {
     key: "monto",
     label: "Monto",
     alwaysOn: true,
@@ -113,7 +127,10 @@ const COLS: ColDef[] = [
   },
 ];
 
-const STORAGE_KEY = "triage-cols-v3";
+// v4: entra la columna «Creada». Subir la versión reinicia las preferencias
+// una vez, que es lo único que hace que una columna nueva se VEA — si no,
+// queda filtrada por la lista guardada y nadie la descubre.
+const STORAGE_KEY = "triage-cols-v4";
 const DEFAULT_VISIBLE = COLS.filter((c) => c.alwaysOn || c.defaultOn).map(
   (c) => c.key,
 );
@@ -577,6 +594,14 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
         </span>
       );
     })(),
+    creada: (
+      <span
+        className="block truncate whitespace-nowrap text-[12.5px] text-muted"
+        title={formatFecha(orden.created_at.slice(0, 10))}
+      >
+        {tiempoRelativo(orden.created_at)}
+      </span>
+    ),
     monto: (
       <span className="block truncate whitespace-nowrap font-mono text-[13px] font-medium tabular-nums text-ink">
         {formatRD(orden.monto, orden.moneda)}
