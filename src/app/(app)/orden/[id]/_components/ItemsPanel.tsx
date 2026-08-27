@@ -38,6 +38,7 @@ import {
   tieneReparto,
   tieneComponentes,
   componentesListos,
+  componentesTotales,
   tipoPorArchivo,
   nivelUrgencia,
   tiempoRelativo,
@@ -434,6 +435,7 @@ function ItemRow({
 
   // ---- Componentes (sub-ítems) ----
   const componentes = item.componentes ?? [];
+  const compsTotales = componentesTotales(item);
   const compuesto = tieneComponentes(item);
   const compsListos = componentesListos(item);
 
@@ -581,7 +583,10 @@ function ItemRow({
             className="inline-flex shrink-0 items-center gap-1 rounded-md bg-surface-2 px-2.5 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:text-ink"
           >
             <Layers className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            {compsListos}/{componentes.length} comp.
+            {/* El total cuenta TODA la rama, no solo los hijos directos: con
+                el conteo directo, seis componentes anidados se resumían como
+                «1 comp.» y parecían perdidos. */}
+            {compsListos}/{compsTotales} comp.
           </button>
         ) : split ? (
           <button
@@ -852,13 +857,23 @@ function ItemRow({
                   Componentes
                   {componentes.length > 0 && ` · ${compsListos}/${componentes.length} listos`}
                 </p>
+                {/* El botón DICE de qué ítem va a colgar. Cuando se abre un
+                    componente para renombrarlo, su propio «Agregar
+                    componente» queda a la vista junto al del padre: dos
+                    botones idénticos, anidados, sin nada que los distinga.
+                    Así es como seis componentes acabaron un nivel más abajo
+                    de lo que su dueño creía. */}
                 <button
                   type="button"
                   onClick={() => onAddComponente(item.id)}
-                  className="inline-flex items-center gap-1 text-[12px] font-medium text-primary transition-opacity hover:opacity-80"
+                  title={`Se agregará dentro de «${item.nombre || "este ítem"}»`}
+                  className="inline-flex min-w-0 items-center gap-1 text-[12px] font-medium text-primary transition-opacity hover:opacity-80"
                 >
-                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
-                  Agregar componente
+                  <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+                  <span className="shrink-0">Agregar a</span>
+                  <span className="max-w-40 truncate font-normal text-muted">
+                    {item.nombre || "este ítem"}
+                  </span>
                 </button>
               </div>
               {componentes.length === 0 ? (
