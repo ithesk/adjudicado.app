@@ -56,6 +56,10 @@ export interface Orden {
   responsable_id: string | null;
   colaboradores?: string[]; // user_ids de colaboradores (además del responsable)
   grupo_id?: string | null; // grupo/equipo responsable de la orden
+  // La licitación de la que salió esta orden, si estaba en el sistema. Se
+  // enlaza sola por el código de expediente; null es un caso legítimo y
+  // frecuente (el pliego se trabajó fuera).
+  proceso_id?: string | null;
   buzon?: string | null; // código del buzón de correo entrante (oc-<buzon>@dominio)
   odoo_factura_id?: number | null; // factura vinculada en Odoo
   odoo_factura_estado?: string | null; // payment_state de la factura en Odoo

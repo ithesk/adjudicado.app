@@ -22,6 +22,7 @@ import {
   estadoDocumentacion,
   type DocumentoEmpresa,
 } from "@/lib/empresa/documentos";
+import { proponerAdjudicar } from "@/lib/licitaciones/enlace";
 
 // Tres niveles, no cinco: la alerta o es tarde (vencido), o es para hoy
 // (urgente), o es para esta semana (aviso). Más matices no cambian qué hace
@@ -235,6 +236,51 @@ export function alertasDeLicitaciones(procesos: ProcesoParaAlerta[]): Alerta[] {
   return alertas;
 }
 
+// ---------- La costura entre los dos módulos ----------
+
+// Llegó la orden de compra de una licitación que el sistema no da por ganada.
+// La orden ES la prueba de que se ganó, así que aquí hay una contradicción
+// que alguien tiene que resolver con un clic. Sin esto, el tablero de
+// licitaciones enseña un embudo falso: procesos «en armado» que en realidad
+// ya se entregaron y están por facturar (pasa hoy con 3 de 5 enlazadas).
+export function alertasDeEnlace(
+  ordenes: { id: string; numero_oc: string | null; proceso_id?: string | null }[],
+  procesos: ProcesoParaAlerta[],
+): Alerta[] {
+  const porId = new Map(procesos.map((p) => [p.id, p]));
+  const alertas: Alerta[] = [];
+  for (const o of ordenes) {
+    if (!o.proceso_id) continue;
+    const p = porId.get(o.proceso_id);
+    if (!p || !proponerAdjudicar(p.estado)) continue;
+    alertas.push({
+      id: `enlace:${o.id}`,
+      nivel: "aviso",
+      fuente: "licitacion",
+      titulo: `${p.codigo} — ganada, sin marcar`,
+      detalle: `Llegó su orden de compra (${o.numero_oc ?? "sin número"}) pero la licitación sigue en «${ESTADO_LABEL_LIC[p.estado] ?? p.estado}».`,
+      href: `/licitaciones/${p.id}`,
+      dias: null,
+    });
+  }
+  return alertas;
+}
+
+// Etiquetas de estado de licitación. Duplicadas a propósito en vez de
+// importar el módulo de tipos: alertas.ts es puro y se usa en cliente y
+// servidor, y solo hacen falta para redactar la frase.
+const ESTADO_LABEL_LIC: Record<string, string> = {
+  captura: "Captura",
+  calificacion: "Calificación",
+  costeo: "Costeo",
+  armado: "Armado",
+  listo: "Listo",
+  sometido: "Sometido",
+  subsanacion: "Subsanación",
+  perdido: "Perdido",
+  descartado: "Descartado",
+};
+
 // ---------- El conjunto ----------
 
 const PESO: Record<NivelAlerta, number> = { vencido: 0, urgente: 1, aviso: 2 };
@@ -261,6 +307,7 @@ export function construirAlertas(fuentes: FuentesAlerta): Alerta[] {
     ...alertasDeDocumentos(fuentes.docs ?? []),
     ...alertasDeOrdenes(fuentes.ordenes ?? []),
     ...alertasDeLicitaciones(fuentes.procesos ?? []),
+    ...alertasDeEnlace(fuentes.ordenes ?? [], fuentes.procesos ?? []),
   ]);
 }
 

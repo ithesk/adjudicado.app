@@ -36,6 +36,7 @@ import ColaboradoresControl from "./_components/ColaboradoresControl";
 import MarcadoresControl from "./_components/MarcadoresControl";
 import GrupoControl from "./_components/GrupoControl";
 import OdooSync from "./_components/OdooSync";
+import EnlaceLicitacion from "./_components/EnlaceLicitacion";
 import BuzonOrden from "./_components/BuzonOrden";
 import ActividadProvider from "./_components/Actividad";
 
@@ -74,6 +75,21 @@ export default async function OrdenDetallePage({
     id: miembro?.user_id ?? "yo",
     nombre: miembro?.nombre ? nombreLegible(miembro.nombre) : "Tú",
   };
+
+  // La licitación de la que salió esta orden (si estaba en el sistema) y el
+  // resto de procesos, para poder enlazarla a mano cuando el pliego se
+  // trabajó fuera y se registra después.
+  const procesosOrg = miembro
+    ? ((
+        await (await createClient())
+          .from("lic_proceso")
+          .select("id, codigo, objeto, estado")
+          .eq("org_id", miembro.org_id)
+          .order("created_at", { ascending: false })
+      ).data ?? [])
+    : [];
+  const procesoDeLaOrden =
+    procesosOrg.find((p) => p.id === orden.proceso_id) ?? null;
 
   // La URL del Odoo conectado, para enlazar la orden de venta y la factura.
   // Se pedía «dónde quedó eso» y la respuesta era un nombre suelto que había
@@ -236,6 +252,12 @@ export default async function OrdenDetallePage({
             </div>
           </Panel>
           <PlazosPanel ordenId={orden.id} orden={orden} />
+          <EnlaceLicitacion
+            ordenId={orden.id}
+            codigoExpediente={orden.codigo_expediente}
+            proceso={procesoDeLaOrden}
+            candidatos={procesosOrg}
+          />
           <OdooSync
             ordenId={orden.id}
             numeroOc={orden.numero_oc ?? ""}

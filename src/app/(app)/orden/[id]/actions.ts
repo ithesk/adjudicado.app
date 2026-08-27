@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { getMiembro, getUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { isDemo } from "@/lib/demo";
+import { enlazarProceso } from "../nueva/actions";
 import {
   siguienteEstado,
   tipoPorArchivo,
@@ -168,7 +169,45 @@ export async function actualizarOrden(
   }
   if (Object.keys(limpio).length === 0) return null;
   const supabase = await createClient();
+
+  // Corregir el expediente vuelve a buscarle su licitación: el OCR se
+  // equivoca leyendo códigos, y hasta ahora arreglarlo a mano no reconectaba
+  // nada — la orden se quedaba huérfana para siempre aunque el código ya
+  // fuera correcto.
+  if ("codigo_expediente" in limpio) {
+    const miembro = await getMiembro();
+    if (miembro) {
+      limpio.proceso_id = await enlazarProceso(
+        supabase,
+        miembro.org_id,
+        (limpio.codigo_expediente as string | null) ?? null,
+      );
+    }
+  }
+
   const { error } = await supabase.from("orden").update(limpio).eq("id", ordenId);
+  if (error) return `No se pudo guardar: ${error.message}`;
+  refrescar(ordenId);
+  return null;
+}
+
+// Enlazar (o desenlazar) a mano una orden con su licitación. Hace falta
+// porque el cruce automático solo funciona si la licitación está en el
+// sistema: cuando el pliego se trabajó fuera y se registra después, esto es
+// lo que cierra el hilo.
+export async function enlazarOrdenAProceso(
+  ordenId: string,
+  procesoId: string | null,
+): Promise<string | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("orden")
+    .update({ proceso_id: procesoId })
+    .eq("id", ordenId)
+    .eq("org_id", miembro.org_id);
   if (error) return `No se pudo guardar: ${error.message}`;
   refrescar(ordenId);
   return null;
