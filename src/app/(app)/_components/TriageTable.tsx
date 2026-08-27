@@ -114,7 +114,7 @@ const COLS: ColDef[] = [
     key: "creada",
     label: "Creada",
     defaultOn: true,
-    peso: 1.2,
+    peso: 1,
     sort: (o) => o.created_at ?? "",
   },
   {
@@ -196,9 +196,20 @@ export default function TriageTable({
   }
 
   const cols = COLS.filter((c) => visible.includes(c.key));
-  // Reparte el ancho proporcional al peso de cada columna visible (suma 100%).
+  // Reparte el ancho proporcional al peso… pero dejando UNA columna elástica
+  // (la de la orden) SIN ancho declarado.
+  //
+  // Por qué: las columnas secundarias se ocultan por CSS según el ancho de la
+  // pantalla (`hidden md:table-cell`), y esa decisión no se puede conocer
+  // aquí. Si todas llevaran porcentaje, al ocultarse unas cuantas la suma
+  // bajaría del 100% y el sobrante lo repartiría el navegador a su criterio —
+  // la spec lo deja abierto. Con una elástica, TODO el sobrante va a ella:
+  // mismo resultado en cualquier navegador, y el espacio liberado se lo queda
+  // justo la columna que más lo aprovecha.
+  const ELASTICA: ColKey = "oc";
   const totalPeso = cols.reduce((s, c) => s + c.peso, 0) || 1;
-  const anchoDe = (c: ColDef) => `${((c.peso / totalPeso) * 100).toFixed(3)}%`;
+  const anchoDe = (c: ColDef) =>
+    c.key === ELASTICA ? undefined : `${((c.peso / totalPeso) * 100).toFixed(3)}%`;
 
   const filas = useMemo(() => {
     const q = query.trim();
@@ -468,11 +479,15 @@ function ItemsProgreso({ items }: { items: ItemResumen[] }) {
   );
 }
 
-// Responsivo: oculta columnas secundarias en pantallas chicas.
+// Responsivo: oculta columnas secundarias en pantallas chicas. Una columna
+// que aparece antes de tener sitio no informa, solo recorta texto: «hace 2 h»
+// en 40 px es «ha…». Por eso cada una entra en el ancho donde de verdad cabe.
 function colHidden(key: ColKey): string {
-  if (key === "suplidor" || key === "grupo") return "hidden lg:table-cell";
-  if (key === "estado" || key === "institucion") return "hidden md:table-cell";
-  if (key === "items" || key === "responsable") return "hidden sm:table-cell";
+  if (key === "suplidor" || key === "grupo" || key === "creada")
+    return "hidden lg:table-cell";
+  if (key === "estado" || key === "institucion" || key === "items")
+    return "hidden md:table-cell";
+  if (key === "responsable") return "hidden sm:table-cell";
   return "";
 }
 
