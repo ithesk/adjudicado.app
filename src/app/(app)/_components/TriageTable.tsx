@@ -455,8 +455,11 @@ function itemEnEspera(o: OrdenConItems): ItemResumen | null {
 function ItemsProgreso({ items }: { items: ItemResumen[] }) {
   const listos = items.filter((i) => i.entregado).length;
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="flex gap-0.5">
+    // El conteo NUNCA se encoge; las barritas sí. Con muchos ítems, un ancho
+    // fijo por barra desbordaba la columna y se montaba sobre el monto: ahora
+    // se aprietan y, si aun así no caben, se recortan dentro de su celda.
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+      <span className="flex min-w-0 gap-0.5 overflow-hidden">
         {items.map((i, idx) => {
           const color = i.entregado
             ? "bg-ok"
@@ -466,13 +469,13 @@ function ItemsProgreso({ items }: { items: ItemResumen[] }) {
           return (
             <span
               key={idx}
-              className={`h-1.5 w-3 rounded-full ${color}`}
+              className={`h-1.5 w-3 min-w-1 shrink rounded-full ${color}`}
               title={i.nombre}
             />
           );
         })}
       </span>
-      <span className="font-mono text-[11px] text-muted">
+      <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted">
         {listos}/{items.length}
       </span>
     </span>
@@ -483,11 +486,10 @@ function ItemsProgreso({ items }: { items: ItemResumen[] }) {
 // que aparece antes de tener sitio no informa, solo recorta texto: «hace 2 h»
 // en 40 px es «ha…». Por eso cada una entra en el ancho donde de verdad cabe.
 function colHidden(key: ColKey): string {
-  if (key === "suplidor" || key === "grupo" || key === "creada")
+  if (key === "suplidor" || key === "grupo" || key === "creada" || key === "items")
     return "hidden lg:table-cell";
-  if (key === "estado" || key === "institucion" || key === "items")
+  if (key === "estado" || key === "institucion" || key === "responsable")
     return "hidden md:table-cell";
-  if (key === "responsable") return "hidden sm:table-cell";
   return "";
 }
 
@@ -504,13 +506,17 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       <Link
         href={href}
         prefetch={false}
-        className="flex items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        className="flex min-w-0 items-center gap-2 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
       >
         <span className={`h-2 w-2 shrink-0 rounded-full ${urgenciaDot(nivel)}`} />
+        {/* El chip se recorta en una línea en vez de partirse en dos y
+            ensancharse: «Vencido 1437d» partido ocupaba el doble de alto y
+            se salía de la columna. El texto completo queda en el title. */}
         <span
-          className={`rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(
+          className={`min-w-0 truncate whitespace-nowrap rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(
             nivel,
           )}`}
+          title={textoDias(dias)}
         >
           {textoDias(dias)}
         </span>
@@ -589,9 +595,12 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
     ),
     estado: (
       <span
-        className={`rounded px-2 py-0.5 text-xs font-medium ${estadoChip(
+        // Igual que el plazo: en una línea y recortado. «En coordinación»
+        // partido en dos se salía de su columna y pisaba los ítems.
+        className={`block max-w-full truncate whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${estadoChip(
           orden.estado,
         )}`}
+        title={ESTADO_LABEL[orden.estado]}
       >
         {ESTADO_LABEL[orden.estado]}
       </span>
@@ -629,7 +638,11 @@ function Row({ orden, cols }: { orden: OrdenConItems; cols: ColDef[] }) {
       {cols.map((c) => (
         <td
           key={c.key}
-          className={`px-3 py-2 align-middle ${
+          // overflow-hidden es OBLIGATORIO con table-fixed: sin él, lo que no
+          // cabe en la columna no se recorta, se DERRAMA encima de la de al
+          // lado. En pantallas medianas se veía «Vencido 1437d» pisando el
+          // número de orden y las barras de ítems montadas sobre el monto.
+          className={`overflow-hidden px-3 py-2 align-middle ${
             c.align === "right"
               ? "text-right"
               : c.align === "center"
