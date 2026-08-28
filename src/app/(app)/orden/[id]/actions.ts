@@ -336,7 +336,16 @@ export async function agregarCoordinacionItem(
 // en la bitácora. NO revalida: el feed en vivo ya lo muestra al instante y así
 // evitamos que aparezca duplicado en la misma sesión. Devuelve void (no
 // string|null) porque su único caller —el feed de actividad— es fire-and-forget.
-export async function registrarEvento(ordenId: string, texto: string) {
+// `itemId` ata el evento al ítem o COMPONENTE al que se refiere. Sin él, los
+// avances de cada componente («Avanzó "Batería" a En tránsito») caían sueltos
+// en la orden: el hilo propio del componente salía vacío y la bitácora era un
+// muro plano donde había que buscar el nombre dentro del texto. Un ítem con
+// seis componentes se volvía imposible de seguir.
+export async function registrarEvento(
+  ordenId: string,
+  texto: string,
+  itemId?: string | null,
+) {
   if (isDemo()) return;
   const limpio = texto.trim();
   if (!limpio) return;
@@ -344,6 +353,7 @@ export async function registrarEvento(ordenId: string, texto: string) {
   const supabase = await createClient();
   const { error } = await supabase.from("bitacora").insert({
     orden_id: ordenId,
+    item_id: itemId ?? null,
     autor_id: user?.id ?? null,
     tipo: "evento",
     texto: limpio,

@@ -7,7 +7,7 @@ import { registrarEvento } from "../actions";
 interface ActividadCtx {
   // Eventos emitidos por acciones en los ítems (se ven en la bitácora).
   eventos: Bitacora[];
-  emitir: (texto: string) => void;
+  emitir: (texto: string, itemId?: string | null) => void;
   // Catálogo de suplidores en vivo (autocompletar + guardar nuevos).
   suplidores: Suplidor[];
   agregarSuplidor: (nombre: string, canal: CanalItem | null) => void;
@@ -38,13 +38,17 @@ export default function ActividadProvider({
   const [, startTransition] = useTransition();
   const seq = useRef(0);
 
-  function emitir(texto: string) {
+  // `itemId` dice a qué ítem o componente pertenece el evento. Sin él, los
+  // avances de los componentes caían sueltos en la orden y no había forma de
+  // ver qué había pasado con uno concreto.
+  function emitir(texto: string, itemId?: string | null) {
     seq.current += 1;
     // Feed en vivo (instantáneo).
     setEventos((prev) => [
       {
         id: `ev-${Date.now()}-${seq.current}`,
         orden_id: ordenId,
+        item_id: itemId ?? null,
         autor_id: currentUser.id,
         autor: currentUser,
         tipo: "evento",
@@ -54,7 +58,7 @@ export default function ActividadProvider({
       ...prev,
     ]);
     // Persistir en la bitácora (queda al recargar).
-    startTransition(() => registrarEvento(ordenId, texto));
+    startTransition(() => registrarEvento(ordenId, texto, itemId));
   }
 
   function agregarSuplidor(nombre: string, canal: CanalItem | null) {

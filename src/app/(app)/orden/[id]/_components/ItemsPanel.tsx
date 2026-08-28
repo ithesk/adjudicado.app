@@ -189,7 +189,9 @@ export default function ItemsPanel({
             componentes: [...(it.componentes ?? []), nuevo],
           })),
         );
-        emitir("Agregó un componente a un ítem.");
+        // Cuelga del PADRE: «a este ítem le agregué un componente» es
+        // historia del ítem, no del componente que acaba de nacer.
+        emitir(`Agregó el componente “${nuevo.nombre}”.`, parentId);
       } else if (!isDemo()) {
         avisoError("No se pudo agregar el componente.");
       }
@@ -201,7 +203,7 @@ export default function ItemsPanel({
   function delItem(it: Item) {
     const previos = items;
     setItems((prev) => quitarArbol(prev, it.id));
-    emitir(`Eliminó “${it.nombre}”.`);
+    emitir(`Eliminó “${it.nombre}”.`, it.parent_id ?? null);
     startTransition(async () => {
       // Si el borrado falla, el ítem vuelve a su sitio y avisamos.
       try {
@@ -227,7 +229,7 @@ export default function ItemsPanel({
       entregado: esTerminal,
       fecha_entrega: esTerminal ? new Date().toISOString().slice(0, 10) : null,
     });
-    emitir(`Avanzó “${it.nombre}” a ${prox.label}.`);
+    emitir(`Avanzó “${it.nombre}” a ${prox.label}.`, it.id);
   }
 
   function setEstado(it: Item, key: string) {
@@ -239,7 +241,7 @@ export default function ItemsPanel({
       entregado: esTerminal,
       fecha_entrega: esTerminal ? new Date().toISOString().slice(0, 10) : null,
     });
-    emitir(`Marcó “${it.nombre}” como ${label}.`);
+    emitir(`Marcó “${it.nombre}” como ${label}.`, it.id);
   }
 
   // Adjunta archivos (arrastrados) al hilo de coordinación de un ítem: sube y
@@ -483,7 +485,7 @@ function ItemRow({
       },
       nuevaAsig(1),
     ]);
-    emitir(`Dividió “${item.nombre}” entre varios suplidores.`);
+    emitir(`Dividió “${item.nombre}” entre varios suplidores.`, item.id);
   }
   function addAsig() {
     commitAsignaciones([...asignaciones, nuevaAsig(1)]);
@@ -494,7 +496,7 @@ function ItemRow({
   function delAsig(aId: string) {
     const rest = asignaciones.filter((a) => a.id !== aId);
     commitAsignaciones(rest.length ? rest : undefined);
-    emitir(`Quitó un suplidor del reparto de “${item.nombre}”.`);
+    emitir(`Quitó un suplidor del reparto de “${item.nombre}”.`, item.id);
   }
   function avanzarAsig(a: Asignacion) {
     const i = flujo.findIndex((x) => x.key === (a.estado_item ?? flujo[0].key));
@@ -503,7 +505,7 @@ function ItemRow({
     commitAsignaciones(
       asignaciones.map((x) => (x.id === a.id ? { ...x, estado_item: next.key } : x)),
     );
-    emitir(`“${item.nombre}” · ${a.suplidor || "suplidor"}: ${next.label}.`);
+    emitir(`“${item.nombre}” · ${a.suplidor || "suplidor"}: ${next.label}.`, item.id);
   }
 
   return (
@@ -729,7 +731,7 @@ function ItemRow({
                       if (!v) return;
                       agregarSuplidor(v, item.canal as CanalItem | null);
                       if (v !== supInicial.current) {
-                        emitir(`Asignó suplidor “${v}” a “${item.nombre}”.`);
+                        emitir(`Asignó suplidor “${v}” a “${item.nombre}”.`, item.id);
                         supInicial.current = v;
                       }
                     }}
