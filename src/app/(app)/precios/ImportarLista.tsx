@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { Panel } from "@/components/ui";
+import { fetchLargo } from "@/lib/fetch-cliente";
 import type { ListaVigente } from "@/lib/precios/tipos";
 import type { SuplidorOpcion } from "./BuscadorPrecios";
 
@@ -46,7 +47,14 @@ export default function ImportarLista({
     form.set("archivo", archivo);
     form.set("suplidor_id", suplidorId);
     try {
-      const res = await fetch("/api/precios/importar", { method: "POST", body: form });
+      // Con tope: es la subida más pesada de la app (listas de hasta 30 MB) y
+      // era la ÚNICA llamada del cliente sin límite de espera — si el
+      // servidor se colgaba, el spinner giraba para siempre. 150 s deja
+      // margen sobre los 120 s que la ruta se concede a sí misma.
+      const res = await fetchLargo("/api/precios/importar", 150_000, {
+        method: "POST",
+        body: form,
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "La importación falló.");
@@ -56,8 +64,14 @@ export default function ImportarLista({
         if (fileRef.current) fileRef.current.value = "";
         router.refresh(); // actualiza el resumen (productos listos para buscar)
       }
-    } catch {
-      setError("La importación falló. Revisa tu conexión e inténtalo de nuevo.");
+    } catch (e) {
+      // fetchLargo ya distingue «tardó demasiado» de «sin conexión»: se
+      // muestra su mensaje en vez de uno genérico que no dice qué pasó.
+      setError(
+        e instanceof Error
+          ? e.message
+          : "La importación falló. Revisa tu conexión e inténtalo de nuevo.",
+      );
     } finally {
       setSubiendo(false);
     }

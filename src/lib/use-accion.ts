@@ -46,6 +46,50 @@ type OpcionesAccion = {
 
 type Turno = { fn: () => Promise<string | null>; opts: OpcionesAccion };
 
+// Tope de espera de una acción de servidor.
+//
+// Una server action no se puede cancelar desde el cliente: esto NO aborta
+// nada, solo deja de esperar. Sin él, un servidor que no contesta dejaba el
+// indicador en «guardando» para siempre — sin error, sin reintento y sin
+// forma de saber qué pasó. En Vercel la función se corta sola mucho antes;
+// esto cubre el caso feo, el de la conexión que se queda colgada sin cerrar.
+//
+// 30 s es holgado para un guardado normal (los de verdad tardan décimas) y
+// corto frente a «para siempre». Las operaciones largas de verdad —generar
+// paquetes, OCR, importar precios— no pasan por aquí: van por fetchLargo.
+const TOPE_MS = 30_000;
+
+// El mensaje es deliberadamente ambiguo sobre el resultado, porque LO ES: la
+// acción pudo completarse en el servidor después de que dejáramos de
+// esperar. Decir «no se guardó» sería mentir la mitad de las veces.
+const MSG_TOPE =
+  "El servidor tardó demasiado en responder. Puede que el cambio sí se haya guardado — recarga la página para comprobarlo.";
+
+function conTope(fn: () => Promise<string | null>): Promise<string | null> {
+  return new Promise((resolve) => {
+    let resuelto = false;
+    const t = setTimeout(() => {
+      if (!resuelto) {
+        resuelto = true;
+        resolve(MSG_TOPE);
+      }
+    }, TOPE_MS);
+    fn()
+      .then((err) => {
+        if (resuelto) return;
+        resuelto = true;
+        clearTimeout(t);
+        resolve(err);
+      })
+      .catch(() => {
+        if (resuelto) return;
+        resuelto = true;
+        clearTimeout(t);
+        resolve("No se pudo completar — revisa tu conexión e inténtalo de nuevo.");
+      });
+  });
+}
+
 export function useAccion() {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -76,12 +120,9 @@ export function useAccion() {
     setError(null);
     setEstado("guardando");
     startTransition(async () => {
-      let err: string | null = null;
-      try {
-        err = await fn();
-      } catch {
-        err = "No se pudo completar — revisa tu conexión e inténtalo de nuevo.";
-      }
+      // conTope ya absorbe el fallo y el plantón; siempre resuelve con
+      // mensaje o con null.
+      const err: string | null = await conTope(fn);
       if (err) {
         setEstado("idle");
         if (opts.errorInline) setError(err);
