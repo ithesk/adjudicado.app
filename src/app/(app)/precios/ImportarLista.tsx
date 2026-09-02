@@ -11,7 +11,7 @@ import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { Panel } from "@/components/ui";
 import ProgresoLargo from "@/components/ProgresoLargo";
 import { fetchLargo } from "@/lib/fetch-cliente";
-import { createClient } from "@/lib/supabase/client";
+import { subirConProgreso } from "@/lib/subir-con-progreso";
 import { carpetaDeImportacion } from "@/lib/actions/precios";
 
 import type { ListaVigente } from "@/lib/precios/tipos";
@@ -65,6 +65,8 @@ export default function ImportarLista({
   // dejar un círculo girando sin más.
   const [fase, setFase] = useState<string | null>(null);
   const [inicio, setInicio] = useState<number>(0);
+  // Avance REAL de la subida (bytes). null = fase sin avance conocible.
+  const [pctSubida, setPctSubida] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoImport | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -88,6 +90,7 @@ export default function ImportarLista({
     // Las dos fases son REALES: son dos peticiones distintas y el cliente
     // sabe con certeza en cuál está. Nada de pasos inventados por reloj.
     setInicio(Date.now());
+    setPctSubida(0);
     setFase(`Subiendo el archivo (${legible(archivo.size)})…`);
     try {
       // 1) El Excel va DIRECTO al almacenamiento, sin pasar por Vercel — que
@@ -96,16 +99,22 @@ export default function ImportarLista({
       //    organización, así que autoriza la sesión del propio usuario.
       const carpeta = await carpetaDeImportacion();
       if (!carpeta) throw new Error("Tu sesión caducó. Recarga la página y vuelve a entrar.");
-      const supabase = createClient();
       const ruta = `${carpeta}/${crypto.randomUUID()}-${archivo.name.replace(/[^\w.-]+/g, "_")}`;
-      const { error: errSubida } = await supabase.storage
-        .from("documentos")
-        .upload(ruta, archivo, { contentType: archivo.type || undefined });
-      if (errSubida) throw new Error(`No se pudo subir el archivo: ${errSubida.message}`);
+      // Con progreso REAL: los bytes enviados son un hecho medible, así que
+      // aquí la barra sí puede dar un porcentaje sin inventar nada.
+      const { error: errSubida } = await subirConProgreso(
+        "documentos",
+        ruta,
+        archivo,
+        setPctSubida,
+      );
+      if (errSubida) throw new Error(errSubida);
 
       // Segunda fase: el archivo ya está arriba, ahora se procesa. Es la
       // parte larga (23 s con 23.650 filas) y hasta ahora no se distinguía
-      // de la primera: todo era el mismo círculo girando.
+      // de la primera: todo era el mismo círculo girando. Aquí el avance ya
+      // NO se puede saber, así que la barra pasa a indeterminada.
+      setPctSubida(null);
       setFase("Procesando la lista y guardando los precios…");
 
       // 2) A la función solo viaja la RUTA: unos bytes, nunca el Excel. Con
@@ -144,6 +153,7 @@ export default function ImportarLista({
     } finally {
       setSubiendo(false);
       setFase(null);
+      setPctSubida(null);
     }
   };
 
@@ -243,6 +253,7 @@ export default function ImportarLista({
               fase={fase}
               desde={inicio}
               estimado={30}
+              porcentaje={pctSubida}
               className="basis-full"
             />
           )}
