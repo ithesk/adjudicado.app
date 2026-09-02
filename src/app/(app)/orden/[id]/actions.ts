@@ -654,6 +654,48 @@ export async function subirDocumento(
   return null;
 }
 
+// Las dos mitades de la subida DIRECTA de un documento de la orden. El
+// archivo NO viaja por el servidor: Vercel rechaza cuerpos de más de 4,5 MB
+// antes de ejecutar nada, así que un adjunto grande fallaba sin explicación
+// y sin forma de ver el avance. El navegador lo sube al almacenamiento (la
+// RLS del bucket exige que la primera carpeta sea la de la organización) y
+// aquí solo se registra la fila.
+export async function carpetaDeOrden(ordenId: string): Promise<string | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  return miembro ? `${miembro.org_id}/${ordenId}` : null;
+}
+
+export async function registrarDocumentoOrden(
+  ordenId: string,
+  ruta: string,
+  nombre: string,
+  tipo = "otro",
+): Promise<string | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  const user = await getUser();
+  if (!miembro) return "No autorizado.";
+  if (!ruta.startsWith(`${miembro.org_id}/`)) return "Archivo no válido.";
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("documento").insert({
+    orden_id: ordenId,
+    nombre,
+    tipo,
+    archivo_url: ruta,
+    subido_por: user?.id ?? null,
+  });
+  if (error) {
+    // El archivo ya está arriba pero nadie lo referencia: se borra para no
+    // dejar basura invisible en el almacenamiento.
+    await supabase.storage.from("documentos").remove([ruta]);
+    return `No se pudo registrar el documento: ${error.message}`;
+  }
+  refrescar(ordenId);
+  return null;
+}
+
 // Genera una URL firmada temporal para ver/descargar un documento privado.
 export async function urlFirmada(
   bucket: "documentos" | "ordenes-oc",

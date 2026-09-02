@@ -23,6 +23,8 @@ import {
   guardarFirmante,
   guardarPerfil,
   reordenarItems,
+  carpetaDeRequisito,
+  registrarArchivoRequisito,
   subirArchivoRequisito,
   toggleRequisitoSubsanacion,
   type NuevoProceso,
@@ -141,6 +143,23 @@ export async function subirArchivoRequisitoAction(
   formData: FormData,
 ): Promise<string | null> {
   const error = await subirArchivoRequisito(requisitoId, formData);
+  if (!error) refrescar();
+  return error;
+}
+
+// Las dos mitades de la subida DIRECTA: primero se pide dónde dejar el
+// archivo, el navegador lo sube al almacenamiento, y después se registra.
+// Así el archivo no atraviesa la función (que rechaza más de 4,5 MB) y el
+// avance se puede medir de verdad.
+export async function carpetaDeRequisitoAction(requisitoId: string) {
+  return carpetaDeRequisito(requisitoId);
+}
+
+export async function registrarArchivoRequisitoAction(
+  requisitoId: string,
+  ruta: string,
+): Promise<string | null> {
+  const error = await registrarArchivoRequisito(requisitoId, ruta);
   if (!error) refrescar();
   return error;
 }

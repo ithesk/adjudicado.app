@@ -933,6 +933,25 @@ export async function crearRequisitosLote(
 const MAX_MB = 15;
 
 // Sube el archivo de un requisito y lo marca listo.
+// La carpeta donde el navegador debe dejar el archivo de un requisito. El
+// archivo sube DIRECTO al almacenamiento (Vercel rechaza cuerpos de más de
+// 4,5 MB antes de ejecutar nada) y aquí solo se valida y se registra.
+export async function carpetaDeRequisito(
+  requisitoId: string,
+): Promise<string | null> {
+  if (isDemo()) return null;
+  const miembro = await getMiembro();
+  if (!miembro) return null;
+  const supabase = await createClient();
+  const { data: req } = await supabase
+    .from("lic_requisito")
+    .select("proceso_id")
+    .eq("id", requisitoId)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  return req ? `${miembro.org_id}/licitaciones/${req.proceso_id}` : null;
+}
+
 export async function subirArchivoRequisito(
   requisitoId: string,
   formData: FormData,
@@ -971,6 +990,33 @@ export async function subirArchivoRequisito(
     .eq("org_id", miembro.org_id);
   if (error) {
     await supabase.storage.from("documentos").remove([path]);
+    return `No se pudo guardar: ${error.message}`;
+  }
+  return null;
+}
+
+// Registra un archivo YA SUBIDO por el navegador al almacenamiento. Es el
+// paso final de la subida directa: aquí no viaja el archivo, solo su ruta.
+export async function registrarArchivoRequisito(
+  requisitoId: string,
+  ruta: string,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se suben archivos.";
+  const miembro = await getMiembro();
+  if (!miembro) return "No autorizado.";
+  // La ruta debe caer bajo la carpeta de ESTA organización. La RLS del
+  // bucket ya lo impone al subir; comprobarlo aquí evita registrar una
+  // ruta ajena aunque alguien manipule la llamada.
+  if (!ruta.startsWith(`${miembro.org_id}/`)) return "Archivo no válido.";
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("lic_requisito")
+    .update({ storage_path: ruta, estado: "listo" })
+    .eq("id", requisitoId)
+    .eq("org_id", miembro.org_id);
+  if (error) {
+    await supabase.storage.from("documentos").remove([ruta]);
     return `No se pudo guardar: ${error.message}`;
   }
   return null;
