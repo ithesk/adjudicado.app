@@ -10,6 +10,30 @@ import { useRouter } from "next/navigation";
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { Panel } from "@/components/ui";
 import { fetchLargo } from "@/lib/fetch-cliente";
+
+const MB = 1024 * 1024;
+
+// Tope REAL de una subida en Vercel: la plataforma rechaza cualquier cuerpo
+// mayor, y lo hace ANTES de que la ruta llegue a ejecutarse. Por eso su
+// respuesta no es JSON y no trae explicación: hay que ponerla aquí.
+const TOPE_SUBIDA = 4.5 * MB;
+
+const legible = (bytes: number) => `${(bytes / MB).toFixed(1)} MB`;
+
+// Traduce el código de la respuesta a algo que se pueda leer y actuar. Sin
+// esto, cualquier fallo que no venga de la ruta se veía como «inténtalo de
+// nuevo», que no dice qué pasó ni qué hacer.
+function mensajePorEstado(status: number, tamano: number): string {
+  if (status === 413)
+    return `El archivo pesa ${legible(tamano)} y el servidor no acepta más de ${legible(TOPE_SUBIDA)}. Divide la lista en partes o pídeme que habilitemos la subida directa.`;
+  if (status === 401)
+    return "Tu sesión caducó. Recarga la página y vuelve a entrar.";
+  if (status === 504 || status === 502)
+    return "El servidor tardó demasiado procesando la lista. Prueba con menos filas.";
+  if (status >= 500)
+    return `El servidor falló procesando la lista (error ${status}). Si se repite, avísanos.`;
+  return `La importación falló (error ${status}).`;
+}
 import type { ListaVigente } from "@/lib/precios/tipos";
 import type { SuplidorOpcion } from "./BuscadorPrecios";
 
@@ -40,6 +64,16 @@ export default function ImportarLista({
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!archivo || !suplidorId || subiendo) return;
+    // Se comprueba ANTES de subir: enviar 20 MB para que el servidor los
+    // rechace es hacer esperar al usuario un minuto para nada, y encima el
+    // rechazo llega sin explicación porque no lo genera la aplicación.
+    if (archivo.size > TOPE_SUBIDA) {
+      setError(
+        `El archivo pesa ${legible(archivo.size)} y el máximo que admite el servidor son ${legible(TOPE_SUBIDA)}. ` +
+          "Divide la lista en varias partes (por hoja o por rango de filas) e impórtalas una a una.",
+      );
+      return;
+    }
     setSubiendo(true);
     setError(null);
     setResultado(null);
@@ -55,9 +89,17 @@ export default function ImportarLista({
         method: "POST",
         body: form,
       });
-      const data = await res.json();
+      // La respuesta se lee DEFENSIVAMENTE. Antes se hacía res.json() antes
+      // de mirar si había ido bien: cuando el fallo no viene de la ruta sino
+      // de la plataforma (un rechazo por tamaño, un corte del proxy), el
+      // cuerpo no es JSON, res.json() reventaba y el error acababa en el
+      // catch como «revisa tu conexión» — que no es lo que pasó y no dice
+      // nada. El usuario veía «inténtalo de nuevo» para siempre.
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(data.error ?? "La importación falló.");
+        setError(data?.error ?? mensajePorEstado(res.status, archivo.size));
+      } else if (!data) {
+        setError("El servidor respondió algo que no se pudo leer. Inténtalo de nuevo.");
       } else {
         setResultado(data);
         setArchivo(null);
@@ -127,12 +169,28 @@ export default function ImportarLista({
             </select>
           </label>
           <label className="flex min-w-60 flex-1 flex-col gap-1 text-xs text-muted">
-            Excel de la lista (.xlsx)
+            <span className="flex items-baseline justify-between gap-2">
+              <span>Excel de la lista (.xlsx)</span>
+              {/* El peso, en cuanto se elige el archivo: es el dato que
+                  decide si la subida va a funcionar, y hasta ahora solo se
+                  descubría fallando. */}
+              {archivo && (
+                <span
+                  className={`font-mono ${archivo.size > TOPE_SUBIDA ? "font-semibold text-danger" : "text-muted"}`}
+                >
+                  {legible(archivo.size)}
+                  {archivo.size > TOPE_SUBIDA ? ` · máx. ${legible(TOPE_SUBIDA)}` : ""}
+                </span>
+              )}
+            </span>
             <input
               ref={fileRef}
               type="file"
               accept=".xlsx,.xls,.xlsm"
-              onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                setArchivo(e.target.files?.[0] ?? null);
+                setError(null);
+              }}
               className="rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-ink shadow-card file:mr-3 file:rounded file:border-0 file:bg-surface-2 file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-ink-soft"
             />
           </label>
