@@ -9,6 +9,36 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { Panel } from "@/components/ui";
+import { fetchLargo } from "@/lib/fetch-cliente";
+import { createClient } from "@/lib/supabase/client";
+import { carpetaDeImportacion } from "@/lib/actions/precios";
+
+const MB = 1024 * 1024;
+
+// Tope REAL de una subida en Vercel: la plataforma rechaza cualquier cuerpo
+// mayor, y lo hace ANTES de que la ruta llegue a ejecutarse. Por eso su
+// respuesta no es JSON y no trae explicación: hay que ponerla aquí.
+// El Excel sube DIRECTO al almacenamiento, así que el techo ya no es el de
+// Vercel (4,5 MB por petición, que rechazaba un archivo de 6 MB sin dar
+// explicación) sino el que la aplicación siempre prometió y la ruta valida.
+const TOPE_SUBIDA = 30 * MB;
+
+const legible = (bytes: number) => `${(bytes / MB).toFixed(1)} MB`;
+
+// Traduce el código de la respuesta a algo que se pueda leer y actuar. Sin
+// esto, cualquier fallo que no venga de la ruta se veía como «inténtalo de
+// nuevo», que no dice qué pasó ni qué hacer.
+function mensajePorEstado(status: number, tamano: number): string {
+  if (status === 413)
+    return `El archivo pesa ${legible(tamano)} y supera el máximo de ${legible(TOPE_SUBIDA)}. Divide la lista en partes e impórtalas una a una.`;
+  if (status === 401)
+    return "Tu sesión caducó. Recarga la página y vuelve a entrar.";
+  if (status === 504 || status === 502)
+    return "El servidor tardó demasiado procesando la lista. Prueba con menos filas.";
+  if (status >= 500)
+    return `El servidor falló procesando la lista (error ${status}). Si se repite, avísanos.`;
+  return `La importación falló (error ${status}).`;
+}
 import type { ListaVigente } from "@/lib/precios/tipos";
 import type { SuplidorOpcion } from "./BuscadorPrecios";
 
@@ -39,25 +69,66 @@ export default function ImportarLista({
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!archivo || !suplidorId || subiendo) return;
+    // Se comprueba ANTES de subir: enviar 20 MB para que el servidor los
+    // rechace es hacer esperar al usuario un minuto para nada, y encima el
+    // rechazo llega sin explicación porque no lo genera la aplicación.
+    if (archivo.size > TOPE_SUBIDA) {
+      setError(
+        `El archivo pesa ${legible(archivo.size)} y el máximo que admite el servidor son ${legible(TOPE_SUBIDA)}. ` +
+          "Divide la lista en varias partes (por hoja o por rango de filas) e impórtalas una a una.",
+      );
+      return;
+    }
     setSubiendo(true);
     setError(null);
     setResultado(null);
-    const form = new FormData();
-    form.set("archivo", archivo);
-    form.set("suplidor_id", suplidorId);
     try {
-      const res = await fetch("/api/precios/importar", { method: "POST", body: form });
-      const data = await res.json();
+      // 1) El Excel va DIRECTO al almacenamiento, sin pasar por Vercel — que
+      //    rechaza cualquier cuerpo mayor de 4,5 MB antes de ejecutar nada.
+      //    La RLS del bucket exige que la primera carpeta sea la de la
+      //    organización, así que autoriza la sesión del propio usuario.
+      const carpeta = await carpetaDeImportacion();
+      if (!carpeta) throw new Error("Tu sesión caducó. Recarga la página y vuelve a entrar.");
+      const supabase = createClient();
+      const ruta = `${carpeta}/${crypto.randomUUID()}-${archivo.name.replace(/[^\w.-]+/g, "_")}`;
+      const { error: errSubida } = await supabase.storage
+        .from("documentos")
+        .upload(ruta, archivo, { contentType: archivo.type || undefined });
+      if (errSubida) throw new Error(`No se pudo subir el archivo: ${errSubida.message}`);
+
+      // 2) A la función solo viaja la RUTA: unos bytes, nunca el Excel. Con
+      //    tope de espera, que es la parte que sí puede tardar (procesar
+      //    decenas de miles de filas).
+      const res = await fetchLargo("/api/precios/importar", 150_000, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ruta, nombre: archivo.name, suplidor_id: suplidorId }),
+      });
+      // La respuesta se lee DEFENSIVAMENTE. Antes se hacía res.json() antes
+      // de mirar si había ido bien: cuando el fallo no viene de la ruta sino
+      // de la plataforma (un rechazo por tamaño, un corte del proxy), el
+      // cuerpo no es JSON, res.json() reventaba y el error acababa en el
+      // catch como «revisa tu conexión» — que no es lo que pasó y no dice
+      // nada. El usuario veía «inténtalo de nuevo» para siempre.
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(data.error ?? "La importación falló.");
+        setError(data?.error ?? mensajePorEstado(res.status, archivo.size));
+      } else if (!data) {
+        setError("El servidor respondió algo que no se pudo leer. Inténtalo de nuevo.");
       } else {
         setResultado(data);
         setArchivo(null);
         if (fileRef.current) fileRef.current.value = "";
         router.refresh(); // actualiza el resumen (productos listos para buscar)
       }
-    } catch {
-      setError("La importación falló. Revisa tu conexión e inténtalo de nuevo.");
+    } catch (e) {
+      // fetchLargo ya distingue «tardó demasiado» de «sin conexión»: se
+      // muestra su mensaje en vez de uno genérico que no dice qué pasó.
+      setError(
+        e instanceof Error
+          ? e.message
+          : "La importación falló. Revisa tu conexión e inténtalo de nuevo.",
+      );
     } finally {
       setSubiendo(false);
     }
@@ -113,12 +184,28 @@ export default function ImportarLista({
             </select>
           </label>
           <label className="flex min-w-60 flex-1 flex-col gap-1 text-xs text-muted">
-            Excel de la lista (.xlsx)
+            <span className="flex items-baseline justify-between gap-2">
+              <span>Excel de la lista (.xlsx)</span>
+              {/* El peso, en cuanto se elige el archivo: es el dato que
+                  decide si la subida va a funcionar, y hasta ahora solo se
+                  descubría fallando. */}
+              {archivo && (
+                <span
+                  className={`font-mono ${archivo.size > TOPE_SUBIDA ? "font-semibold text-danger" : "text-muted"}`}
+                >
+                  {legible(archivo.size)}
+                  {archivo.size > TOPE_SUBIDA ? ` · máx. ${legible(TOPE_SUBIDA)}` : ""}
+                </span>
+              )}
+            </span>
             <input
               ref={fileRef}
               type="file"
               accept=".xlsx,.xls,.xlsm"
-              onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                setArchivo(e.target.files?.[0] ?? null);
+                setError(null);
+              }}
               className="rounded-md border border-line bg-surface px-2.5 py-1.5 text-sm text-ink shadow-card file:mr-3 file:rounded file:border-0 file:bg-surface-2 file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-ink-soft"
             />
           </label>
