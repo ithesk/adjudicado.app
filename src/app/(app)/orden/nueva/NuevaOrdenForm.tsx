@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState } from "react";
 import { X, UploadCloud, FileText, Loader2 } from "lucide-react";
 import { fetchLargo } from "@/lib/fetch-cliente";
+import ProgresoLargo from "@/components/ProgresoLargo";
 import type { TipoItem } from "@/lib/types";
 import { crearOrden, type CrearState } from "./actions";
 
@@ -36,6 +37,7 @@ const VACIO: Datos = {
 export default function NuevaOrdenForm() {
   const [fase, setFase] = useState<"subir" | "confirmar">("subir");
   const [cargando, setCargando] = useState(false);
+  const [inicioOcr, setInicioOcr] = useState(0);
   const [errorOcr, setErrorOcr] = useState<string | null>(null);
   const [datos, setDatos] = useState<Datos>(VACIO);
   const [items, setItems] = useState<ItemDraft[]>([]);
@@ -71,6 +73,7 @@ export default function NuevaOrdenForm() {
   async function procesar() {
     if (!archivo) return;
     setCargando(true);
+    setInicioOcr(Date.now());
     setErrorOcr(null);
 
     const fd = new FormData();
@@ -216,6 +219,17 @@ export default function NuevaOrdenForm() {
           )}
           {cargando ? "Leyendo el documento…" : "Extraer datos"}
         </button>
+
+        {/* Leer un PDF con el modelo tarda entre 10 y 40 s. Antes eran esos
+            segundos con el botón girando y nada que dijera si seguía vivo. */}
+        {cargando && (
+          <ProgresoLargo
+            fase="Leyendo la orden de compra…"
+            desde={inicioOcr}
+            estimado={25}
+            className="mt-2 justify-center"
+          />
+        )}
       </div>
     );
   }

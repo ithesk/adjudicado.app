@@ -9,18 +9,20 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 import { Panel } from "@/components/ui";
+import ProgresoLargo from "@/components/ProgresoLargo";
 import { fetchLargo } from "@/lib/fetch-cliente";
 import { createClient } from "@/lib/supabase/client";
 import { carpetaDeImportacion } from "@/lib/actions/precios";
 
+import type { ListaVigente } from "@/lib/precios/tipos";
+import type { SuplidorOpcion } from "./BuscadorPrecios";
+
 const MB = 1024 * 1024;
 
-// Tope REAL de una subida en Vercel: la plataforma rechaza cualquier cuerpo
-// mayor, y lo hace ANTES de que la ruta llegue a ejecutarse. Por eso su
-// respuesta no es JSON y no trae explicación: hay que ponerla aquí.
 // El Excel sube DIRECTO al almacenamiento, así que el techo ya no es el de
 // Vercel (4,5 MB por petición, que rechazaba un archivo de 6 MB sin dar
-// explicación) sino el que la aplicación siempre prometió y la ruta valida.
+// ninguna explicación) sino el que la aplicación siempre prometió y la ruta
+// valida al procesarlo.
 const TOPE_SUBIDA = 30 * MB;
 
 const legible = (bytes: number) => `${(bytes / MB).toFixed(1)} MB`;
@@ -39,8 +41,6 @@ function mensajePorEstado(status: number, tamano: number): string {
     return `El servidor falló procesando la lista (error ${status}). Si se repite, avísanos.`;
   return `La importación falló (error ${status}).`;
 }
-import type { ListaVigente } from "@/lib/precios/tipos";
-import type { SuplidorOpcion } from "./BuscadorPrecios";
 
 interface ResultadoImport {
   suplidor: string;
@@ -61,6 +61,10 @@ export default function ImportarLista({
   const [suplidorId, setSuplidorId] = useState(suplidores[0]?.id ?? "");
   const [archivo, setArchivo] = useState<File | null>(null);
   const [subiendo, setSubiendo] = useState(false);
+  // Qué se está haciendo AHORA y desde cuándo — para poder decirlo en vez de
+  // dejar un círculo girando sin más.
+  const [fase, setFase] = useState<string | null>(null);
+  const [inicio, setInicio] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ResultadoImport | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -69,12 +73,11 @@ export default function ImportarLista({
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!archivo || !suplidorId || subiendo) return;
-    // Se comprueba ANTES de subir: enviar 20 MB para que el servidor los
-    // rechace es hacer esperar al usuario un minuto para nada, y encima el
-    // rechazo llega sin explicación porque no lo genera la aplicación.
+    // Se comprueba ANTES de subir: mandar un archivo para que lo rechacen es
+    // hacer esperar al usuario para nada.
     if (archivo.size > TOPE_SUBIDA) {
       setError(
-        `El archivo pesa ${legible(archivo.size)} y el máximo que admite el servidor son ${legible(TOPE_SUBIDA)}. ` +
+        `El archivo pesa ${legible(archivo.size)} y el máximo son ${legible(TOPE_SUBIDA)}. ` +
           "Divide la lista en varias partes (por hoja o por rango de filas) e impórtalas una a una.",
       );
       return;
@@ -82,6 +85,10 @@ export default function ImportarLista({
     setSubiendo(true);
     setError(null);
     setResultado(null);
+    // Las dos fases son REALES: son dos peticiones distintas y el cliente
+    // sabe con certeza en cuál está. Nada de pasos inventados por reloj.
+    setInicio(Date.now());
+    setFase(`Subiendo el archivo (${legible(archivo.size)})…`);
     try {
       // 1) El Excel va DIRECTO al almacenamiento, sin pasar por Vercel — que
       //    rechaza cualquier cuerpo mayor de 4,5 MB antes de ejecutar nada.
@@ -95,6 +102,11 @@ export default function ImportarLista({
         .from("documentos")
         .upload(ruta, archivo, { contentType: archivo.type || undefined });
       if (errSubida) throw new Error(`No se pudo subir el archivo: ${errSubida.message}`);
+
+      // Segunda fase: el archivo ya está arriba, ahora se procesa. Es la
+      // parte larga (23 s con 23.650 filas) y hasta ahora no se distinguía
+      // de la primera: todo era el mismo círculo girando.
+      setFase("Procesando la lista y guardando los precios…");
 
       // 2) A la función solo viaja la RUTA: unos bytes, nunca el Excel. Con
       //    tope de espera, que es la parte que sí puede tardar (procesar
@@ -131,6 +143,7 @@ export default function ImportarLista({
       );
     } finally {
       setSubiendo(false);
+      setFase(null);
     }
   };
 
@@ -221,6 +234,18 @@ export default function ImportarLista({
             )}
             {subiendo ? "Importando…" : "Importar"}
           </button>
+
+          {/* Qué está pasando y desde cuándo. Una lista de 24.000 filas tarda
+              ~25 s: sin esto eran 25 segundos de círculo girando sin saber
+              si seguía viva. */}
+          {fase && (
+            <ProgresoLargo
+              fase={fase}
+              desde={inicio}
+              estimado={30}
+              className="basis-full"
+            />
+          )}
         </form>
       )}
 
