@@ -1,12 +1,13 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
-import { Paperclip, FileText, Upload } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Paperclip, FileText } from "lucide-react";
 import { formatFecha, type Documento } from "@/lib/types";
 import { Panel, SectionTitle } from "@/components/ui";
-import { avisoError } from "@/lib/avisos";
 import VisorDocumento from "@/components/VisorDocumento";
-import { subirDocumento } from "../actions";
+import SubirArchivo from "@/components/SubirArchivo";
+import { carpetaDeOrden, registrarDocumentoOrden } from "../actions";
 
 const TIPOS = [
   { v: "acta", l: "Acta" },
@@ -24,15 +25,10 @@ export default function DocumentosPanel({
   documentos: Documento[];
   ocArchivo: string | null;
 }) {
-  // Si la subida falla, la action devuelve el error y lo avisamos.
-  async function subir(formData: FormData) {
-    try {
-      const err = await subirDocumento(ordenId, formData);
-      if (err) avisoError(err);
-    } catch {
-      avisoError("No se pudo subir el documento — inténtalo de nuevo.");
-    }
-  }
+  const router = useRouter();
+  // El tipo se elige antes de escoger el archivo: la subida arranca sola al
+  // seleccionarlo, así que ya no hay un botón de «enviar» donde leerlo.
+  const [tipo, setTipo] = useState(TIPOS[0]?.v ?? "otro");
 
   return (
     <Panel>
@@ -63,16 +59,15 @@ export default function DocumentosPanel({
         )}
       </ul>
 
-      <form
-        action={subir}
-        className="flex flex-wrap items-end gap-2 border-t border-line p-4"
-      >
+      <div className="flex flex-wrap items-end gap-3 border-t border-line p-4">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-muted">
             Tipo
           </span>
           <select
             name="tipo"
+            value={tipo}
+            onChange={(e) => setTipo(e.target.value)}
             className="rounded-md border border-line bg-surface px-2 py-2 text-sm text-ink outline-none focus:border-primary"
           >
             {TIPOS.map((t) => (
@@ -82,31 +77,23 @@ export default function DocumentosPanel({
             ))}
           </select>
         </label>
-        <input
-          type="file"
-          name="archivo"
-          required
-          className="max-w-[12rem] text-xs text-muted file:mr-2 file:rounded file:border-0 file:bg-surface-2 file:px-2 file:py-1 file:text-xs file:text-ink"
+        {/* Sube DIRECTO al almacenamiento, con porcentaje real. Pasando por
+            el servidor, un adjunto de más de 4,5 MB fallaba sin explicación
+            (lo rechaza la plataforma antes de ejecutar nada) y no había
+            manera de ver por dónde iba. */}
+        <SubirArchivo
+          carpeta={() => carpetaDeOrden(ordenId)}
+          onRegistrar={(ruta: string, nombre: string) =>
+            registrarDocumentoOrden(ordenId, ruta, nombre, tipo)
+          }
+          etiqueta="Subir un documento"
+          onListo={() => router.refresh()}
         />
-        <BotonSubir />
-      </form>
+      </div>
     </Panel>
   );
 }
 
-function BotonSubir() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:border-line-strong hover:text-ink disabled:opacity-55"
-    >
-      <Upload className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-      {pending ? "Subiendo…" : "Subir"}
-    </button>
-  );
-}
 
 function DocRow({
   nombre,

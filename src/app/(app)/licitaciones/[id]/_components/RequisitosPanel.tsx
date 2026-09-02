@@ -6,7 +6,7 @@
 // agregan de un golpe. Lo que la empresa ya tiene vigente en Configuración →
 // Empresa nace enlazado y listo. El flag subsanable/NO subsanable manda.
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
@@ -14,7 +14,6 @@ import {
   FileWarning,
   ListPlus,
   Loader2,
-  Paperclip,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -23,12 +22,14 @@ import { useAccion } from "@/lib/use-accion";
 import { avisoError } from "@/lib/avisos";
 import { fetchLargo } from "@/lib/fetch-cliente";
 import VisorDocumento from "@/components/VisorDocumento";
+import SubirArchivo from "@/components/SubirArchivo";
 import {
   actualizarRequisitoAction,
   crearRequisitoAction,
   crearRequisitosLoteAction,
   eliminarRequisitoAction,
-  subirArchivoRequisitoAction,
+  carpetaDeRequisitoAction,
+  registrarArchivoRequisitoAction,
   toggleRequisitoSubsanacionAction,
 } from "@/lib/actions/licitaciones";
 import {
@@ -223,7 +224,7 @@ export default function RequisitosPanel({
                     encolar: true,
                   })
                 }
-                onSubir={(fd) => correr(`subir-${r.id}`, () => subirArchivoRequisitoAction(r.id, fd))}
+                onSubido={() => router.refresh()}
                 onGenerarSolo={(fecha) => generarSolo(r.codigo, fecha)}
                 generandoSolo={generandoSolo === r.codigo}
                 onEliminar={() => {
@@ -460,7 +461,7 @@ function FilaRequisito({
   subsanacionId,
   onToggleSub,
   onPatch,
-  onSubir,
+  onSubido,
   onEliminar,
   onGenerarSolo,
   generandoSolo,
@@ -476,12 +477,11 @@ function FilaRequisito({
   subsanacionId: string | null;
   onToggleSub: (marcar: boolean) => void;
   onPatch: (patch: Parameters<typeof actualizarRequisitoAction>[1]) => void;
-  onSubir: (fd: FormData) => void;
+  onSubido: () => void;
   onEliminar: () => void;
   onGenerarSolo: (fecha?: string) => void;
   generandoSolo: boolean;
 }) {
-  const fileRef = useRef<HTMLInputElement>(null);
   // Selector de fecha para generar CON OTRA FECHA (subsanación: el documento
   // corregido conserva la fecha del original). Cerrado no estorba a nadie.
   const [fechaAbierta, setFechaAbierta] = useState(false);
@@ -636,39 +636,18 @@ function FilaRequisito({
         {/* Subir aplica a lo externo; en lo generado es el plan B mientras
             llega el motor documental. Lo "en línea" y lo de Empresa no suben. */}
         {via !== "linea" && !cubiertoPorEmpresa && (
-          <>
-            <input
-              ref={fileRef}
-              type="file"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                const fd = new FormData();
-                fd.set("archivo", f);
-                onSubir(fd);
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={subiendo}
-              className="flex items-center gap-1 text-[12px] text-muted transition-colors hover:text-ink"
-              title={
-                via === "genera"
-                  ? "Mientras el motor documental no existe, súbelo hecho a mano"
-                  : "Subir el archivo de este requisito (lo marca listo)"
-              }
-            >
-              {subiendo ? (
-                <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" strokeWidth={2} aria-hidden />
-              ) : (
-                <Paperclip className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-              )}
-              {subiendo ? "Subiendo…" : r.storage_path ? "Reemplazar" : via === "genera" ? "Subir hecho" : "Subir"}
-            </button>
-          </>
+          // El archivo va DIRECTO al almacenamiento, con su porcentaje real:
+          // pasando por el servidor, cualquier adjunto de más de 4,5 MB
+          // fallaba sin explicación (lo rechaza la plataforma antes de
+          // ejecutar nada) y no había forma de ver el avance.
+          <SubirArchivo
+            carpeta={() => carpetaDeRequisitoAction(r.id)}
+            onRegistrar={(ruta: string) => registrarArchivoRequisitoAction(r.id, ruta)}
+            etiqueta={
+              r.storage_path ? "Reemplazar" : via === "genera" ? "Subir hecho" : "Subir"
+            }
+            onListo={onSubido}
+          />
         )}
 
         <label className="flex items-center gap-1 text-[12px] text-ink-soft" title="Listo / pendiente">

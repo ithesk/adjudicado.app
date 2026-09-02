@@ -8,7 +8,7 @@
 // - en móvil, el menú completo vive en un drawer (antes no existía).
 // La línea gráfica no cambia: mismos tokens, mismos colores.
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
@@ -23,6 +23,7 @@ import {
   Landmark,
   LayoutList,
   LogOut,
+  Loader2,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -61,6 +62,28 @@ const DESTINOS = [
   { href: "/entidades", label: "Entidades", Icono: Landmark },
   { href: "/configuracion/empresa", label: "Empresa", Icono: BadgeCheck },
 ] as const;
+
+// Pista de navegación: si el destino tarda en llegar (una ficha pesada, la
+// red floja), aparece un spinner EN el ítem que se clicó. Sin esto, pulsar
+// «Licitaciones» y esperar dos segundos no daba ninguna señal — el usuario
+// no sabe si su clic se registró y vuelve a pulsar.
+//
+// useLinkStatus solo funciona dentro de un <Link>, por eso es un componente
+// aparte. El retardo evita que parpadee cuando la navegación es instantánea,
+// y el hueco está SIEMPRE reservado para que nada salte de sitio.
+function PistaNav() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden
+      className={`inline-grid h-3.5 w-3.5 flex-none place-items-center transition-opacity delay-150 duration-200 ${
+        pending ? "opacity-100" : "opacity-0"
+      }`}
+    >
+      <Loader2 className="h-3 w-3 motion-safe:animate-spin text-primary" strokeWidth={2.2} />
+    </span>
+  );
+}
 
 function ItemNav({
   href,
@@ -102,6 +125,7 @@ function ItemNav({
       <Icono className="h-[15px] w-[15px] flex-none" strokeWidth={2} />
       {!rail && <span className="min-w-0 flex-1 truncate">{label}</span>}
       {!rail && extra}
+      <PistaNav />
     </Link>
   );
 }

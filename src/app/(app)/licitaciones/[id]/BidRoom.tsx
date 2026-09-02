@@ -46,6 +46,7 @@ import {
 } from "@/lib/actions/licitaciones";
 import DuplicarProceso from "../_components/DuplicarProceso";
 import LineaTiempo from "./_components/LineaTiempo";
+import ProgresoLargo from "@/components/ProgresoLargo";
 import OrdenesDelProceso, {
   type OrdenDelProceso,
 } from "./_components/OrdenesDelProceso";
@@ -177,6 +178,8 @@ export default function BidRoom({
   // Errores de la generación de la SUBSANACIÓN — se muestran en su sección.
   const [erroresSub, setErroresSub] = useState<string[] | null>(null);
   const [pasoTexto, setPasoTexto] = useState<string | null>(null);
+  // Cuándo arrancó la generación, para poder decir cuánto lleva.
+  const [inicioGen, setInicioGen] = useState(0);
   const [reusado, setReusado] = useState<"docx" | "pdf" | null>(null);
   // Un solo PDF por sobre (los portales piden subir 2-3 archivos, no 15).
   const [unir, setUnir] = useState(true);
@@ -230,6 +233,7 @@ export default function BidRoom({
     setErroresSub(null);
     setReusado(null);
     const pasos = formato === "pdf" ? PASOS_PDF : PASOS_DOCX;
+    setInicioGen(Date.now());
     setPasoTexto(pasos[0]);
     let i = 0;
     const reloj = setInterval(() => {
@@ -327,9 +331,13 @@ export default function BidRoom({
               {textoDias(dias)}
             </span>
             {pasoTexto ? (
-              <span className="flex items-center gap-1.5 rounded-md bg-surface-2 px-2.5 py-1.5 text-[12.5px] text-ink-soft">
-                <Loader2 className="h-3.5 w-3.5 flex-none animate-spin text-primary" strokeWidth={2} aria-hidden />
-                <span className="max-w-56 truncate">{pasoTexto}</span>
+              // Se conserva el texto del paso (describe de verdad el orden en
+              // que trabaja el servidor) pero AHORA con el reloj al lado: los
+              // pasos avanzan por temporizador, no por progreso real, así que
+              // solos se quedan clavados en el último y nada dice si aquello
+              // sigue vivo. El tiempo transcurrido sí es verdad.
+              <span className="flex items-center gap-2 rounded-md bg-surface-2 px-2.5 py-1.5">
+                <ProgresoLargo fase={pasoTexto} desde={inicioGen} estimado={45} />
               </span>
             ) : (
               <>

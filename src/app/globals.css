@@ -163,6 +163,28 @@ body {
   animation: slide-in-left 0.18s ease-out;
 }
 
+/* Barra INDETERMINADA: para esperas cuyo avance real no se puede conocer
+   (el trabajo del servidor). Se mueve para decir «sigo viva», y NO finge un
+   porcentaje — una barra que promete precisión que no existe se queda
+   clavada en el 90 % y hace desconfiar de todo lo demás. Donde el avance sí
+   se sabe (los bytes de una subida) se usa una barra normal con su ancho. */
+@keyframes barra-indeterminada {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-barra-indeterminada {
+  animation: barra-indeterminada 1.4s ease-in-out infinite;
+}
+/* Con «reducir movimiento» activo, la barra deja de desplazarse y solo late:
+   sigue comunicando actividad sin animación de traslación. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-barra-indeterminada {
+    animation: fade-in 1s ease-in-out infinite alternate;
+    transform: none;
+    width: 100%;
+  }
+}
+
 /* Landing pública — entrada al hacer scroll. El estado oculto lo aplica JS
    (componente Reveal) para que sin JavaScript el contenido siga visible. */
 .reveal {
