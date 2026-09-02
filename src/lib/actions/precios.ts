@@ -4,6 +4,7 @@
 // cliente (búsqueda instantánea, peek, anotaciones) y la capa de datos.
 
 import { revalidatePath } from "next/cache";
+import { getMiembro } from "@/lib/auth";
 import {
   activarListaPrecio,
   buscarPrecios,
@@ -65,4 +66,16 @@ export async function eliminarListaAction(listaId: string): Promise<string | nul
   const error = await eliminarListaPrecio(listaId);
   if (!error) revalidatePath("/precios", "layout");
   return error;
+}
+
+// La carpeta donde el navegador debe dejar el Excel antes de importarlo.
+//
+// El archivo sube DIRECTO al almacenamiento (Vercel rechaza cualquier cuerpo
+// mayor de 4,5 MB antes de ejecutar nada), y la RLS del bucket exige que la
+// primera carpeta sea la de la organización. El navegador no conoce ese id,
+// así que lo pide aquí en vez de recibirlo por props a través de dos niveles
+// de componentes.
+export async function carpetaDeImportacion(): Promise<string | null> {
+  const miembro = await getMiembro();
+  return miembro ? `${miembro.org_id}/importaciones` : null;
 }

@@ -22,23 +22,54 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 
-  const form = await req.formData();
-  const archivo = form.get("archivo");
-  const suplidorId = String(form.get("suplidor_id") ?? "");
-  if (!(archivo instanceof File) || !/\.(xlsx|xls|xlsm)$/i.test(archivo.name)) {
+  // El Excel NO viaja en la petición: el navegador lo sube directo al
+  // almacenamiento y aquí solo llega su ruta.
+  //
+  // Por qué: Vercel rechaza cualquier cuerpo mayor de 4,5 MB ANTES de
+  // ejecutar esta función, así que un Excel de 6 MB fallaba sin que este
+  // código llegara a correr — y como el rechazo no lo genera la app, su
+  // respuesta no era JSON y el usuario veía «inténtalo de nuevo» sin más.
+  // Yendo directo al almacenamiento, el tope pasa a ser el del bucket
+  // (50 MB) y los 30 MB que promete la app son alcanzables de verdad.
+  const cuerpo = (await req.json().catch(() => null)) as {
+    ruta?: string;
+    nombre?: string;
+    suplidor_id?: string;
+  } | null;
+  const ruta = cuerpo?.ruta ?? "";
+  const nombre = cuerpo?.nombre ?? "";
+  const suplidorId = cuerpo?.suplidor_id ?? "";
+
+  if (!ruta || !/\.(xlsx|xls|xlsm)$/i.test(nombre)) {
     return NextResponse.json(
       { error: "Sube la lista de precios en Excel (.xlsx)." },
       { status: 400 },
     );
   }
-  if (archivo.size > 30 * 1024 * 1024) {
-    return NextResponse.json({ error: "El Excel supera 30 MB." }, { status: 400 });
-  }
   if (!suplidorId) {
     return NextResponse.json({ error: "Elige el suplidor de la lista." }, { status: 400 });
   }
+  // La ruta debe estar bajo la carpeta de ESTA organización. La RLS del
+  // bucket ya lo impone, pero comprobarlo aquí evita siquiera intentarlo.
+  if (!ruta.startsWith(`${miembro.org_id}/`)) {
+    return NextResponse.json({ error: "Archivo no válido." }, { status: 403 });
+  }
 
   const supabase = await createClient();
+
+  const { data: descarga, error: errDescarga } = await supabase.storage
+    .from("documentos")
+    .download(ruta);
+  if (errDescarga || !descarga) {
+    return NextResponse.json(
+      { error: "No se pudo leer el archivo subido. Inténtalo de nuevo." },
+      { status: 400 },
+    );
+  }
+  if (descarga.size > 30 * 1024 * 1024) {
+    return NextResponse.json({ error: "El Excel supera 30 MB." }, { status: 400 });
+  }
+  const archivo = { name: nombre, arrayBuffer: () => descarga.arrayBuffer() };
 
   // El suplidor debe existir en el catálogo de la organización.
   const { data: suplidor } = await supabase
@@ -126,6 +157,14 @@ export async function POST(req: Request) {
       { error: "No se pudo activar la lista: " + actErr.message },
       { status: 500 },
     );
+  }
+
+  // El Excel ya se volcó a la base: el archivo temporal no aporta nada y
+  // sí engordaría el almacenamiento para siempre. Se borra aquí, y si falla
+  // no se rompe la importación (ya está hecha) — solo queda anotado.
+  const { error: errBorrado } = await supabase.storage.from("documentos").remove([ruta]);
+  if (errBorrado) {
+    console.error("importar: no se pudo borrar el temporal", ruta, errBorrado.message);
   }
 
   return NextResponse.json({
