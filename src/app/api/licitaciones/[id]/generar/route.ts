@@ -33,6 +33,13 @@ import PizZipLib from "pizzip";
 import { docxAPdf, pdfDisponible, unirPdfs } from "@/lib/licitaciones/pdf";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
 import {
+  coberturaDeRequisito,
+  coberturaPorTipo,
+  estaCubierto,
+  rutaDeEmpresa,
+} from "@/lib/licitaciones/cobertura-empresa";
+import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
+import {
   grupoDeRequisito,
   requisitoEstandar,
 } from "@/lib/licitaciones/requisitos-estandar";
@@ -125,7 +132,8 @@ export async function GET(
   // 2) EL GATE: ningún NO subsanable pendiente. Bloqueo duro. Lo que la
   //    propia generación produce no bloquea — incluidas las plantillas que
   //    la organización construyó (lic_plantilla en estado "lista").
-  const [{ data: requisitos }, { data: plantillasOrg }, { data: proc }] = await Promise.all([
+  const [{ data: requisitos }, { data: plantillasOrg }, { data: proc }, { data: docsEmpresa }] =
+    await Promise.all([
     supabase
       .from("lic_requisito")
       .select("id, codigo, subsanable, estado, nombre, datos, storage_path, documento_empresa_id, orden_indice, subsanacion_id")
@@ -142,7 +150,18 @@ export async function GET(
       .eq("id", id)
       .eq("org_id", miembro.org_id)
       .maybeSingle(),
+    supabase.from("documento_empresa").select("*").eq("org_id", miembro.org_id),
   ]);
+  // Los documentos de la empresa se resuelven por TIPO y contra lo VIGENTE
+  // hoy, no por el `documento_empresa_id` grabado el día que se agregó el
+  // requisito. Con el id congelado, renovar un certificado (que es subir una
+  // fila nueva) dejaba el paquete llevando el VENCIDO, y el certificado
+  // subido después de cargar el checklist no entraba nunca.
+  const cobertura = coberturaPorTipo((docsEmpresa ?? []) as DocumentoEmpresa[]);
+  // Un requisito que cubre la empresa no está pendiente aunque su fila siga
+  // guardada así de cuando el documento todavía no existía.
+  const sigueFaltando = (q: { codigo: string; estado: string }) =>
+    q.estado === "pendiente" && !estaCubierto(q.codigo, cobertura);
   // CASCADA por código: variante de la entidad del proceso → genérica de
   // la org → (más abajo) plantilla del sistema.
   const plantillaPorCodigo = resolverPlantillas(
@@ -192,7 +211,7 @@ export async function GET(
       );
     }
     const incompletos = enPaquete.filter(
-      (q) => q.estado === "pendiente" && !esGenerable(q.codigo),
+      (q) => sigueFaltando(q) && !esGenerable(q.codigo),
     );
     if (incompletos.length > 0) {
       return NextResponse.json(
@@ -205,7 +224,7 @@ export async function GET(
     }
   } else {
     const criticos = enPaquete.filter(
-      (q) => !q.subsanable && q.estado === "pendiente" && !esGenerable(q.codigo),
+      (q) => !q.subsanable && sigueFaltando(q) && !esGenerable(q.codigo),
     );
     if (criticos.length > 0) {
       return NextResponse.json(
@@ -426,9 +445,13 @@ export async function GET(
           .map((q) => ({
             codigo: q.codigo,
             datos: q.datos ?? {},
+            // La RUTA del documento vigente, no el id congelado: si se
+            // renueva un certificado, la huella cambia y el ZIP se
+            // regenera. Con el id, el paquete reusado seguía trayendo el
+            // archivo viejo.
             adjunto: esGenerable(q.codigo)
               ? null
-              : q.storage_path ?? q.documento_empresa_id ?? null,
+              : q.storage_path ?? rutaDeEmpresa(q.codigo, cobertura),
           }))
           .sort((a, b) => a.codigo.localeCompare(b.codigo)),
         sellos: (docsImagen ?? []).map((d) => d.archivo_url),
@@ -505,18 +528,6 @@ export async function GET(
   //    Empresa enlazado. Lo que no tiene archivo se declara en el índice.
   const generadoPorCodigo = new Map(archivos.map((d) => [d.codigo, d]));
 
-  const idsDocEmpresa = enPaquete
-    .map((q) => q.documento_empresa_id)
-    .filter(Boolean) as string[];
-  const docEmpresaPorId = new Map<string, { archivo_url: string }>();
-  if (idsDocEmpresa.length > 0) {
-    const { data } = await supabase
-      .from("documento_empresa")
-      .select("id, archivo_url")
-      .in("id", idsDocEmpresa);
-    for (const d of data ?? []) docEmpresaPorId.set(d.id, d);
-  }
-
   const ordenados = [...enPaquete].sort((a, b) => {
     const sa = SOBRE[grupoDeRequisito(a.codigo)] ?? "Sobre A";
     const sb = SOBRE[grupoDeRequisito(b.codigo)] ?? "Sobre A";
@@ -533,11 +544,7 @@ export async function GET(
   await Promise.all(
     ordenados.map(async (q) => {
       if (generadoPorCodigo.has(q.codigo)) return;
-      const ruta =
-        q.storage_path ??
-        (q.documento_empresa_id
-          ? docEmpresaPorId.get(q.documento_empresa_id)?.archivo_url ?? null
-          : null);
+      const ruta = q.storage_path ?? rutaDeEmpresa(q.codigo, cobertura);
       if (!ruta) return;
       const { data: adj } = await supabase.storage.from("documentos").download(ruta);
       if (!adj) return;
@@ -625,6 +632,14 @@ export async function GET(
       indice.push(`  ${nn} ${q.codigo} — ${q.nombre} (${origenNota})`);
     } else if (requisitoEstandar(q.codigo)?.via === "linea") {
       indice.push(`  ·· ${q.codigo} — ${q.nombre}: la entidad lo verifica en línea, no lleva archivo`);
+    } else if (coberturaDeRequisito(q.codigo, cobertura)?.vencido) {
+      // Se deja FUERA a propósito y se dice por qué: anexar un certificado
+      // caducado es peor que no anexarlo — en la apertura, la oferta se cae
+      // igual, pero sin que nadie lo hubiera visto venir.
+      indice.push(
+        `  ¡VENCIDO! ${q.codigo} — ${q.nombre}: el documento está en Empresa pero caducado. Renuévalo en Configuración → Empresa y vuelve a generar.`,
+      );
+      sinArchivo.push(`${q.codigo} — ${q.nombre} (vencido en Empresa)`);
     } else {
       indice.push(`  ¡FALTA! ${q.codigo} — ${q.nombre}: sin archivo`);
       sinArchivo.push(`${q.codigo} — ${q.nombre}`);

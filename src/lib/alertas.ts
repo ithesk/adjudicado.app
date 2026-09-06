@@ -89,7 +89,9 @@ export function alertasDeDocumentos(docs: DocumentoEmpresa[]): Alerta[] {
 
   // Los que NUNCA se cargaron van AGRUPADOS: en una empresa recién montada
   // faltan cinco de golpe, y cinco alertas iguales solo hacen ruido.
-  const faltantes = filas.filter((f) => f.tipo.vence && !f.vigente);
+  // Los `opcional` (MIPYME) quedan fuera: no toda empresa los tiene, y una
+  // alerta que el usuario no puede apagar nunca es ruido permanente.
+  const faltantes = filas.filter((f) => f.tipo.vence && !f.tipo.opcional && !f.vigente);
   if (faltantes.length > 0) {
     alertas.push({
       id: "doc:faltantes",
