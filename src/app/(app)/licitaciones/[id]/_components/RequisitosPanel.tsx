@@ -43,6 +43,11 @@ import {
   requisitoEstandar,
   type GrupoRequisito,
 } from "@/lib/licitaciones/requisitos-estandar";
+import {
+  coberturaDeRequisito,
+  type Cobertura,
+  type MapaCobertura,
+} from "@/lib/licitaciones/cobertura-empresa";
 
 const inputSm =
   "rounded-md border border-line bg-surface px-2 py-1 text-[12.5px] text-ink outline-none focus:border-primary";
@@ -67,6 +72,7 @@ export default function RequisitosPanel({
   plantillasOrg = [],
   subsanacionId = null,
   pdfListo = false,
+  cobertura = {},
 }: {
   procesoId: string;
   requisitos: LicRequisito[];
@@ -79,6 +85,8 @@ export default function RequisitosPanel({
   subsanacionId?: string | null;
   // Con el convertidor configurado, el formulario suelto también baja en PDF.
   pdfListo?: boolean;
+  // Documentos de empresa vigentes HOY, por tipo.
+  cobertura?: MapaCobertura;
 }) {
   const router = useRouter();
   const [modo, setModo] = useState<"lista" | "checklist" | "manual">("lista");
@@ -207,6 +215,7 @@ export default function RequisitosPanel({
               <FilaRequisito
                 key={r.id}
                 r={r}
+                cobertura={coberturaDeRequisito(r.codigo, cobertura)}
                 preguntas={plantillasOrg.find((p) => p.codigo === r.codigo)?.preguntas ?? []}
                 ocupada={ocupada(`req-${r.id}`)}
                 subiendo={ocupada(`subir-${r.id}`)}
@@ -454,6 +463,7 @@ function FormManual({
 
 function FilaRequisito({
   r,
+  cobertura,
   preguntas,
   ocupada,
   subiendo,
@@ -467,6 +477,8 @@ function FilaRequisito({
   generandoSolo,
 }: {
   r: LicRequisito;
+  // El documento de empresa que lo cubre HOY (null si no lo cubre ninguno).
+  cobertura: Cobertura | null;
   // Variables "se pregunta al generar" de la plantilla de la org detrás de
   // este requisito — cada proceso captura sus valores aquí.
   preguntas: { clave: string; etiqueta: string }[];
@@ -502,7 +514,16 @@ function FilaRequisito({
   // Por dónde llega: estándar → su vía; origen "generado" (plantilla de la
   // org creada en el constructor) → se genera aquí; el resto se sube.
   const via = estandar?.via ?? (r.origen === "generado" ? "genera" : "sube");
-  const cubiertoPorEmpresa = r.origen === "documento_empresa" && !!r.documento_empresa_id;
+  // Cubierto = hay documento de ESE TIPO vigente hoy. NO se mira
+  // `documento_empresa_id`: ese id se congelaba el día que se agregó el
+  // requisito, así que el certificado subido después nunca lo ponía en verde
+  // y el renovado dejaba el requisito apuntando al vencido.
+  const docEmpresa = cobertura?.archivo_url ?? null;
+  const cubiertoPorEmpresa = !!docEmpresa && !cobertura!.vencido;
+  const vencidoEnEmpresa = !!docEmpresa && !!cobertura?.vencido;
+  // El semáforo dice la verdad: lo que cubre la empresa está listo aunque la
+  // fila siga guardada como "pendiente" de cuando el documento no estaba.
+  const pendienteEfectivo = pendienteEstado && !cubiertoPorEmpresa;
 
   return (
     <li className="px-4 py-2">
@@ -513,9 +534,9 @@ function FilaRequisito({
         {/* El semáforo del gate: rojo = crítico pendiente. */}
         <span
           className={`h-2.5 w-2.5 flex-none rounded-full ${
-            pendienteEstado ? (critico ? "bg-danger" : "bg-warn") : "bg-ok"
+            pendienteEfectivo ? (critico ? "bg-danger" : "bg-warn") : "bg-ok"
           }`}
-          title={pendienteEstado ? (critico ? "Crítico pendiente" : "Pendiente") : "Listo"}
+          title={pendienteEfectivo ? (critico ? "Crítico pendiente" : "Pendiente") : "Listo"}
           aria-hidden
         />
         {/* Guardando/guardado de ESTA fila, junto a su semáforo. */}
@@ -588,15 +609,25 @@ function FilaRequisito({
           (cubiertoPorEmpresa ? (
             <span
               className="whitespace-nowrap rounded bg-ok-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-ok"
-              title="El paquete lo toma de la documentación de la empresa"
+              title={`El paquete lo toma de la documentación de la empresa: ${cobertura?.nombre ?? ""}`}
             >
               De Empresa ✓
             </span>
+          ) : vencidoEnEmpresa ? (
+            // Antes esto se veía igual que «falta», y peor: el paquete salía
+            // con el documento vencido sin decir nada.
+            <a
+              href="/configuracion/empresa"
+              className="whitespace-nowrap rounded bg-danger-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-danger hover:underline"
+              title="El documento está en Empresa pero VENCIDO — renuévalo allá y este requisito se pone en verde solo"
+            >
+              Vencido en Empresa
+            </a>
           ) : (
             <a
               href="/configuracion/empresa"
               className="whitespace-nowrap rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-warn hover:underline"
-              title="Falta o está vencido en Configuración → Empresa — cárgalo allá una sola vez"
+              title="No está cargado en Configuración → Empresa — cárgalo allá una sola vez y sirve para todos los procesos"
             >
               Falta en Empresa
             </a>
@@ -624,13 +655,24 @@ function FilaRequisito({
           </button>
         )}
 
-        {r.storage_path && (
+        {r.storage_path ? (
           <VisorDocumento
             bucket="documentos"
             path={r.storage_path}
             nombre={`${r.codigo}.pdf`}
             className="text-[12px] font-medium text-primary transition-colors hover:underline"
           />
+        ) : (
+          // Cuando lo cubre la empresa, se abre EL MISMO archivo que irá al
+          // paquete: si no es el que uno cree, se ve aquí y no en la apertura.
+          docEmpresa && (
+            <VisorDocumento
+              bucket="documentos"
+              path={docEmpresa}
+              nombre={cobertura?.nombre ?? r.codigo}
+              className="text-[12px] font-medium text-primary transition-colors hover:underline"
+            />
+          )
         )}
 
         {/* Subir aplica a lo externo; en lo generado es el plan B mientras
@@ -650,10 +692,21 @@ function FilaRequisito({
           />
         )}
 
-        <label className="flex items-center gap-1 text-[12px] text-ink-soft" title="Listo / pendiente">
+        <label
+          className="flex items-center gap-1 text-[12px] text-ink-soft"
+          title={
+            cubiertoPorEmpresa
+              ? "Lo cubre un documento vigente de la empresa — se marca solo"
+              : "Listo / pendiente"
+          }
+        >
           <input
             type="checkbox"
-            defaultChecked={r.estado === "listo"}
+            // `key`: sin ella React vería el input pasar de no controlado a
+            // controlado cuando aparece el documento, y avisaría por consola.
+            key={cubiertoPorEmpresa ? "empresa" : "libre"}
+            defaultChecked={cubiertoPorEmpresa || r.estado === "listo"}
+            disabled={cubiertoPorEmpresa}
             onChange={(e) => onPatch({ estado: e.target.checked ? "listo" : "pendiente" })}
           />
           Listo

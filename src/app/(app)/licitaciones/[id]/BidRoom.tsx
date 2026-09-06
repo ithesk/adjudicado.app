@@ -54,6 +54,7 @@ import { proponerAdjudicar } from "@/lib/licitaciones/enlace";
 import DatosProceso from "./_components/DatosProceso";
 import CotizadorItems from "./_components/CotizadorItems";
 import RequisitosPanel from "./_components/RequisitosPanel";
+import type { MapaCobertura } from "@/lib/licitaciones/cobertura-empresa";
 import SubsanacionPanel from "./_components/SubsanacionPanel";
 
 // A qué bloque se salta cuando se avanza en la línea de tiempo.
@@ -152,6 +153,7 @@ export default function BidRoom({
   pdfListo = false,
   paquetes = [],
   ordenes = [],
+  cobertura = {},
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
@@ -171,6 +173,9 @@ export default function BidRoom({
   // Las órdenes de compra que salieron de este proceso (enlazadas por el
   // código de expediente). El otro extremo del hilo.
   ordenes?: OrdenDelProceso[];
+  // Documentos de empresa vigentes HOY, por tipo. Lo que decide si un
+  // requisito «de Empresa» está cubierto — ya no el id congelado en la fila.
+  cobertura?: MapaCobertura;
 }) {
   const router = useRouter();
   const { proceso, items, requisitos, institucion, subsanacion } = detalle;
@@ -431,6 +436,7 @@ export default function BidRoom({
                 plantillasOrg={plantillasOrg}
                 subsanacionId={subAbierta && subsanacion ? subsanacion.id : null}
                 pdfListo={pdfListo}
+                cobertura={cobertura}
               />
             </section>
 

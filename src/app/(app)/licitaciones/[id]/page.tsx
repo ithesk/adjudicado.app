@@ -6,6 +6,8 @@ import {
   perfilEmpresa,
 } from "@/lib/licitaciones/queries";
 import { listarInstituciones } from "@/lib/queries";
+import { listarDocsEmpresa } from "@/lib/empresa/queries";
+import { coberturaPorTipo } from "@/lib/licitaciones/cobertura-empresa";
 import { listarPlantillas } from "@/lib/licitaciones/queries-plantillas";
 import { resolverPlantillas } from "@/lib/licitaciones/plantillas";
 import { paramsCotizacion } from "@/lib/licitaciones/cotizador";
@@ -22,14 +24,16 @@ export default async function ProcesoPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [detalle, perfil, firmantes, instituciones, plantillas, paquetes] = await Promise.all([
-    obtenerProceso(id),
-    perfilEmpresa(),
-    listarFirmantes(),
-    listarInstituciones(),
-    listarPlantillas(),
-    listarPaquetes(id),
-  ]);
+  const [detalle, perfil, firmantes, instituciones, plantillas, paquetes, docsEmpresa] =
+    await Promise.all([
+      obtenerProceso(id),
+      perfilEmpresa(),
+      listarFirmantes(),
+      listarInstituciones(),
+      listarPlantillas(),
+      listarPaquetes(id),
+      listarDocsEmpresa(),
+    ]);
   if (!detalle) notFound();
 
   // El otro extremo del hilo: las órdenes de compra que salieron de este
@@ -69,6 +73,10 @@ export default async function ProcesoPage({
       pdfListo={pdfDisponible()}
       paquetes={paquetes}
       ordenes={ordenesDelProceso ?? []}
+      // Qué documentos de la empresa están vigentes HOY. Se resuelve aquí, en
+      // cada carga, y no con el id que quedó guardado el día que se agregó el
+      // requisito: así el certificado renovado entra solo y el vencido se ve.
+      cobertura={coberturaPorTipo(docsEmpresa)}
     />
   );
 }

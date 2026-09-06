@@ -17,10 +17,8 @@ import { isDemo } from "@/lib/demo";
 import { ProcesoCanonico, traducirIssue } from "./contrato";
 import { paramsCotizacion, precioBaseUnitario, precioVentaUnitario } from "./cotizador";
 import { requisitoEstandar } from "./requisitos-estandar";
-import {
-  estadoDocumentacion,
-  type DocumentoEmpresa,
-} from "@/lib/empresa/documentos";
+import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
+import { coberturaPorTipo } from "./cobertura-empresa";
 import type {
   EmpresaPerfil,
   LicFirmante,
@@ -881,19 +879,17 @@ export async function crearRequisitosLote(
     (plantillasOrg ?? []).map((p) => [p.codigo as string, p.nombre as string]),
   );
 
-  // El documento vigente de cada tipo (mismo criterio que la pantalla Empresa).
-  const vigentes = new Map(
-    estadoDocumentacion((docs ?? []) as DocumentoEmpresa[])
-      .filter((f) => f.vigente && f.nivel !== "vencido")
-      .map((f) => [f.tipo.codigo, f.vigente!]),
-  );
+  // El documento vigente de cada tipo (mismo criterio que la pantalla Empresa
+  // y que la generación del paquete: un solo resolvedor para los tres).
+  const vigentes = coberturaPorTipo((docs ?? []) as DocumentoEmpresa[]);
 
   const filas = codigos
     .filter((c) => !yaEstan.has(c))
     .map((c, i) => {
       const r = requisitoEstandar(c);
       if (r) {
-        const doc = r.docEmpresa ? vigentes.get(r.docEmpresa) : undefined;
+        const cob = r.docEmpresa ? vigentes[r.docEmpresa] : undefined;
+        const doc = cob && !cob.vencido ? cob : undefined;
         return {
           org_id: miembro.org_id,
           proceso_id: procesoId,

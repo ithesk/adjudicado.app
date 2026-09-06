@@ -24,6 +24,10 @@ export interface TipoDocEmpresa {
   descripcion: string;
   /** Si vence, el formulario pide la fecha de vencimiento. */
   vence: boolean;
+  /** No lo tiene toda empresa (la certificación MIPYME solo la de ese
+   *  tamaño). Se sigue mostrando y vigilando su vencimiento, pero NO cuenta
+   *  como «documento que falta»: sería una alerta que nadie puede apagar. */
+  opcional?: boolean;
 }
 
 // El catálogo es fijo para poder decir qué FALTA, no solo qué hay cargado.
@@ -52,6 +56,14 @@ export const TIPOS_DOC_EMPRESA: TipoDocEmpresa[] = [
     label: "Registro Mercantil",
     descripcion: "Emitido por la Cámara de Comercio. Se renueva periódicamente.",
     vence: true,
+  },
+  {
+    codigo: "mipyme",
+    label: "Certificación MIPYME (MICM)",
+    descripcion:
+      "Clasificación como micro, pequeña o mediana empresa. Da acceso a los procesos reservados a MIPYME y al margen de preferencia.",
+    vence: true,
+    opcional: true,
   },
   {
     codigo: "acta",

@@ -8,6 +8,66 @@ se hizo, qué quedó pendiente y las decisiones no obvias (las obvias ya están 
 
 ---
 
+## 2026-09-06 — MIPYME como requisito, y el enlace con Empresa que estaba congelado
+
+Pablo pidió poder agregar a una licitación requisitos que son documentos de la
+empresa, como la certificación MIPYME. Al revisarlo aparecieron dos cosas: que
+MIPYME no existía en ningún catálogo, y que el mecanismo que iba a usar estaba
+roto de una forma silenciosa.
+
+**MIPYME, de alta en los dos catálogos.** `TIPOS_DOC_EMPRESA` gana el tipo
+`mipyme` (Certificación MIPYME del MICM, con vencimiento) y `REQUISITOS_ESTANDAR`
+el requisito `MIPYME` en Sobre A · Legal, `via: "empresa"`, subsanable y
+desmarcado por defecto en el picker — no todos los pliegos la piden.
+
+Se añadió `opcional` a `TipoDocEmpresa` y MIPYME lo lleva: no toda empresa está
+clasificada como MIPYME, así que **no cuenta como «documento que falta»** en la
+alerta agrupada. Una alerta que el usuario no puede apagar nunca es ruido
+permanente. Su vencimiento sí se vigila igual que el resto una vez cargada.
+
+**El defecto de fondo: `documento_empresa_id` se congelaba.** Solo se escribía
+en `crearRequisitosLote`, el día que se agregaba el requisito, y nadie lo volvía
+a mirar. Dos consecuencias:
+
+- Subir el certificado DESPUÉS de cargar el checklist dejaba el requisito en
+  «Falta en Empresa» para siempre. El único arreglo era borrarlo y re-agregarlo.
+- Renovar un certificado es subir una fila NUEVA (deliberado: así se conserva el
+  historial). El requisito seguía apuntando a la anterior, así que **el paquete
+  salía con el documento vencido y el semáforo en verde**. Al duplicar un
+  proceso el id viejo se copiaba tal cual y el problema viajaba con él.
+
+**El vínculo real es el TIPO, no la fila.** Nuevo `cobertura-empresa.ts`: un
+único resolvedor que, a partir de los documentos de la organización, dice qué
+cubre cada requisito HOY. Lo usan los tres sitios que antes decidían por su
+cuenta — el checklist al crear, el panel al pintar, y la generación del paquete.
+`documento_empresa_id` se sigue escribiendo, pero ya solo como rastro.
+
+Efectos visibles:
+
+- El requisito se pone en verde **solo** cuando cargas el documento en
+  Configuración → Empresa, sin tocar la licitación.
+- Aparece un tercer estado, **«Vencido en Empresa»** en rojo, que antes se veía
+  igual que «falta» mientras el paquete anexaba el caducado.
+- Un documento vencido **no se anexa**, y el índice del ZIP lo dice con nombre y
+  apellido en vez de un «sin archivo» genérico.
+- La huella de caché del paquete usa la RUTA del documento vigente, no el id: al
+  renovar un certificado, el ZIP se regenera en vez de reusarse con el viejo.
+- Los dos gates (paquete y subsanación) miran el estado EFECTIVO, así que un
+  requisito cubierto ya no bloquea por tener guardado un «pendiente» de cuando
+  el documento todavía no existía.
+- Desde la fila se abre el documento de empresa que irá al paquete: si no es el
+  que uno cree, se ve ahí y no en la apertura.
+
+`cobertura-empresa.test.ts` cubre lo delicado: renovación, vencido, requisito
+que nace sin documento, y los `otro` (comparten código, no cubren nada).
+
+**Pendiente, sin tocar:** las subidas que aún pasan por el servidor (documentos
+de empresa, logo de entidad, adjuntos de bitácora y el PDF del OCR, que promete
+15 MB y en producción se corta en 4,5); y las dos variables que faltan en Vercel
+Production, `CREDENCIALES_SECRET` y `CRON_SECRET`.
+
+---
+
 ## 2026-08-26 — «Le di a crear en Odoo y no encuentro la orden»
 
 Pablo probó «Crear en Odoo» y no encontró nada. Diagnóstico completo, incluida
