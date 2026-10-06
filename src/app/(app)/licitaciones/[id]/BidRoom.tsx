@@ -52,6 +52,7 @@ import OrdenesDelProceso, {
 } from "./_components/OrdenesDelProceso";
 import { proponerAdjudicar } from "@/lib/licitaciones/enlace";
 import DatosProceso from "./_components/DatosProceso";
+import NotasProceso from "./_components/NotasProceso";
 import CotizadorItems from "./_components/CotizadorItems";
 import RequisitosPanel from "./_components/RequisitosPanel";
 import type { MapaCobertura } from "@/lib/licitaciones/cobertura-empresa";
@@ -624,6 +625,8 @@ export default function BidRoom({
                 </div>
               )}
             </Panel>
+
+            <NotasProceso procesoId={proceso.id} notas={proceso.notas} />
 
             {(!tienePerfil || !tieneFirmantes) && (
               <Panel className="p-3">
