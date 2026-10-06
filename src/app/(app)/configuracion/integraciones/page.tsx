@@ -1,21 +1,42 @@
-import { CheckCircle2, XCircle, Plug, Mail } from "lucide-react";
+import { CheckCircle2, XCircle, Plug, Mail, Sparkles } from "lucide-react";
 import { requireMiembro } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { estadoIntegracionOdoo } from "@/lib/odoo-config";
 import { Panel, SectionTitle } from "@/components/ui";
 import ConexionOdoo from "./ConexionOdoo";
+import ConectorClaude from "./ConectorClaude";
+import { listarConectores } from "@/lib/actions/mcp";
 
 export const dynamic = "force-dynamic";
 
 export default async function IntegracionesPage() {
   const miembro = await requireMiembro();
   const supabase = await createClient();
-  const odoo = await estadoIntegracionOdoo(supabase, miembro.org_id);
+  const [odoo, conectores] = await Promise.all([
+    estadoIntegracionOdoo(supabase, miembro.org_id),
+    listarConectores(),
+  ]);
   const dominioEntrante = process.env.INBOUND_DOMAIN || null;
   const secretConfigurado = Boolean(process.env.INBOUND_SECRET);
 
   return (
     <div className="space-y-4">
+      {/* ── Claude (MCP) ─────────────────────────────────────── */}
+      <Panel>
+        <SectionTitle icon={Sparkles}>Claude</SectionTitle>
+
+        <div className="space-y-4 p-4">
+          <ConectorClaude conectores={conectores} esAdmin={miembro.rol === "admin"} />
+          <p className="text-[12px] text-muted">
+            Conecta Claude (claude.ai, la app de escritorio o Claude Code) con las licitaciones de
+            esta empresa: busca oportunidades abiertas en la DGCP, lee el pliego y la ficha técnica
+            directamente del portal, y lleva el análisis a la Bid Room como un proceso nuevo con sus
+            ítems y su checklist de requisitos. Lo que el equipo aprende de cada institución queda
+            guardado y aparece en el siguiente análisis.
+          </p>
+        </div>
+      </Panel>
+
       {/* ── Odoo ─────────────────────────────────────────────── */}
       <Panel>
         <SectionTitle icon={Plug}>Odoo</SectionTitle>

@@ -48,8 +48,8 @@ export const REQUISITOS_ESTANDAR: RequisitoEstandar[] = [
   { codigo: "RPE", via: "linea", nombre: "Registro de Proveedores del Estado (rubro inscrito)", grupo: "legal", subsanable: true, sinArchivo: true, docEmpresa: "rpe" },
   { codigo: "REG-MERC", via: "empresa", nombre: "Registro Mercantil vigente (copia)", grupo: "legal", subsanable: true, docEmpresa: "mercantil" },
   { codigo: "ESTATUTOS", via: "empresa", nombre: "Estatutos sociales registrados (copia)", grupo: "legal", subsanable: true, docEmpresa: "acta" },
-  { codigo: "NOMINA-ACC", via: "sube", nombre: "Nómina de accionistas y acta de última asamblea", grupo: "legal", subsanable: true },
-  { codigo: "ACTA-GERENTE", via: "sube", nombre: "Acta de designación del gerente/consejo con poder de firma", grupo: "legal", subsanable: true },
+  { codigo: "NOMINA-ACC", via: "empresa", nombre: "Nómina de accionistas y acta de última asamblea", grupo: "legal", subsanable: true, docEmpresa: "nomina_accionistas" },
+  { codigo: "ACTA-GERENTE", via: "empresa", nombre: "Acta de designación del gerente/consejo con poder de firma", grupo: "legal", subsanable: true, docEmpresa: "acta_gerente" },
   { codigo: "COMP-ETICO", via: "genera", nombre: "Compromiso Ético de Proveedores del Estado (firmado y sellado)", grupo: "legal", subsanable: true },
   { codigo: "SNCC.F.040", via: "genera", nombre: "Formulario de Debida Diligencia y Conflicto de Interés", grupo: "legal", subsanable: true, opcional: true },
   { codigo: "DJ-ART38", via: "genera", nombre: "Declaración jurada simple — prohibiciones art. 38 Ley 47-25", grupo: "legal", subsanable: true },
@@ -87,6 +87,7 @@ export function grupoDeRequisito(codigo: string): GrupoRequisito | "otros" {
 // taggeada). El gate del paquete NO bloquea por estos: son justo lo que la
 // generación produce.
 export const CODIGOS_GENERABLES = [
+  "PROP-TEC",
   "SNCC.F.033",
   "SNCC.F.034",
   "SNCC.F.042",
@@ -95,3 +96,16 @@ export const CODIGOS_GENERABLES = [
   "CARTA-COND",
   "DJ-COLUSION",
 ];
+
+// Lo que un documento DEL SISTEMA pregunta en cada proceso (igual que las
+// variables "se pregunta al generar" de las plantillas de la org): se
+// captura en la fila del requisito y vive en lic_requisito.datos. Sin todas
+// completas, la generación avisa en vez de imprimir huecos.
+export const PREGUNTAS_SISTEMA: Record<string, { clave: string; etiqueta: string }[]> = {
+  "PROP-TEC": [
+    { clave: "validez_dias", etiqueta: "Validez de la oferta (días)" },
+    { clave: "plazo_entrega", etiqueta: "Plazo de entrega (p. ej. 30 días calendario)" },
+    { clave: "lugar_entrega", etiqueta: "Lugar de entrega" },
+    { clave: "garantia", etiqueta: "Garantía ofrecida (p. ej. 1 año del fabricante)" },
+  ],
+};

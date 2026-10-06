@@ -71,6 +71,20 @@ export const TIPOS_DOC_EMPRESA: TipoDocEmpresa[] = [
     descripcion: "Documento de constitución de la empresa. No vence.",
     vence: false,
   },
+  // Los dos que todo pliego SNCC pide en el Sobre A y que antes había que
+  // subir en CADA proceso (quedaban «¡FALTA!» en todos los paquetes).
+  {
+    codigo: "nomina_accionistas",
+    label: "Nómina de accionistas y acta de última asamblea",
+    descripcion: "Lista de socios vigente y el acta de la última asamblea. Se reemplaza cuando cambian.",
+    vence: false,
+  },
+  {
+    codigo: "acta_gerente",
+    label: "Acta de designación del gerente",
+    descripcion: "Acta que designa al gerente o consejo con poder de firma por la empresa.",
+    vence: false,
+  },
   {
     codigo: "cedula",
     label: "Cédula del representante legal",

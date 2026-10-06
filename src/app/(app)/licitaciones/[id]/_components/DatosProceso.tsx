@@ -168,19 +168,7 @@ export default function DatosProceso({
           />
         </label>
         </div>
-
-        <label className="block text-[12.5px] text-muted">
-          Notas
-          <textarea
-            rows={2}
-            defaultValue={proceso.notas ?? ""}
-            onBlur={(e) => {
-              const v = e.target.value.trim();
-              if (v !== (proceso.notas ?? "")) autosave({ notas: v || null });
-            }}
-            className={`${inputBase} mt-1 resize-y`}
-          />
-        </label>
+        {/* Las notas viven en la columna derecha (NotasProceso). */}
       </div>
     </Panel>
   );

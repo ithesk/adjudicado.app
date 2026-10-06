@@ -30,7 +30,8 @@ import {
 import type { LicPlantilla } from "@/lib/licitaciones/queries-plantillas";
 import { resolverPlantillas } from "@/lib/licitaciones/plantillas";
 import PizZipLib from "pizzip";
-import { docxAPdf, pdfDisponible, unirPdfs } from "@/lib/licitaciones/pdf";
+import { docxAPdf, htmlAPdf, pdfDisponible, unirPdfs } from "@/lib/licitaciones/pdf";
+import { faltantesOfertaTecnica, htmlOfertaTecnica } from "@/lib/licitaciones/oferta-tecnica";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
 import {
   coberturaDeRequisito,
@@ -136,7 +137,7 @@ export async function GET(
     await Promise.all([
     supabase
       .from("lic_requisito")
-      .select("id, codigo, subsanable, estado, nombre, datos, storage_path, documento_empresa_id, orden_indice, subsanacion_id")
+      .select("id, codigo, subsanable, estado, nombre, origen, datos, storage_path, documento_empresa_id, orden_indice, subsanacion_id")
       .eq("proceso_id", id)
       .eq("org_id", miembro.org_id),
     supabase
@@ -168,8 +169,17 @@ export async function GET(
     (plantillasOrg ?? []) as LicPlantilla[],
     proc?.institucion_id ?? null,
   );
+  // La oferta técnica la genera el sistema (HTML→PDF), salvo que alguien
+  // haya SUBIDO la suya a mano: esa manda y no se pisa.
+  const propTecSubida = (requisitos ?? []).some(
+    (q) => q.codigo === "PROP-TEC" && q.storage_path && q.origen !== "generado",
+  );
   const esGenerable = (codigo: string) =>
-    Boolean(GENERABLES[codigo] || plantillaPorCodigo.has(codigo));
+    Boolean(
+      GENERABLES[codigo] ||
+        plantillaPorCodigo.has(codigo) ||
+        (codigo === "PROP-TEC" && !propTecSubida),
+    );
 
   // ¿Paquete completo o de subsanación? La subsanación acota el universo a
   // lo pedido, y ahí TODO es obligatorio (no hay "subsanable después" —
@@ -246,6 +256,12 @@ export async function GET(
   const datosFaltantes: string[] = [];
   for (const q of solo ? enPaquete.filter((q) => q.codigo === solo) : enPaquete) {
     const plantilla = plantillaPorCodigo.get(q.codigo);
+    if (!plantilla && q.codigo === "PROP-TEC" && esGenerable("PROP-TEC")) {
+      datosFaltantes.push(
+        ...faltantesOfertaTecnica(canonico, (q.datos ?? {}) as Record<string, string>),
+      );
+      continue;
+    }
     if (!plantilla) continue;
     const datos = (q.datos ?? {}) as Record<string, string>;
     for (const v of plantilla.variables_personalizadas ?? []) {
@@ -264,7 +280,7 @@ export async function GET(
   // subsanación sí puede ser puros adjuntos re-subidos.
   if (codigos.length === 0 && !subsanacion) {
     return NextResponse.json(
-      { error: "Este proceso no tiene requisitos generables (F.033/034/042 o plantillas propias). Agrégalos con el checklist." },
+      { error: "Este proceso no tiene requisitos generables (oferta técnica, F.033/034/042 o plantillas propias). Agrégalos con el checklist." },
       { status: 422 },
     );
   }
@@ -338,6 +354,24 @@ export async function GET(
     // día/mes/año en letras) para que el documento salga coherente.
     const conFecha = fechaElegida ? datosDeFecha(fechaElegida) : {};
     const plantilla = plantillaPorCodigo.get(codigo);
+    // La oferta técnica nace en PDF (diseño editorial, Chromium), no en Word.
+    if (!plantilla && codigo === "PROP-TEC") {
+      if (!pdfDisponible()) {
+        throw new Error("La oferta técnica necesita el convertidor PDF (GOTENBERG_URL/TOKEN).");
+      }
+      const requisito = enPaquete.find((q) => q.codigo === codigo);
+      const { html, pie } = htmlOfertaTecnica(canonico, {
+        datos: (requisito?.datos ?? {}) as Record<string, string>,
+        imagenes,
+        fecha: fechaElegida ?? undefined,
+      });
+      return {
+        codigo,
+        nombre: "Oferta Técnica",
+        archivo: `PROP-TEC_${canonico.proceso.codigo.replace(/[^\w-]+/g, "-")}.pdf`,
+        buffer: await htmlAPdf(html, pie),
+      };
+    }
     if (!plantilla)
       return generarDocumento(codigo, canonico, imagenes, { adjudicados, ...conFecha });
     const { data: tpl } = await supabase.storage
@@ -371,9 +405,10 @@ export async function GET(
   if (solo) {
     try {
       const doc = await generarUno(solo);
-      const esPdf = formato === "pdf";
+      const yaPdf = doc.archivo.endsWith(".pdf");
+      const esPdf = formato === "pdf" || yaPdf;
       const archivo = esPdf ? doc.archivo.replace(/\.docx$/, ".pdf") : doc.archivo;
-      const buffer = esPdf ? await docxAPdf(doc.archivo, doc.buffer) : doc.buffer;
+      const buffer = esPdf && !yaPdf ? await docxAPdf(doc.archivo, doc.buffer) : doc.buffer;
       const contentType = esPdf
         ? "application/pdf"
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -427,7 +462,10 @@ export async function GET(
         // v6: plantillas DGCP corregidas (membrete sin sdt, fuente Arial
         // real, autoajuste de cuadros) — el nombre de la institución salía
         // cortado; los paquetes viejos deben regenerarse.
-        motor: 6,
+        // v7: la oferta técnica (PROP-TEC) la genera el sistema.
+        // v8: índice dice ¡VENCIDO! también en DGII/TSS/RPE; nómina y acta
+        // del gerente salen de Empresa.
+        motor: 8,
         formato,
         unir,
         // La fecha elegida cambia lo impreso: un paquete con fecha propia
@@ -507,19 +545,25 @@ export async function GET(
   }
   // 6) Los generados, convertidos si se pidió PDF (estos también se suben
   //    sueltos a storage y dejan su requisito en "listo").
+  // Lo que ya nace en PDF (la oferta técnica) no se convierte.
   let archivos = documentos.map((d) => ({
     ...d,
-    contentType:
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    contentType: d.archivo.endsWith(".pdf")
+      ? "application/pdf"
+      : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   }));
   if (formato === "pdf") {
     archivos = await Promise.all(
-      archivos.map(async (d) => ({
-        ...d,
-        archivo: d.archivo.replace(/\.docx$/, ".pdf"),
-        buffer: await docxAPdf(d.archivo, d.buffer),
-        contentType: "application/pdf",
-      })),
+      archivos.map(async (d) =>
+        d.archivo.endsWith(".pdf")
+          ? d
+          : {
+              ...d,
+              archivo: d.archivo.replace(/\.docx$/, ".pdf"),
+              buffer: await docxAPdf(d.archivo, d.buffer),
+              contentType: "application/pdf",
+            },
+      ),
     );
   }
 
@@ -610,7 +654,7 @@ export async function GET(
     let origenNota = "";
     if (gen) {
       buffer = gen.buffer;
-      ext = formato === "pdf" ? ".pdf" : ".docx";
+      ext = gen.archivo.endsWith(".pdf") ? ".pdf" : ".docx";
       origenNota = "generado";
     } else {
       const adj = adjuntoPorRequisito.get(q.id);
@@ -630,16 +674,18 @@ export async function GET(
       const nn = String(n).padStart(2, "0");
       piezas.push({ sobre, nn, codigo: q.codigo, nombre: q.nombre, buffer, ext });
       indice.push(`  ${nn} ${q.codigo} — ${q.nombre} (${origenNota})`);
-    } else if (requisitoEstandar(q.codigo)?.via === "linea") {
-      indice.push(`  ·· ${q.codigo} — ${q.nombre}: la entidad lo verifica en línea, no lleva archivo`);
     } else if (coberturaDeRequisito(q.codigo, cobertura)?.vencido) {
       // Se deja FUERA a propósito y se dice por qué: anexar un certificado
       // caducado es peor que no anexarlo — en la apertura, la oferta se cae
-      // igual, pero sin que nadie lo hubiera visto venir.
+      // igual, pero sin que nadie lo hubiera visto venir. VA ANTES que «se
+      // verifica en línea»: con ese orden, DGII/TSS/RPE vencidos salían
+      // como «no lleva archivo» y nadie se enteraba de que había que renovar.
       indice.push(
         `  ¡VENCIDO! ${q.codigo} — ${q.nombre}: el documento está en Empresa pero caducado. Renuévalo en Configuración → Empresa y vuelve a generar.`,
       );
       sinArchivo.push(`${q.codigo} — ${q.nombre} (vencido en Empresa)`);
+    } else if (requisitoEstandar(q.codigo)?.via === "linea") {
+      indice.push(`  ·· ${q.codigo} — ${q.nombre}: la entidad lo verifica en línea, no lleva archivo`);
     } else {
       indice.push(`  ¡FALTA! ${q.codigo} — ${q.nombre}: sin archivo`);
       sinArchivo.push(`${q.codigo} — ${q.nombre}`);

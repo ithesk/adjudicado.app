@@ -85,13 +85,38 @@ type Salida = { resultado: OcrResultado; crudo: unknown };
 
 // Punto de entrada: OpenAI → Gemini → Claude, según la key disponible.
 export async function extraerOrdenDeCompra(pdfBase64: string): Promise<Salida> {
-  if (env.ocrProvider === "openai") return extraerConOpenAI(pdfBase64);
-  if (env.ocrProvider === "gemini") return extraerConGemini(pdfBase64);
-  return extraerConClaude(pdfBase64);
+  const crudo = parsearJson(await leerPdf(pdfBase64, PROMPT, { json: true }));
+  return { resultado: normalizar(crudo), crudo };
 }
 
-// ---- OpenAI (gpt-4o-mini): lee el PDF (Responses API) y devuelve JSON. ----
-async function extraerConOpenAI(pdfBase64: string): Promise<Salida> {
+const PROMPT_TRANSCRIBIR = `Transcribe COMPLETO y LITERAL el texto de este documento escaneado de una compra pública dominicana. Reglas:
+- Antes de cada página escribe una línea "--- página N ---".
+- Las tablas, una fila por línea con las celdas separadas por " | ".
+- No resumas, no corrijas, no traduzcas, no agregues comentarios. Lo ilegible, como [ilegible].
+- Sellos y firmas: indícalos entre corchetes, p. ej. [sello: ...], [firma].`;
+
+// Texto de un PDF escaneado (sin capa de texto), con el mismo proveedor que
+// el OCR de órdenes. Lo usa el conector MCP para que Claude pueda leer las
+// fichas técnicas que las entidades suben como imagen.
+export async function transcribirPdf(pdfBase64: string): Promise<string> {
+  return (await leerPdf(pdfBase64, PROMPT_TRANSCRIBIR, { json: false, maxTokens: 8192 })).trim();
+}
+
+interface OpcionesLectura {
+  json: boolean;
+  /** Tope de salida. Sin él, OpenAI y Gemini usan el suyo y Claude 2048
+   *  (lo que el OCR de órdenes usó siempre). */
+  maxTokens?: number;
+}
+
+function leerPdf(pdfBase64: string, prompt: string, op: OpcionesLectura): Promise<string> {
+  if (env.ocrProvider === "openai") return leerConOpenAI(pdfBase64, prompt, op);
+  if (env.ocrProvider === "gemini") return leerConGemini(pdfBase64, prompt, op);
+  return leerConClaude(pdfBase64, prompt, op);
+}
+
+// ---- OpenAI (gpt-4o-mini): lee el PDF (Responses API). ----
+async function leerConOpenAI(pdfBase64: string, prompt: string, op: OpcionesLectura): Promise<string> {
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -106,14 +131,15 @@ async function extraerConOpenAI(pdfBase64: string): Promise<Salida> {
           content: [
             {
               type: "input_file",
-              filename: "oc.pdf",
+              filename: "documento.pdf",
               file_data: `data:application/pdf;base64,${pdfBase64}`,
             },
-            { type: "input_text", text: PROMPT },
+            { type: "input_text", text: prompt },
           ],
         },
       ],
-      text: { format: { type: "json_object" } },
+      ...(op.maxTokens ? { max_output_tokens: op.maxTokens } : {}),
+      ...(op.json ? { text: { format: { type: "json_object" } } } : {}),
     }),
   });
 
@@ -129,12 +155,11 @@ async function extraerConOpenAI(pdfBase64: string): Promise<Salida> {
       .map((c: { text?: string }) => c.text ?? "")
       .join("");
   }
-  const crudo = parsearJson(texto);
-  return { resultado: normalizar(crudo), crudo };
+  return texto;
 }
 
-// ---- Google Gemini (Flash): lee el PDF y devuelve JSON. Barato. ----
-async function extraerConGemini(pdfBase64: string): Promise<Salida> {
+// ---- Google Gemini (Flash): lee el PDF. Barato. ----
+async function leerConGemini(pdfBase64: string, prompt: string, op: OpcionesLectura): Promise<string> {
   const model = env.ocrModel; // p.ej. gemini-2.0-flash
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.geminiApiKey}`;
 
@@ -146,11 +171,15 @@ async function extraerConGemini(pdfBase64: string): Promise<Salida> {
         {
           parts: [
             { inline_data: { mime_type: "application/pdf", data: pdfBase64 } },
-            { text: PROMPT },
+            { text: prompt },
           ],
         },
       ],
-      generationConfig: { responseMimeType: "application/json", temperature: 0 },
+      generationConfig: {
+        ...(op.json ? { responseMimeType: "application/json" } : {}),
+        ...(op.maxTokens ? { maxOutputTokens: op.maxTokens } : {}),
+        temperature: 0,
+      },
     }),
   });
 
@@ -158,20 +187,19 @@ async function extraerConGemini(pdfBase64: string): Promise<Salida> {
     throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 300)}`);
   }
   const data = await res.json();
-  const texto: string =
+  return (
     data?.candidates?.[0]?.content?.parts
       ?.map((p: { text?: string }) => p.text ?? "")
-      .join("") ?? "";
-  const crudo = parsearJson(texto);
-  return { resultado: normalizar(crudo), crudo };
+      .join("") ?? ""
+  );
 }
 
-// ---- Anthropic Claude: lee el PDF y devuelve JSON. ----
-async function extraerConClaude(pdfBase64: string): Promise<Salida> {
+// ---- Anthropic Claude: lee el PDF. ----
+async function leerConClaude(pdfBase64: string, prompt: string, op: OpcionesLectura): Promise<string> {
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
   const msg = await client.messages.create({
     model: env.ocrModel,
-    max_tokens: 2048,
+    max_tokens: op.maxTokens ?? 2048,
     messages: [
       {
         role: "user",
@@ -184,17 +212,14 @@ async function extraerConClaude(pdfBase64: string): Promise<Salida> {
               data: pdfBase64,
             },
           },
-          { type: "text", text: PROMPT },
+          { type: "text", text: prompt },
         ],
       },
     ],
   });
 
-  const texto = msg.content
+  return msg.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("");
-
-  const crudo = parsearJson(texto);
-  return { resultado: normalizar(crudo), crudo };
 }
