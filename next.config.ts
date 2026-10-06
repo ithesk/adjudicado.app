@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
     "/api/licitaciones/[id]/generar": [
       "./plantillas/dgcp/*-tpl.docx",
       "./plantillas/cartas/*-tpl.docx",
+      "./plantillas/oferta-tecnica/fuentes/*.woff2",
     ],
   },
   experimental: {

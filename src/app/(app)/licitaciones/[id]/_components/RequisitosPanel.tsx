@@ -38,6 +38,7 @@ import {
 } from "@/lib/licitaciones/tipos";
 import {
   GRUPO_LABEL,
+  PREGUNTAS_SISTEMA,
   REQUISITOS_ESTANDAR,
   grupoDeRequisito,
   requisitoEstandar,
@@ -216,7 +217,11 @@ export default function RequisitosPanel({
                 key={r.id}
                 r={r}
                 cobertura={coberturaDeRequisito(r.codigo, cobertura)}
-                preguntas={plantillasOrg.find((p) => p.codigo === r.codigo)?.preguntas ?? []}
+                preguntas={
+                  plantillasOrg.find((p) => p.codigo === r.codigo)?.preguntas ??
+                  PREGUNTAS_SISTEMA[r.codigo] ??
+                  []
+                }
                 ocupada={ocupada(`req-${r.id}`)}
                 subiendo={ocupada(`subir-${r.id}`)}
                 ok={okClave === `req-${r.id}` || okClave === `subir-${r.id}`}
