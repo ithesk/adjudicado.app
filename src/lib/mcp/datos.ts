@@ -530,3 +530,14 @@ export async function imagenProducto(ctx: Ctx, codigo: string, numero: number, u
   if (error) throw new Error(error);
   return { proceso_id: p.id, numero, imagen: "guardada", kb: Math.round(bytes.length / 1024) };
 }
+
+export async function idDeProceso(ctx: Ctx, codigo: string): Promise<string> {
+  const { data } = await ctx.supabase
+    .from("lic_proceso")
+    .select("id")
+    .eq("org_id", ctx.orgId)
+    .eq("codigo", codigo.trim())
+    .maybeSingle();
+  if (!data) throw new Error(`${codigo} no está en adjudicado.app todavía: impórtalo con importar_proceso.`);
+  return data.id as string;
+}

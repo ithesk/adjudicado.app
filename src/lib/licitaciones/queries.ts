@@ -11,6 +11,7 @@
 // insertar con la empresa equivocada no fallaba de forma entendible.
 
 import { randomUUID } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
@@ -29,13 +30,29 @@ import type {
   RolFirmante,
 } from "./tipos";
 
-// ===== Empresa (perfil + firmantes) =====
+// Quién lee. Sin `acceso`, la sesión del navegador (la Bid Room). Con
+// `acceso`, un cliente y una empresa ya resueltos: lo usa el conector MCP,
+// que no tiene sesión — el token resolvió la empresa y el cliente es
+// service_role, así que TODA lectura con acceso filtra por su orgId.
+export interface Acceso {
+  supabase: SupabaseClient;
+  orgId: string;
+}
 
-export async function perfilEmpresa(): Promise<EmpresaPerfil | null> {
+async function resolverAcceso(acceso?: Acceso): Promise<Acceso | null> {
+  if (acceso) return acceso;
   if (isDemo()) return null;
   const orgId = await orgActivaLigera();
   if (!orgId) return null;
-  const supabase = await createClient();
+  return { supabase: await createClient(), orgId };
+}
+
+// ===== Empresa (perfil + firmantes) =====
+
+export async function perfilEmpresa(acceso?: Acceso): Promise<EmpresaPerfil | null> {
+  const a = await resolverAcceso(acceso);
+  if (!a) return null;
+  const { supabase, orgId } = a;
   const { data } = await supabase
     .from("empresa_perfil")
     .select("*")
@@ -44,11 +61,10 @@ export async function perfilEmpresa(): Promise<EmpresaPerfil | null> {
   return (data as EmpresaPerfil | null) ?? null;
 }
 
-export async function listarFirmantes(): Promise<LicFirmante[]> {
-  if (isDemo()) return [];
-  const orgId = await orgActivaLigera();
-  if (!orgId) return [];
-  const supabase = await createClient();
+export async function listarFirmantes(acceso?: Acceso): Promise<LicFirmante[]> {
+  const a = await resolverAcceso(acceso);
+  if (!a) return [];
+  const { supabase, orgId } = a;
   const { data } = await supabase
     .from("lic_firmante")
     .select("*")
@@ -172,11 +188,10 @@ export async function subsanacionesAbiertas(): Promise<Record<string, string>> {
   );
 }
 
-export async function obtenerProceso(id: string): Promise<ProcesoDetalle | null> {
-  if (isDemo()) return null;
-  const orgId = await orgActivaLigera();
-  if (!orgId) return null;
-  const supabase = await createClient();
+export async function obtenerProceso(id: string, acceso?: Acceso): Promise<ProcesoDetalle | null> {
+  const a = await resolverAcceso(acceso);
+  if (!a) return null;
+  const { supabase, orgId } = a;
 
   const { data: proceso } = await supabase
     .from("lic_proceso")
@@ -1028,10 +1043,13 @@ export interface ResultadoCanonico {
 // Arma el JSON canónico del proceso desde la base y lo valida contra el
 // contrato (Fase 1). Los errores salen legibles: son la lista de "qué falta"
 // para que el expediente esté completo.
-export async function construirCanonico(procesoId: string): Promise<ResultadoCanonico> {
-  const detalle = await obtenerProceso(procesoId);
+export async function construirCanonico(
+  procesoId: string,
+  acceso?: Acceso,
+): Promise<ResultadoCanonico> {
+  const detalle = await obtenerProceso(procesoId, acceso);
   if (!detalle) return { errores: ["Proceso no encontrado."] };
-  const [perfil, firmantes] = await Promise.all([perfilEmpresa(), listarFirmantes()]);
+  const [perfil, firmantes] = await Promise.all([perfilEmpresa(acceso), listarFirmantes(acceso)]);
 
   const { proceso, lotes, items, requisitos, institucion } = detalle;
   const params = paramsCotizacion(proceso, perfil);
@@ -1082,7 +1100,7 @@ export async function construirCanonico(procesoId: string): Promise<ResultadoCan
       itbis_aplica: i.itbis_modo !== "exento",
     }));
 
-  const supabase = await createClient();
+  const supabase = acceso?.supabase ?? (await createClient());
   const { data: ultimo } = await supabase
     .from("lic_paquete")
     .select("version")

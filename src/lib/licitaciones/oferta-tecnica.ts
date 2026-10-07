@@ -28,7 +28,7 @@ const MESES = [
   "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
-function esc(s: string | number | null | undefined): string {
+export function esc(s: string | number | null | undefined): string {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -37,7 +37,7 @@ function esc(s: string | number | null | undefined): string {
 }
 
 let fuentesCss: string | null = null;
-function cssFuentes(): string {
+export function cssFuentes(): string {
   if (fuentesCss) return fuentesCss;
   const cara = (familia: string, archivo: string, estilo: string, pesos: string) => {
     const b64 = fs.readFileSync(path.join(DIR_FUENTES, archivo)).toString("base64");
@@ -52,7 +52,7 @@ function cssFuentes(): string {
   return fuentesCss;
 }
 
-function imagenDataUri(buf: Buffer | null | undefined): string | null {
+export function imagenDataUri(buf: Buffer | null | undefined): string | null {
   if (!buf) return null;
   const formato = formatoRealDeImagen(buf);
   return formato ? `data:image/${formato};base64,${buf.toString("base64")}` : null;
@@ -320,19 +320,25 @@ export function htmlOfertaTecnica(c: ProcesoCanonico, op: OpcionesOferta): { htm
 
   // El pie lo pinta Chromium en cada página (los números de página solo
   // existen ahí). Va sin fuentes propias: la plantilla de pie no las carga.
-  // El ancho va en la caja (width 100% + padding con border-box), no en el
-  // margen del body: Chromium da a la plantilla de pie su propio ancho, y con
-  // margen el número de página se salía por la derecha («Pági…»).
-  const pie = `<html><head><style>
+  const pie = pieDocumento(o.razon_social, o.rnc, c.proceso.codigo);
+
+  return { html, pie };
+}
+
+// El pie de página de los documentos de la empresa (oferta técnica y
+// documentos libres): razón social, RNC, expediente y «Página X de Y».
+// El ancho va en la caja (width 100% + padding con border-box), no en el
+// margen del body: Chromium da a la plantilla de pie su propio ancho, y con
+// margen el número de página se salía por la derecha («Pági…»).
+export function pieDocumento(razonSocial: string, rnc: string, expediente: string): string {
+  return `<html><head><style>
     html,body{margin:0;padding:0}
     .p{box-sizing:border-box;width:100%;padding:0 13mm;font-family:monospace;font-size:6.5pt;color:#6b7280;-webkit-print-color-adjust:exact}
     .l{display:flex;justify-content:space-between;gap:8mm;border-top:1px solid #e8e5de;padding-top:5px}
     .l span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .l span:last-child{white-space:nowrap}
   </style></head><body><div class="p"><div class="l">
-    <span>${esc(o.razon_social)} · RNC ${esc(o.rnc)} · ${esc(c.proceso.codigo)}</span>
+    <span>${esc(razonSocial)} · RNC ${esc(rnc)} · ${esc(expediente)}</span>
     <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
   </div></div></body></html>`;
-
-  return { html, pie };
 }

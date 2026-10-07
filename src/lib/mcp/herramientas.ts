@@ -13,11 +13,14 @@ import { normalizar, radar, siglasDesdeCodigo, type Nivel } from "@/lib/dgcp/rel
 import { extraerTexto, tramo } from "@/lib/dgcp/texto";
 import { transcribirPdf } from "@/lib/ocr";
 import { ESTADOS_LICITACION } from "@/lib/licitaciones/tipos";
+import { entregarDocumentoLibre, entregarOfertaTecnica } from "@/lib/licitaciones/entregables";
+import { GENERABLES } from "@/lib/licitaciones/generador";
 import {
   CODIGOS_REQUISITO,
   actualizarItems,
   capacidades,
   guardarPatron,
+  idDeProceso,
   imagenProducto,
   importarProceso,
   listarProcesos,
@@ -407,6 +410,78 @@ export const HERRAMIENTAS: Herramienta[] = [
     async ejecutar(a, ctx) {
       const r = await imagenProducto(ctx, a.codigo, a.numero, a.url);
       return { ...r, url_bid_room: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
+    },
+  }),
+
+  definir({
+    nombre: "generar_oferta_tecnica",
+    titulo: "Generar la oferta técnica (PDF)",
+    descripcion:
+      "Genera la oferta técnica del proceso con el diseño de la empresa (sin precios, con logo, firma, sello y las fotos de " +
+      "producto que tenga cada ítem), la deja guardada en el requisito PROP-TEC de la Bid Room y devuelve un enlace al PDF " +
+      "(vale 7 días) para que el usuario la revise. Si pide cambios: actualizar_items / imagen_producto y volver a generarla. " +
+      "Si falta algo (validez, plazo, lugar, garantía, o marca/modelo/descripción de un ítem) lo dice: complétalo con " +
+      "importar_proceso (oferta_tecnica) o actualizar_items.",
+    soloLectura: false,
+    entrada: z.object({ codigo: codigoProceso }),
+    async ejecutar({ codigo }, ctx) {
+      const procesoId = await idDeProceso(ctx, codigo);
+      const r = await entregarOfertaTecnica({ supabase: ctx.supabase, orgId: ctx.orgId }, procesoId);
+      return { ...r, ruta: undefined, url_bid_room: `${ctx.baseUrl}/licitaciones/${procesoId}` };
+    },
+  }),
+
+  definir({
+    nombre: "crear_documento",
+    titulo: "Crear un documento para el expediente",
+    descripcion:
+      "Para lo que el pliego pida y no tenga formulario del sistema: cronograma de entrega o de implementación, plan de " +
+      "trabajo, matriz de cumplimiento, metodología, carta de garantía, declaración, listado de personal… Tú escribes el " +
+      "CUERPO en HTML simple (h2, h3, p, ul/ol, table con th/td, strong) con contenido real del pliego y de lo acordado con " +
+      "el usuario; la app le pone el membrete de la empresa, el título, la firma y el sello, lo convierte a PDF, lo deja como " +
+      "archivo del requisito en la Bid Room (lo crea si no existe) y devuelve un enlace (7 días). Sin estilos, scripts ni " +
+      "imágenes externas: el motor no tiene red. Mostrar antes al usuario lo que vas a poner y ajustar si pide cambios: " +
+      "volver a llamarla con el mismo requisito reemplaza el archivo.",
+    soloLectura: false,
+    entrada: z.object({
+      codigo: codigoProceso,
+      titulo: z.string().min(3).describe("Título del documento, p. ej. 'Cronograma de entrega'"),
+      cuerpo_html: z.string().min(20).describe("Solo el cuerpo: <h2>, <p>, <table>… sin <html>, <head> ni estilos"),
+      requisito: z.object({
+        codigo: z.string().min(2).describe("Código del requisito (existente o nuevo), p. ej. 'CRONOGRAMA'"),
+        nombre: z.string().optional().describe("Nombre del requisito si hay que crearlo"),
+        subsanable: z.boolean().optional().describe("Si se crea: ante la duda false"),
+        fuente: z.string().optional().describe("Sección/página del pliego que lo pide"),
+      }),
+      firmar: z.boolean().default(true).describe("Con bloque de firma, firma y sello del Gerente General"),
+    }),
+    async ejecutar(a, ctx) {
+      const cod = a.requisito.codigo.trim();
+      if (GENERABLES[cod] || cod === "PROP-TEC") {
+        throw new Error(
+          `${cod} lo genera la Bid Room con su formulario oficial; usa otro código para un documento propio` +
+            (cod === "PROP-TEC" ? " o generar_oferta_tecnica." : "."),
+        );
+      }
+      const { data: plantilla } = await ctx.supabase
+        .from("lic_plantilla")
+        .select("nombre")
+        .eq("org_id", ctx.orgId)
+        .eq("codigo", cod)
+        .eq("estado", "lista")
+        .limit(1)
+        .maybeSingle();
+      if (plantilla) {
+        throw new Error(`${cod} sale de tu plantilla «${plantilla.nombre}» al generar el paquete; usa otro código.`);
+      }
+      const procesoId = await idDeProceso(ctx, a.codigo);
+      const r = await entregarDocumentoLibre({ supabase: ctx.supabase, orgId: ctx.orgId }, procesoId, {
+        titulo: a.titulo,
+        cuerpoHtml: a.cuerpo_html,
+        firmar: a.firmar,
+        requisito: a.requisito,
+      });
+      return { ...r, ruta: undefined, url_bid_room: `${ctx.baseUrl}/licitaciones/${procesoId}` };
     },
   }),
 
