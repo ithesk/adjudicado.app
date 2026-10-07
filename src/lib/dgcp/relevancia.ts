@@ -30,6 +30,10 @@ export const PALABRAS_TI = [
   // audiovisual
   "camara fotografic", "fotografic", "videocamara", "drone", "dji", "proyector", "pantalla",
   "monitor", "videoconferencia", "video conferencia", "webcam", "microfono", "tripode", "gimbal",
+  // seguridad electrónica (CCTV y control de acceso)
+  "control de acceso", "controles de acceso", "lector de tarjeta", "lectores de tarjeta", "cctv",
+  "videovigilancia", "video vigilancia", "camara de seguridad", "camaras de seguridad", "camara ip",
+  "camaras ip", "nvr", "dvr", "biometric", "hikvision", "dahua",
   // telecom y redes
   "telefonia ip", "central telefonica", "pbx", "grandstream", "yealink", "cableado estructurado",
   "fibra optica", "red lan", "conectividad", "internet",
