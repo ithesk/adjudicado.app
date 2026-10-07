@@ -9,7 +9,8 @@
 
 import { z } from "zod";
 import * as dgcp from "@/lib/dgcp/api";
-import { normalizar, radar, siglasDesdeCodigo, type Nivel } from "@/lib/dgcp/relevancia";
+import { fichaProceso, procesosAbiertos, resolverProceso } from "@/lib/dgcp/fuente";
+import { horaRd, normalizar, radar, siglasDesdeCodigo, type Nivel } from "@/lib/dgcp/relevancia";
 import { extraerTexto, tramo } from "@/lib/dgcp/texto";
 import { transcribirPdf } from "@/lib/ocr";
 import { ESTADOS_LICITACION } from "@/lib/licitaciones/tipos";
@@ -83,7 +84,10 @@ const MAX_PAGINAS_OCR = 15;
 const codigoProceso = z
   .string()
   .min(5)
-  .describe("Código del proceso en ComprasDominicana, p. ej. OGTIC-CCC-CP-2026-0011");
+  .describe(
+    "Código del proceso en ComprasDominicana, p. ej. OGTIC-CCC-CP-2026-0011. Vale incompleto (HACIENDA-DAF-CM-2026-0098 " +
+      "encuentra MINISTERIO HACIENDA-DAF-CM-2026-0098) y vale lo publicado hoy (sale del portal).",
+  );
 
 export const HERRAMIENTAS: Herramienta[] = [
   definir({
@@ -108,7 +112,10 @@ export const HERRAMIENTAS: Herramienta[] = [
       limite: z.number().int().min(1).max(100).default(25),
     }),
     async ejecutar(a, ctx) {
-      const [{ procesos, paginasFallidas }, caps] = await Promise.all([dgcp.listarProcesos(), capacidades(ctx)]);
+      const [{ procesos, paginasFallidas, delPortal, avisoPortal }, caps] = await Promise.all([
+        procesosAbiertos(),
+        capacidades(ctx),
+      ]);
       const todas = radar(procesos, {
         socios: caps.socios,
         bloqueados: caps.bloqueados,
@@ -124,6 +131,8 @@ export const HERRAMIENTAS: Herramienta[] = [
       return {
         escaneados: procesos.length,
         paginas_fallidas: paginasFallidas,
+        publicados_hoy_desde_el_portal: delPortal,
+        ...(avisoPortal ? { aviso: avisoPortal } : {}),
         relevantes: todas.length,
         cierran_en_7_dias: todas.filter((o) => (o.dias_restantes ?? 99) <= 7).length,
         socios_de_la_empresa: caps.socios,
@@ -147,14 +156,11 @@ export const HERRAMIENTAS: Herramienta[] = [
       "institución convocante (memoria del equipo). Llamar antes de analizar.",
     soloLectura: true,
     entrada: z.object({ codigo: codigoProceso }),
-    async ejecutar({ codigo }, ctx) {
-      const [proceso, articulos, documentos, enApp] = await Promise.all([
-        dgcp.obtenerProceso(codigo),
-        dgcp.listarArticulos(codigo),
-        dgcp.listarDocumentos(codigo),
-        procesosPorCodigo(ctx, [codigo]),
-      ]);
-      if (!proceso) throw new Error(`La DGCP no tiene un proceso con código ${codigo}.`);
+    async ejecutar({ codigo: entrada }, ctx) {
+      const ficha = await fichaProceso(entrada);
+      if (!ficha) throw new Error(`No encontré el proceso ${entrada} ni en la API de la DGCP ni en el portal.`);
+      const { codigo, proceso, articulos, documentos, cronograma, fuente } = ficha;
+      const enApp = await procesosPorCodigo(ctx, [codigo]);
       const inst = await resolverInstitucion(
         ctx,
         { siglas: siglasDesdeCodigo(codigo), nombre: proceso.unidad_compra },
@@ -162,7 +168,14 @@ export const HERRAMIENTAS: Herramienta[] = [
       );
       const p = enApp.get(codigo);
       return {
+        codigo,
+        ...(codigo !== entrada.trim() ? { aviso_codigo: `El código completo es ${codigo}: úsalo de aquí en adelante.` } : {}),
+        fuente:
+          fuente === "portal"
+            ? "portal (publicado hace poco: la API de datos abiertos todavía no lo tiene)"
+            : "api de datos abiertos",
         proceso,
+        ...(cronograma?.length ? { cronograma: cronograma.map((c) => ({ ...c, fecha_rd: horaRd(c.fecha) })) } : {}),
         articulos,
         documentos: documentos.map((d, i) => ({
           n: i + 1,
@@ -192,7 +205,9 @@ export const HERRAMIENTAS: Herramienta[] = [
       max_caracteres: z.number().int().min(5_000).max(120_000).default(60_000),
     }),
     async ejecutar(a) {
-      const docs = await dgcp.listarDocumentos(a.codigo);
+      const ficha = await fichaProceso(a.codigo);
+      if (!ficha) throw new Error(`No encontré el proceso ${a.codigo} ni en la API de la DGCP ni en el portal.`);
+      const docs = ficha.documentos;
       const doc = elegirDocumento(docs, a.documento);
       if (!doc) {
         throw new Error(
@@ -326,8 +341,9 @@ export const HERRAMIENTAS: Herramienta[] = [
         .optional(),
     }),
     async ejecutar(a, ctx) {
-      const proceso = await dgcp.obtenerProceso(a.codigo).catch(() => null);
-      const r = await importarProceso(ctx, a, proceso);
+      // Con el código REAL: "HACIENDA-…" se guarda como "MINISTERIO HACIENDA-…".
+      const resuelto = await resolverProceso(a.codigo).catch(() => null);
+      const r = await importarProceso(ctx, { ...a, codigo: resuelto?.codigo ?? a.codigo }, resuelto?.proceso ?? null);
       return { ...r, url: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
     },
   }),
@@ -519,7 +535,7 @@ export const HERRAMIENTAS: Herramienta[] = [
       let nombre: string | null = a.institucion;
       // Si dieron un código de proceso, el nombre real sale de la DGCP.
       if (/-\d{4}-\d+$/.test(a.institucion)) {
-        nombre = (await dgcp.obtenerProceso(a.institucion).catch(() => null))?.unidad_compra ?? null;
+        nombre = (await resolverProceso(a.institucion).catch(() => null))?.proceso.unidad_compra ?? null;
       }
       const inst = await resolverInstitucion(ctx, { siglas, nombre }, true);
       if (!inst) throw new Error("No pude identificar la institución; usa su nombre completo.");

@@ -106,6 +106,13 @@ describe("socios por sus productos", () => {
     expect(o?.nivel).toBe("alta");
     expect(o?.socios).toEqual(["fortinet"]);
   });
+  it("control de acceso es del rubro (MINISTERIO HACIENDA-DAF-CM-2026-0098)", () => {
+    const o = evaluar(
+      proc({ titulo: "Adquisición de lectores de tarjeta magnética y controladores de puertas para uso del MHE" }),
+      { socios: [], ahora: AHORA },
+    );
+    expect(o?.nivel).toBe("media");
+  });
   it("«fortificación» no es Fortinet", () => {
     expect(
       evaluar(proc({ titulo: "Fortificación de harina para comedores" }), { socios: ["fortinet"], ahora: AHORA }),
