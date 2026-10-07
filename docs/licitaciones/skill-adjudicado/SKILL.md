@@ -107,6 +107,21 @@ La institución, el cierre, la modalidad y la moneda se completan solos desde la
 existía, se actualiza la cabecera y se agregan los requisitos que falten, pero **no se tocan los ítems**
 (avísalo si la respuesta lo dice). Comparte siempre la **URL** que devuelve.
 
+### Corregir lo que ya está en la Bid Room — `ver_bid_room` y `actualizar_items`
+
+`importar_proceso` no pisa los ítems de un proceso que ya existe. Para cambiar algo después ("corrige
+el modelo del ítem 2", "agrega la línea 4", "ese ítem no lo ofertamos"): primero `ver_bid_room` para
+ver lo que hay de verdad, luego `actualizar_items` solo con los campos que cambian. La spec del pliego
+de una línea existente y los precios no se tocan desde aquí; el costeo es de la persona.
+
+### Imágenes de producto — `imagen_producto`
+
+Cuando el pliego pida imágenes, catálogos o fotos de lo ofertado (o el usuario lo diga), busca en la
+web la foto del **modelo exacto** en el sitio del fabricante y pásala con su URL directa (la del
+archivo .png/.jpg/.webp, no la de la página). Sale en la tarjeta del ítem de la oferta técnica. Si la
+descarga falla, prueba otra fuente; nunca uses la foto de otro modelo. El usuario también puede
+subirla en la Bid Room (botón «Imagen» de cada línea).
+
 ## 6. Memoria del equipo — `guardar_patron`
 
 Solo cuando el usuario cuente algo **recurrente** de una institución, sin preguntárselo:

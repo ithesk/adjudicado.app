@@ -15,14 +15,17 @@ import { transcribirPdf } from "@/lib/ocr";
 import { ESTADOS_LICITACION } from "@/lib/licitaciones/tipos";
 import {
   CODIGOS_REQUISITO,
+  actualizarItems,
   capacidades,
   guardarPatron,
+  imagenProducto,
   importarProceso,
   listarProcesos,
   patronesDe,
   perfilEmpresa,
   procesosPorCodigo,
   resolverInstitucion,
+  verBidRoom,
   type Ctx,
 } from "./datos";
 
@@ -323,6 +326,87 @@ export const HERRAMIENTAS: Herramienta[] = [
       const proceso = await dgcp.obtenerProceso(a.codigo).catch(() => null);
       const r = await importarProceso(ctx, a, proceso);
       return { ...r, url: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
+    },
+  }),
+
+  definir({
+    nombre: "ver_bid_room",
+    titulo: "Ver el proceso en la Bid Room",
+    descripcion:
+      "Lo que HOY tiene el proceso en adjudicado.app: cabecera, notas, ítems (spec del pliego, marca, modelo, descripción, " +
+      "si ya está cotizado y si tiene imagen) y requisitos (estado, si tienen archivo y los datos de la oferta técnica). " +
+      "Llamarla antes de corregir algo con actualizar_items.",
+    soloLectura: true,
+    entrada: z.object({ codigo: codigoProceso }),
+    async ejecutar({ codigo }, ctx) {
+      const r = await verBidRoom(ctx, codigo);
+      return { ...r, url: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
+    },
+  }),
+
+  definir({
+    nombre: "actualizar_items",
+    titulo: "Corregir o agregar ítems en la Bid Room",
+    descripcion:
+      "Corrige ítems EXISTENTES por número (marca, modelo, parte, descripción, cantidad, unidad, ofertamos/motivo_descarte) " +
+      "y agrega líneas nuevas. No edita la spec_cruda de una línea existente (es la evidencia del pliego) ni toca precios " +
+      "(el costeo se hace en la Bid Room). Solo se cambian los campos que envíes. La descripción sigue el formato de la " +
+      "oferta técnica: 1ª línea resumen, luego un punto 'Clave: valor (req. X)' por línea. Confirmar con el usuario antes.",
+    soloLectura: false,
+    entrada: z.object({
+      codigo: codigoProceso,
+      cambios: z
+        .array(
+          z.object({
+            numero: z.number().int().positive(),
+            marca: z.string().nullable().optional(),
+            modelo: z.string().nullable().optional(),
+            parte: z.string().nullable().optional(),
+            descripcion: z.string().nullable().optional(),
+            cantidad: z.number().positive().optional(),
+            unidad: z.string().optional(),
+            ofertamos: z.boolean().optional(),
+            motivo_descarte: z.string().nullable().optional().describe("Obligatorio si ofertamos=false"),
+          }),
+        )
+        .default([]),
+      nuevos: z
+        .array(
+          z.object({
+            numero: z.number().int().positive().optional(),
+            spec_cruda: z.string().min(1).describe("Spec TAL CUAL del pliego"),
+            cantidad: z.number().positive(),
+            unidad: z.string().optional(),
+            marca: z.string().optional(),
+            modelo: z.string().optional(),
+            parte: z.string().optional(),
+            descripcion: z.string().optional(),
+          }),
+        )
+        .default([]),
+    }),
+    async ejecutar(a, ctx) {
+      const r = await actualizarItems(ctx, a.codigo, a.cambios, a.nuevos);
+      return { ...r, url: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
+    },
+  }),
+
+  definir({
+    nombre: "imagen_producto",
+    titulo: "Imagen del producto de un ítem",
+    descripcion:
+      "Pone (o quita, con url null) la foto del producto de un ítem; sale en su tarjeta de la oferta técnica. Usar una URL " +
+      "https DIRECTA a la imagen (PNG, JPG o WebP, ≤ 4 MB), preferiblemente del sitio del fabricante, del producto exacto " +
+      "ofertado. Se valida por su contenido: una página HTML o un logo no sirven.",
+    soloLectura: false,
+    entrada: z.object({
+      codigo: codigoProceso,
+      numero: z.number().int().positive().describe("Número del ítem en la Bid Room"),
+      url: z.string().url().nullable().describe("URL https de la imagen, o null para quitarla"),
+    }),
+    async ejecutar(a, ctx) {
+      const r = await imagenProducto(ctx, a.codigo, a.numero, a.url);
+      return { ...r, url_bid_room: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
     },
   }),
 

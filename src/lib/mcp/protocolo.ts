@@ -18,6 +18,8 @@ Flujo recomendado:
 3. leer_documento 'pliego' y 'ficha' (por tramos si hay_mas) → analiza: productos y marca/modelo probable, fechas, condiciones económicas, requisitos (subsanables vs NO subsanables), alertas.
 4. perfil_empresa para saber qué documentación ya está vigente y la tasa/margen por defecto.
 5. Con el visto bueno del usuario, importar_proceso: queda en la Bid Room de adjudicado.app para costear y armar el paquete. Comparte la URL que devuelve.
+   Si el proceso YA existe, no reimportes: ver_bid_room para ver lo que hay y actualizar_items para corregir o agregar líneas.
+   Si el pliego pide imágenes de los productos, imagen_producto con una URL directa de la foto del fabricante.
 6. Si el usuario cuenta algo RECURRENTE de una institución (cómo paga, qué exige siempre, si subsana o no), guardar_patron.
 Nunca inventes datos del pliego: si algo no aparece, es "No especificado". La spec de cada ítem se copia tal cual.`;
 

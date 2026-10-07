@@ -105,6 +105,8 @@ function conDias(v: string): string {
 export interface OpcionesOferta {
   datos: Record<string, string>;
   imagenes: ImagenesFirma;
+  /** Foto del producto por NÚMERO de ítem (opcional; la piden algunas entidades). */
+  imagenesItems?: Map<number, Buffer>;
   fecha?: Date;
 }
 
@@ -148,6 +150,7 @@ export function htmlOfertaTecnica(c: ProcesoCanonico, op: OpcionesOferta): { htm
     .map((i) => {
       const p = i.producto!;
       const { resumen, puntos } = partirDescripcion(p.descripcion);
+      const foto = imagenDataUri(op.imagenesItems?.get(i.numero));
       const cumplimiento = puntos.length
         ? `<ul class="specs">${puntos.map((x) => `<li><span class="check">✓</span><span>${puntoHtml(x)}</span></li>`).join("")}</ul>`
         : `<p class="valor">${esc(resumen)}</p>`;
@@ -158,6 +161,7 @@ export function htmlOfertaTecnica(c: ProcesoCanonico, op: OpcionesOferta): { htm
         </div>
         <div class="item-cuerpo">
           <div>
+            ${foto ? `<div class="foto"><img src="${foto}" alt=""/></div>` : ""}
             <div class="etiqueta">Requerimiento del pliego</div>
             <div class="pliego">${esc(i.spec_cruda)}</div>
             ${puntos.length ? `<div class="etiqueta">Descripción</div><div class="valor">${esc(resumen)}</div>` : ""}
@@ -223,6 +227,8 @@ export function htmlOfertaTecnica(c: ProcesoCanonico, op: OpcionesOferta): { htm
   .item-titulo{font-weight:800;font-size:9pt;letter-spacing:.02em}
   .pastilla{font-family:"JetBrains Mono",monospace;font-size:6.5pt;color:var(--sub);background:var(--rule);padding:2px 7px;border-radius:10px;white-space:nowrap}
   .item-cuerpo{padding:12px 14px;display:grid;grid-template-columns:1fr 1.6fr;gap:16px}
+  .foto{border:1px solid var(--rule);border-radius:6px;background:#fff;height:130px;display:flex;align-items:center;justify-content:center;padding:8px;margin-bottom:10px}
+  .foto img{max-width:100%;max-height:100%;object-fit:contain}
   .etiqueta{font-family:"JetBrains Mono",monospace;font-size:6.5pt;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:10px 0 4px}
   .etiqueta:first-child{margin-top:0}
   .valor{font-size:8.5pt;line-height:1.5}
@@ -314,15 +320,19 @@ export function htmlOfertaTecnica(c: ProcesoCanonico, op: OpcionesOferta): { htm
 
   // El pie lo pinta Chromium en cada página (los números de página solo
   // existen ahí). Va sin fuentes propias: la plantilla de pie no las carga.
-  // Tabla y no flex: la plantilla de pie de Chromium no reparte el ancho.
+  // El ancho va en la caja (width 100% + padding con border-box), no en el
+  // margen del body: Chromium da a la plantilla de pie su propio ancho, y con
+  // margen el número de página se salía por la derecha («Pági…»).
   const pie = `<html><head><style>
-    body{margin:0 13mm;font-family:monospace;font-size:6.5pt;color:#6b7280;-webkit-print-color-adjust:exact}
-    table{width:100%;border-collapse:collapse;border-top:1px solid #e8e5de}
-    td{padding-top:5px}
-  </style></head><body><table><tr>
-    <td>${esc(o.razon_social)} · RNC ${esc(o.rnc)} · ${esc(c.proceso.codigo)}</td>
-    <td style="text-align:right;white-space:nowrap">Página <span class="pageNumber"></span> de <span class="totalPages"></span></td>
-  </tr></table></body></html>`;
+    html,body{margin:0;padding:0}
+    .p{box-sizing:border-box;width:100%;padding:0 13mm;font-family:monospace;font-size:6.5pt;color:#6b7280;-webkit-print-color-adjust:exact}
+    .l{display:flex;justify-content:space-between;gap:8mm;border-top:1px solid #e8e5de;padding-top:5px}
+    .l span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .l span:last-child{white-space:nowrap}
+  </style></head><body><div class="p"><div class="l">
+    <span>${esc(o.razon_social)} · RNC ${esc(o.rnc)} · ${esc(c.proceso.codigo)}</span>
+    <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
+  </div></div></body></html>`;
 
   return { html, pie };
 }

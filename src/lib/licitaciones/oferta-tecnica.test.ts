@@ -73,3 +73,18 @@ describe("htmlOfertaTecnica", () => {
     expect(pie).toContain('class="pageNumber"');
   });
 });
+
+describe("foto del producto", () => {
+  // PNG 1×1 válido
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  it("se incrusta en la tarjeta del ítem solo si existe", () => {
+    const c = canonico({ marca: "Dell", modelo: "Latitude", descripcion: "x" });
+    const con = htmlOfertaTecnica(c, { datos: DATOS, imagenes: {}, imagenesItems: new Map([[1, png]]) }).html;
+    const sin = htmlOfertaTecnica(c, { datos: DATOS, imagenes: {} }).html;
+    expect(con).toContain('<div class="foto"><img src="data:image/png;base64,');
+    expect(sin).not.toContain('<div class="foto">');
+  });
+});

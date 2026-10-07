@@ -21,6 +21,7 @@ import {
   reordenarItemsAction,
 } from "@/lib/actions/licitaciones";
 import type { LicItem, LicProceso } from "@/lib/licitaciones/tipos";
+import { DescripcionOfertada, ImagenItem } from "./ImagenItem";
 import {
   precioBaseUnitario,
   totalesItem,
@@ -35,10 +36,13 @@ export default function CotizadorItems({
   proceso,
   items,
   params,
+  imagenes = {},
 }: {
   proceso: LicProceso;
   items: LicItem[];
   params: ParamsCotizacion;
+  /** item_id → URL firmada de la imagen del producto (oferta técnica). */
+  imagenes?: Record<string, string>;
 }) {
   const [buscandoEn, setBuscandoEn] = useState<string | null>(null);
   // Alcance POR LÍNEA: guardar una celda no bloquea el resto de la tabla,
@@ -209,6 +213,7 @@ export default function CotizadorItems({
               <Linea
                 key={item.id}
                 item={item}
+                imagenUrl={imagenes[item.id] ?? null}
                 params={params}
                 ocupada={ocupada(`it-${item.id}`)}
                 ok={okClave === `it-${item.id}`}
@@ -298,6 +303,7 @@ export default function CotizadorItems({
         {mostrados.map((item) => (
           <TarjetaLinea
             key={item.id}
+            imagenUrl={imagenes[item.id] ?? null}
             item={item}
             params={params}
             ocupada={ocupada(`it-${item.id}`)}
@@ -372,6 +378,7 @@ function productoIncompleto(item: LicItem): boolean {
 
 function Linea({
   item,
+  imagenUrl,
   params,
   ocupada,
   ok,
@@ -390,6 +397,7 @@ function Linea({
   onEliminar,
 }: {
   item: LicItem;
+  imagenUrl: string | null;
   params: ParamsCotizacion;
   // Estado de guardado de ESTA línea (clave it-<id> en useAccion).
   ocupada: boolean;
@@ -605,12 +613,12 @@ function Linea({
                   onBlur={(e) => onPatch({ modelo: e.target.value || null })}
                   className={`${celda} w-28`}
                 />
-                <input
-                  defaultValue={item.descripcion ?? ""}
-                  placeholder="Descripción de lo ofertado (afirmativa)"
-                  onBlur={(e) => onPatch({ descripcion: e.target.value || null })}
+                <DescripcionOfertada
+                  valor={item.descripcion}
+                  onGuardar={(v) => onPatch({ descripcion: v })}
                   className={`${celda} min-w-52 flex-1`}
                 />
+                <ImagenItem itemId={item.id} url={imagenUrl} />
                 {productoIncompleto(item) && (
                   <span
                     className="whitespace-nowrap rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-medium text-warn"
@@ -655,6 +663,7 @@ const campoMovil =
 
 function TarjetaLinea({
   item,
+  imagenUrl,
   params,
   ocupada,
   ok,
@@ -666,6 +675,7 @@ function TarjetaLinea({
   onEliminar,
 }: {
   item: LicItem;
+  imagenUrl: string | null;
   params: ParamsCotizacion;
   ocupada: boolean;
   ok: boolean;
@@ -813,12 +823,12 @@ function TarjetaLinea({
               className={campoMovil}
             />
           </div>
-          <input
-            defaultValue={item.descripcion ?? ""}
-            placeholder="Descripción de lo ofertado (afirmativa)"
-            onBlur={(e) => onPatch({ descripcion: e.target.value || null })}
+          <DescripcionOfertada
+            valor={item.descripcion}
+            onGuardar={(v) => onPatch({ descripcion: v })}
             className={campoMovil}
           />
+          <ImagenItem itemId={item.id} url={imagenUrl} />
           <div className="flex flex-wrap items-center gap-2">
             {productoIncompleto(item) && (
               <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[10.5px] font-medium text-warn">

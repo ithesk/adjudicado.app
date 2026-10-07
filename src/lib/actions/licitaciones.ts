@@ -31,6 +31,10 @@ import {
   type ResultadoCanonico,
 } from "@/lib/licitaciones/queries";
 import type { EmpresaPerfil, RolFirmante } from "@/lib/licitaciones/tipos";
+import { getMiembro } from "@/lib/auth";
+import { isDemo } from "@/lib/demo";
+import { createClient } from "@/lib/supabase/server";
+import { guardarImagenItem, quitarImagenItem } from "@/lib/licitaciones/imagenes-item";
 
 function refrescar() {
   revalidatePath("/licitaciones", "layout");
@@ -220,6 +224,50 @@ export async function toggleRequisitoSubsanacionAction(
   subsanacionId: string | null,
 ): Promise<string | null> {
   const error = await toggleRequisitoSubsanacion(requisitoId, subsanacionId);
+  if (!error) refrescar();
+  return error;
+}
+
+// ===== Imagen del producto de un ítem (para la oferta técnica) =====
+
+async function itemDeLaOrg(itemId: string) {
+  const miembro = await getMiembro();
+  if (!miembro) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lic_item")
+    .select("id, proceso_id")
+    .eq("id", itemId)
+    .eq("org_id", miembro.org_id)
+    .maybeSingle();
+  return data ? { supabase, orgId: miembro.org_id, procesoId: data.proceso_id as string } : null;
+}
+
+export async function subirImagenItemAction(
+  itemId: string,
+  formData: FormData,
+): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se suben archivos.";
+  const archivo = formData.get("imagen");
+  if (!(archivo instanceof File) || archivo.size === 0) return "Elige una imagen.";
+  const ctx = await itemDeLaOrg(itemId);
+  if (!ctx) return "Ítem no encontrado.";
+  const error = await guardarImagenItem(
+    ctx.supabase,
+    ctx.orgId,
+    ctx.procesoId,
+    itemId,
+    Buffer.from(await archivo.arrayBuffer()),
+  );
+  if (!error) refrescar();
+  return error;
+}
+
+export async function quitarImagenItemAction(itemId: string): Promise<string | null> {
+  if (isDemo()) return "En modo demo no se guardan cambios.";
+  const ctx = await itemDeLaOrg(itemId);
+  if (!ctx) return "Ítem no encontrado.";
+  const error = await quitarImagenItem(ctx.supabase, ctx.orgId, ctx.procesoId, itemId);
   if (!error) refrescar();
   return error;
 }

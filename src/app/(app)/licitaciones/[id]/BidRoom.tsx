@@ -155,6 +155,7 @@ export default function BidRoom({
   paquetes = [],
   ordenes = [],
   cobertura = {},
+  imagenesItems = {},
 }: {
   detalle: ProcesoDetalle;
   instituciones: { id: string; nombre: string }[];
@@ -177,6 +178,8 @@ export default function BidRoom({
   // Documentos de empresa vigentes HOY, por tipo. Lo que decide si un
   // requisito «de Empresa» está cubierto — ya no el id congelado en la fila.
   cobertura?: MapaCobertura;
+  // item_id → URL firmada de la imagen del producto (oferta técnica).
+  imagenesItems?: Record<string, string>;
 }) {
   const router = useRouter();
   const { proceso, items, requisitos, institucion, subsanacion } = detalle;
@@ -442,7 +445,7 @@ export default function BidRoom({
             </section>
 
             <section id="items" className="scroll-mt-14">
-              <CotizadorItems proceso={proceso} items={items} params={params} />
+              <CotizadorItems proceso={proceso} items={items} params={params} imagenes={imagenesItems} />
             </section>
 
             {conSubsanacion && (
