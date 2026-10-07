@@ -9,6 +9,12 @@ import { modalidadDesdeDgcp, normalizar, siglasDesdeCodigo } from "@/lib/dgcp/re
 import { requisitoEstandar, REQUISITOS_ESTANDAR } from "@/lib/licitaciones/requisitos-estandar";
 import { coberturaPorTipo } from "@/lib/licitaciones/cobertura-empresa";
 import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
+import {
+  bajarImagenDeUrl,
+  guardarImagenItem,
+  listarImagenesItems,
+  quitarImagenItem,
+} from "@/lib/licitaciones/imagenes-item";
 
 export interface Ctx {
   orgId: string;
@@ -276,7 +282,7 @@ export async function importarProceso(ctx: Ctx, a: Analisis, dgcp: DgcpProceso |
       .eq("org_id", ctx.orgId)
       .eq("proceso_id", procesoId);
     if ((count ?? 0) > 0) {
-      avisos.push(`El proceso ya tenía ${count} ítem(s): no se tocaron. Edítalos en la Bid Room.`);
+      avisos.push(`El proceso ya tenía ${count} ítem(s): no se tocaron. Para corregirlos o agregar líneas usa actualizar_items (ver_bid_room muestra lo que hay).`);
     } else {
       const filas = a.items.map((it, i) => ({
         org_id: ctx.orgId,
@@ -380,4 +386,147 @@ export async function importarProceso(ctx: Ctx, a: Analisis, dgcp: DgcpProceso |
     requisitos_creados: requisitosCreados,
     avisos,
   };
+}
+
+// ===== La Bid Room tal como está (para trabajar sobre lo real) =====
+
+async function procesoDeLaOrg(ctx: Ctx, codigo: string) {
+  const { data } = await ctx.supabase
+    .from("lic_proceso")
+    .select("id, codigo, objeto, modalidad, estado, cierre, moneda, adjudicacion, criterio, plazo_pago_dias, notas, institucion(nombre, siglas)")
+    .eq("org_id", ctx.orgId)
+    .eq("codigo", codigo.trim())
+    .maybeSingle();
+  if (!data) throw new Error(`${codigo} no está en adjudicado.app todavía: impórtalo con importar_proceso.`);
+  return data;
+}
+
+export async function verBidRoom(ctx: Ctx, codigo: string) {
+  const p = await procesoDeLaOrg(ctx, codigo);
+  const [{ data: items }, { data: requisitos }, { data: lotes }, fotos] = await Promise.all([
+    ctx.supabase
+      .from("lic_item")
+      .select("id, numero, lote_id, spec_cruda, cantidad, unidad, marca, modelo, parte, descripcion, ofertamos, motivo_descarte, precio_unitario")
+      .eq("org_id", ctx.orgId)
+      .eq("proceso_id", p.id)
+      .order("orden_indice"),
+    ctx.supabase
+      .from("lic_requisito")
+      .select("codigo, nombre, subsanable, estado, origen, fuente, datos, storage_path")
+      .eq("org_id", ctx.orgId)
+      .eq("proceso_id", p.id)
+      .order("orden_indice"),
+    ctx.supabase.from("lic_lote").select("id, numero, nombre").eq("org_id", ctx.orgId).eq("proceso_id", p.id),
+    listarImagenesItems(ctx.supabase, ctx.orgId, p.id),
+  ]);
+  const loteNum = new Map((lotes ?? []).map((l) => [l.id, l.numero]));
+  return {
+    proceso: { ...p, id: undefined },
+    proceso_id: p.id,
+    items: (items ?? []).map(({ id, lote_id, precio_unitario, ...it }) => ({
+      ...it,
+      lote: lote_id ? (loteNum.get(lote_id) ?? null) : null,
+      cotizado: precio_unitario !== null,
+      tiene_imagen: fotos.has(id),
+    })),
+    requisitos: (requisitos ?? []).map(({ storage_path, ...r }) => ({ ...r, tiene_archivo: !!storage_path })),
+  };
+}
+
+// ===== Corregir ítems sin pisar lo que no toca =====
+
+export interface CambioItem {
+  numero: number;
+  marca?: string | null;
+  modelo?: string | null;
+  parte?: string | null;
+  descripcion?: string | null;
+  cantidad?: number;
+  unidad?: string;
+  ofertamos?: boolean;
+  motivo_descarte?: string | null;
+}
+
+// La spec_cruda de una línea existente NO se edita (evidencia legal del
+// pliego) y los precios tampoco (el costeo es de la persona, en la Bid Room).
+export async function actualizarItems(
+  ctx: Ctx,
+  codigo: string,
+  cambios: CambioItem[],
+  nuevos: ItemAnalizado[],
+) {
+  const p = await procesoDeLaOrg(ctx, codigo);
+  const { data: existentes } = await ctx.supabase
+    .from("lic_item")
+    .select("id, numero, orden_indice")
+    .eq("org_id", ctx.orgId)
+    .eq("proceso_id", p.id);
+  const porNumero = new Map((existentes ?? []).map((i) => [i.numero as number, i.id as string]));
+  const avisos: string[] = [];
+  let actualizados = 0;
+
+  for (const c of cambios) {
+    const itemId = porNumero.get(c.numero);
+    if (!itemId) {
+      avisos.push(`No existe el ítem ${c.numero}: para agregarlo usa «nuevos».`);
+      continue;
+    }
+    const patch: Record<string, unknown> = {};
+    for (const k of ["marca", "modelo", "parte", "descripcion", "motivo_descarte"] as const) {
+      if (c[k] !== undefined) patch[k] = typeof c[k] === "string" ? (c[k] as string).trim() || null : null;
+    }
+    if (c.cantidad !== undefined) patch.cantidad = c.cantidad;
+    if (c.unidad !== undefined) patch.unidad = c.unidad.trim() || "UD";
+    if (c.ofertamos !== undefined) patch.ofertamos = c.ofertamos;
+    if (Object.keys(patch).length === 0) continue;
+    const { error } = await ctx.supabase.from("lic_item").update(patch).eq("id", itemId).eq("org_id", ctx.orgId);
+    if (error) avisos.push(`Ítem ${c.numero}: ${error.message}`);
+    else actualizados++;
+  }
+
+  let creados = 0;
+  if (nuevos.length) {
+    let siguiente = Math.max(0, ...porNumero.keys()) + 1;
+    let orden = Math.max(-1, ...(existentes ?? []).map((i) => i.orden_indice as number)) + 1;
+    const filas = nuevos.map((it) => ({
+      org_id: ctx.orgId,
+      proceso_id: p.id,
+      numero: it.numero && !porNumero.has(it.numero) ? it.numero : siguiente++,
+      spec_cruda: it.spec_cruda,
+      cantidad: it.cantidad,
+      unidad: it.unidad?.trim() || "UD",
+      marca: it.marca?.trim() || null,
+      modelo: it.modelo?.trim() || null,
+      parte: it.parte?.trim() || null,
+      descripcion: it.descripcion?.trim() || null,
+      orden_indice: orden++,
+    }));
+    const { error } = await ctx.supabase.from("lic_item").insert(filas);
+    if (error) avisos.push(`Ítems nuevos: ${error.message}`);
+    else creados = filas.length;
+  }
+  return { proceso_id: p.id, actualizados, creados, avisos };
+}
+
+// ===== Foto del producto de un ítem =====
+
+export async function imagenProducto(ctx: Ctx, codigo: string, numero: number, url: string | null) {
+  const p = await procesoDeLaOrg(ctx, codigo);
+  const { data: item } = await ctx.supabase
+    .from("lic_item")
+    .select("id")
+    .eq("org_id", ctx.orgId)
+    .eq("proceso_id", p.id)
+    .eq("numero", numero)
+    .maybeSingle();
+  if (!item) throw new Error(`No existe el ítem ${numero} en ${codigo}.`);
+  if (url === null) {
+    const error = await quitarImagenItem(ctx.supabase, ctx.orgId, p.id, item.id);
+    if (error) throw new Error(error);
+    return { proceso_id: p.id, numero, imagen: "quitada" };
+  }
+  const bytes = await bajarImagenDeUrl(url);
+  const error = await guardarImagenItem(ctx.supabase, ctx.orgId, p.id, item.id, bytes);
+  if (error) throw new Error(error);
+  return { proceso_id: p.id, numero, imagen: "guardada", kb: Math.round(bytes.length / 1024) };
 }

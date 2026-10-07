@@ -8,10 +8,13 @@ import {
   tipoQueCubre,
 } from "./cobertura-empresa";
 
+// Fecha LOCAL (como la lee diasRestantes). Con toISOString salía en UTC y,
+// de 8 p. m. a medianoche en RD, «ayer» ya era «hoy»: los tests de vencido
+// fallaban solo de noche.
 function enDias(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 let seq = 0;

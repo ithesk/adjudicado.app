@@ -32,6 +32,7 @@ import { resolverPlantillas } from "@/lib/licitaciones/plantillas";
 import PizZipLib from "pizzip";
 import { docxAPdf, htmlAPdf, pdfDisponible, unirPdfs } from "@/lib/licitaciones/pdf";
 import { faltantesOfertaTecnica, htmlOfertaTecnica } from "@/lib/licitaciones/oferta-tecnica";
+import { descargarImagenesItems } from "@/lib/licitaciones/imagenes-item";
 import type { ProcesoCanonico } from "@/lib/licitaciones/contrato";
 import {
   coberturaDeRequisito,
@@ -346,6 +347,19 @@ export async function GET(
     };
   });
 
+  // Las fotos de producto de la oferta técnica (solo si el sistema la genera).
+  const fotosItems =
+    codigos.includes("PROP-TEC") && !plantillaPorCodigo.has("PROP-TEC")
+      ? await (async () => {
+          const { data: its } = await supabase
+            .from("lic_item")
+            .select("id, numero")
+            .eq("proceso_id", id)
+            .eq("org_id", miembro.org_id);
+          return descargarImagenesItems(supabase, miembro.org_id, id, its ?? []);
+        })()
+      : null;
+
   // Cómo se genera UN documento — la CASCADA completa: la plantilla resuelta
   // (variante de la entidad o genérica de la org) GANA sobre el formulario
   // del sistema — si MITUR exige su propia versión del F.033, sale la de MITUR.
@@ -363,6 +377,7 @@ export async function GET(
       const { html, pie } = htmlOfertaTecnica(canonico, {
         datos: (requisito?.datos ?? {}) as Record<string, string>,
         imagenes,
+        imagenesItems: fotosItems?.porNumero,
         fecha: fechaElegida ?? undefined,
       });
       return {
@@ -493,6 +508,8 @@ export async function GET(
           }))
           .sort((a, b) => a.codigo.localeCompare(b.codigo)),
         sellos: (docsImagen ?? []).map((d) => d.archivo_url),
+        // Cambiar o quitar la foto de un producto regenera la oferta técnica.
+        fotos_items: fotosItems?.huella ?? [],
         // Qué plantilla EXACTA responde cada código (la variante de la
         // entidad cuenta distinto que la genérica, y editarla invalida).
         plantillas: Array.from(new Set(codigos))

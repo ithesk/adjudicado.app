@@ -14,6 +14,7 @@ import { paramsCotizacion } from "@/lib/licitaciones/cotizador";
 import { pdfDisponible } from "@/lib/licitaciones/pdf";
 import { getMiembro } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { urlsImagenesItems } from "@/lib/licitaciones/imagenes-item";
 import BidRoom from "./BidRoom";
 
 export const dynamic = "force-dynamic";
@@ -39,14 +40,19 @@ export default async function ProcesoPage({
   // El otro extremo del hilo: las órdenes de compra que salieron de este
   // proceso. Enlazadas por el código de expediente cuando la orden nació.
   const miembro = await getMiembro();
-  const { data: ordenesDelProceso } = miembro
-    ? await (await createClient())
-        .from("orden")
-        .select("id, numero_oc, estado, monto, moneda")
-        .eq("org_id", miembro.org_id)
-        .eq("proceso_id", id)
-        .order("created_at", { ascending: false })
-    : { data: null };
+  // …y la imagen de producto de cada ítem (miniaturas del cotizador).
+  const supabase = await createClient();
+  const [{ data: ordenesDelProceso }, imagenesItems] = miembro
+    ? await Promise.all([
+        supabase
+          .from("orden")
+          .select("id, numero_oc, estado, monto, moneda")
+          .eq("org_id", miembro.org_id)
+          .eq("proceso_id", id)
+          .order("created_at", { ascending: false }),
+        urlsImagenesItems(supabase, miembro.org_id, id),
+      ])
+    : [{ data: null }, {}];
 
   // La MISMA cascada que usa la generación (variante de la entidad del
   // proceso → genérica → sistema): sin esto la Bid Room decía "se genera
@@ -77,6 +83,7 @@ export default async function ProcesoPage({
       // cada carga, y no con el id que quedó guardado el día que se agregó el
       // requisito: así el certificado renovado entra solo y el vencido se ve.
       cobertura={coberturaPorTipo(docsEmpresa)}
+      imagenesItems={imagenesItems}
     />
   );
 }
