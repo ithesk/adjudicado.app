@@ -10,7 +10,8 @@ import * as dgcp from "@/lib/dgcp/api";
 import { partesRuta } from "@/lib/dgcp/expediente";
 import { normalizar } from "@/lib/dgcp/relevancia";
 import { compararNuestra, type ComparacionNuestra } from "./analisis";
-import { bajarTexto, esFinal, type FilaExpediente } from "./almacen";
+import { bajarTexto, esFinal, guardarFila, type FilaExpediente } from "./almacen";
+import { asegurarTexto } from "./preparar";
 
 export type Resultado = "ganado" | "parcial" | "perdido" | "desierto" | "cancelado" | "pendiente";
 
@@ -162,6 +163,11 @@ export async function analizarNuestra(
     .find((o) => o && mismoOferente({ razon_social: o }, nosotros));
   if (!carpeta) return null;
   const nuestros = fila.archivos.filter((a) => partesRuta(a.ruta).oferente === carpeta);
+  // Nuestros archivos se leen todos (son pocos); quedan extraídos para la próxima.
+  if (nuestros.some((a) => a.texto === "sin_procesar")) {
+    for (const a of nuestros) await asegurarTexto(sb, fila.codigo, a).catch(() => undefined);
+    await guardarFila(sb, fila.codigo, { archivos: fila.archivos });
+  }
   const inicio = async (sha1: string) =>
     (await bajarTexto(sb, fila.codigo, sha1).catch(() => [] as string[])).join(" ").replace(/\s+/g, " ").slice(0, 300) || null;
   const nuestrosArchivos = await Promise.all(

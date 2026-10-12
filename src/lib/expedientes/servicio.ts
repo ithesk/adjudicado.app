@@ -11,7 +11,7 @@ import { empresaBasica, procesosPorCodigo, type Ctx } from "@/lib/mcp/datos";
 import { bajarBinario, bajarTexto, guardarFila, hayQueRefrescar, leerFila, type FilaExpediente } from "./almacen";
 import { encolarExpediente } from "./cola";
 import { proveedor } from "./llm";
-import { ocrArchivo, prioridad } from "./preparar";
+import { asegurarTexto, ocrArchivo, prioridad } from "./preparar";
 import {
   actualizarLigero,
   analisisVigente,
@@ -242,6 +242,10 @@ export async function leerArchivo(
     return { ...base, aviso: "Demasiado grande para guardarlo (más de 45 MB). Pide al usuario que lo descargue del portal y lo adjunte." };
   }
 
+  if (a.texto === "sin_procesar") {
+    await asegurarTexto(ctx.supabase, codigo, a);
+    await guardarFila(ctx.supabase, codigo, { archivos: fila.archivos });
+  }
   let paginas: string[];
   let ocr = !!a.ocr;
   if (/\.zip$/i.test(a.ruta)) {

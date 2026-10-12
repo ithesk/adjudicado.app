@@ -57,6 +57,20 @@ export function esPliego(ruta: string) {
   return carpeta.startsWith("1_") && /pliego|ficha|especificac|t[eé]rminos|requerimiento|tdr/i.test(archivo);
 }
 
+/** Lo que vale la pena extraer durante la descarga: el resto, al pedirlo (la CPU no da para todo). */
+export function extraerAlBajar(ruta: string, bytes: number) {
+  return esDocumentoClave(ruta) || esPliego(ruta) || bytes <= 1_500_000;
+}
+
+/** Extrae el texto de un archivo guardado sin procesar (y lo deja guardado). Modifica `a`. */
+export async function asegurarTexto(sb: SupabaseClient, codigo: string, a: ArchivoExpediente) {
+  if (a.texto !== "sin_procesar") return;
+  const { estado, paginas } = await textoDe(a.ruta, await bajarBinario(sb, codigo, a.sha1));
+  if (estado === "listo") await subirTexto(sb, codigo, a.sha1, paginas);
+  a.texto = estado;
+  a.paginas = paginas.length || undefined;
+}
+
 async function textoDe(ruta: string, bytes: Uint8Array): Promise<{ estado: ArchivoExpediente["texto"]; paginas: string[] }> {
   try {
     const t = await extraerTexto(ruta, bytes);
@@ -72,8 +86,9 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
   const codigo = proceso.codigo_proceso;
   // Lo ya procesado de una descarga anterior se reutiliza por sha1 (el OCR cuesta).
   const previos = new Map((fila?.archivos ?? []).map((a) => [a.sha1, a]));
+  const inicio = Date.now();
   const archivos: ArchivoExpediente[] = [];
-  // Subir y extraer el texto en paralelo con la descarga (hasta 4 a la vez):
+  // Subir y extraer el texto en paralelo con la descarga (hasta 6 a la vez):
   // un expediente de 170 MB tarda ~3 min en bajar desde el portal y no
   // queda tiempo para hacerlo en serie.
   const enCurso = new Set<Promise<void>>();
@@ -86,6 +101,10 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
       return;
     }
     await subirBinario(sb, codigo, huella, contenido);
+    if (!extraerAlBajar(ruta, contenido.length)) {
+      archivos.push({ ruta, bytes: contenido.length, sha1: huella, guardado: true, texto: "sin_procesar" });
+      return;
+    }
     const { estado, paginas } = await textoDe(ruta, contenido);
     if (estado === "listo") await subirTexto(sb, codigo, huella, paginas);
     archivos.push({ ruta, bytes: contenido.length, sha1: huella, guardado: true, texto: estado, paginas: paginas.length || undefined });
@@ -100,10 +119,14 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
       });
       enCurso.add(tarea);
       void tarea.finally(() => enCurso.delete(tarea));
-      if (enCurso.size >= 4) await Promise.race(enCurso);
+      if (enCurso.size >= 6) await Promise.race(enCurso);
     },
   });
   await Promise.all(enCurso);
+  console.info(
+    `[expediente] ${codigo}: ${r.entradas.length} archivos, ${(r.entradas.reduce((n, e) => n + e.bytes, 0) / 1048576).toFixed(0)} MB, ` +
+      `completo=${r.completo}${r.motivoCorte ? ` (${r.motivoCorte})` : ""}, ${((Date.now() - inicio) / 1000).toFixed(0)} s`,
+  );
   if (fallo) throw fallo;
   if (!r.completo) {
     throw new Error(
