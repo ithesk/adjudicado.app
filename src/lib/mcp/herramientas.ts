@@ -86,10 +86,20 @@ const MAX_PAGINAS_OCR = 15;
 
 // Texto de un archivo; si es un PDF escaneado de hasta MAX_PAGINAS_OCR
 // páginas, transcrito con OCR. `aviso` explica por qué no hay texto.
+// La función de Vercel muere a los 300 s y se pierde TODA la respuesta: mejor
+// devolver lo que haya. El OCR es lo más lento (y lo más prescindible).
+const SIN_TIEMPO = Symbol("sin tiempo");
+function conTope<T>(p: Promise<T>, hasta: number): Promise<T | typeof SIN_TIEMPO> {
+  const ms = hasta - Date.now();
+  if (ms <= 0) return Promise.resolve(SIN_TIEMPO);
+  return Promise.race([p, new Promise<typeof SIN_TIEMPO>((ok) => setTimeout(() => ok(SIN_TIEMPO), ms))]);
+}
+
 async function textoLegible(
   nombre: string,
   bytes: Uint8Array,
   conOcr = true,
+  hasta = Date.now() + 120_000,
 ): Promise<TextoDocumento & { ocr: boolean; aviso?: string }> {
   const texto = await extraerTexto(nombre, bytes);
   if (texto.formato === "otro") return { ...texto, ocr: false, aviso: "Formato no legible como texto." };
@@ -102,7 +112,11 @@ async function textoLegible(
       aviso: `PDF escaneado de ${texto.paginas.length} páginas (el OCR automático llega a ${MAX_PAGINAS_OCR}). Pide al usuario que lo adjunte en el chat.`,
     };
   }
-  const transcrito = await transcribirPdf(Buffer.from(bytes).toString("base64"));
+  const resultado = await conTope(transcribirPdf(Buffer.from(bytes).toString("base64")), hasta);
+  if (resultado === SIN_TIEMPO) {
+    return { ...texto, ocr: false, aviso: "PDF escaneado: no dio tiempo de transcribirlo aquí; léelo con leer_expediente." };
+  }
+  const transcrito = resultado;
   // El modelo a veces se niega («Lo siento, no puedo transcribir…»): eso no es el documento.
   if (transcrito.length < 300 && /no puedo|lo siento|can.?t assist|cannot|unable to|i.?m sorry/i.test(transcrito)) {
     return {
@@ -314,6 +328,7 @@ export const HERRAMIENTAS: Herramienta[] = [
     soloLectura: true,
     entrada: z.object({ codigo: codigoProceso }),
     async ejecutar({ codigo }, ctx) {
+      const inicio = Date.now();
       const [proceso, ofertas, contratos, empresa, enApp] = await Promise.all([
         dgcp.obtenerProceso(codigo),
         dgcp.listarOfertas(codigo),
@@ -322,6 +337,9 @@ export const HERRAMIENTAS: Herramienta[] = [
         procesosPorCodigo(ctx, [codigo]),
       ]);
       if (!proceso) throw new Error(`La DGCP no tiene un proceso con código ${codigo}.`);
+      // Presupuesto dentro de los 300 s de la función: descarga hasta ~170 s y
+      // el OCR de las actas, lo que quede hasta ~250 s.
+      const fin = inicio + 250_000;
       const nosotros = { rpe: empresa?.rpe ?? null, razon_social: empresa?.nombre_legal ?? null };
       const esNuestra = (o: { rpe?: string | null; razon_social?: string | null }) => mismoOferente(o, nosotros);
 
@@ -349,7 +367,7 @@ export const HERRAMIENTAS: Herramienta[] = [
         try {
           expediente = await recorrerExpediente(proceso.url, {
             guardar: esDocumentoClave,
-            limite: Date.now() + 200_000,
+            limite: inicio + 170_000,
           });
         } catch (e) {
           errorExpediente = e instanceof Error ? e.message : String(e);
@@ -392,7 +410,7 @@ export const HERRAMIENTAS: Herramienta[] = [
           // OCR solo para lo que decide el resultado: actas e informes.
           const ocr = /^(4_|5_|6_)/.test(partesRuta(ruta).carpeta);
           try {
-            return { ruta, ...(await textoLegible(ruta, bytes, ocr)) };
+            return { ruta, ...(await textoLegible(ruta, bytes, ocr, fin)) };
           } catch (e) {
             return { ruta, formato: "otro" as const, paginas: [], escaneado: false, ocr: false, aviso: String(e) };
           }
@@ -482,13 +500,14 @@ export const HERRAMIENTAS: Herramienta[] = [
       max_caracteres: z.number().int().min(5_000).max(120_000).default(60_000),
     }),
     async ejecutar(a) {
+      const inicio = Date.now();
       const proceso = await dgcp.obtenerProceso(a.codigo);
       if (!proceso?.url) throw new Error(`La DGCP no tiene la página pública de ${a.codigo}.`);
       const [externo, interno] = a.archivo.split("::");
       const r = await recorrerExpediente(proceso.url, {
         guardar: (ruta) => coincideRuta(ruta, externo.trim()),
         pararTras: () => true,
-        limite: Date.now() + 230_000,
+        limite: inicio + 200_000,
       });
       const encontrado = r.archivos.keys().next().value;
       if (!encontrado) {
@@ -516,7 +535,7 @@ export const HERRAMIENTAS: Herramienta[] = [
         return { archivo: encontrado, aviso: "Es un .rar: no se puede leer aquí. Pide al usuario que lo extraiga y adjunte." };
       }
 
-      const texto = await textoLegible(nombre, bytes);
+      const texto = await textoLegible(nombre, bytes, true, inicio + 270_000);
       const base = { archivo: nombre, formato: texto.formato, kb: Math.round(bytes.length / 1024) };
       if (texto.aviso) return { ...base, aviso: texto.aviso };
       const t = tramo(texto, a.desde_pagina, a.max_caracteres);
