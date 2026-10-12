@@ -33,8 +33,19 @@ import {
 import { proveedor } from "./llm";
 import { transcribir } from "./ocr";
 
-/** Más que esto no se guarda (tope de un objeto en Supabase Storage: 50 MB). */
+/** Más que esto no se guarda nunca (tope de un objeto en Supabase Storage: 50 MB). */
 export const MAX_BINARIO = 45 * 1024 * 1024;
+/**
+ * Al bajar el expediente se guardan los documentos clave y lo que pese hasta
+ * esto; lo más grande (estatutos, registros mercantiles escaneados…) solo se
+ * lista y se baja del portal si alguien lo pide. Subir los 170 MB de un
+ * proceso grande no cabía en el tiempo de una función.
+ */
+export const MAX_AL_BAJAR = 8 * 1024 * 1024;
+
+export function guardarAlBajar(ruta: string, bytes: number) {
+  return bytes <= MAX_BINARIO && (bytes <= MAX_AL_BAJAR || esDocumentoClave(ruta) || esPliego(ruta));
+}
 
 const sha1 = (b: Uint8Array) => createHash("sha1").update(b).digest("hex");
 
@@ -93,6 +104,7 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
   // queda tiempo para hacerlo en serie.
   const enCurso = new Set<Promise<void>>();
   let fallo: unknown = null;
+  let n = 0;
   const procesar = async (ruta: string, contenido: Uint8Array) => {
     const huella = sha1(contenido);
     const previo = previos.get(huella);
@@ -110,7 +122,7 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
     archivos.push({ ruta, bytes: contenido.length, sha1: huella, guardado: true, texto: estado, paginas: paginas.length || undefined });
   };
   const r = await recorrerExpediente(proceso.url!, {
-    guardar: (_ruta, bytes) => bytes <= MAX_BINARIO,
+    guardar: guardarAlBajar,
     limite: hasta,
     alGuardar: async (ruta, contenido) => {
       if (fallo) throw fallo;
@@ -119,6 +131,7 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
       });
       enCurso.add(tarea);
       void tarea.finally(() => enCurso.delete(tarea));
+      if (++n % 25 === 0) console.info(`[expediente] ${codigo}: ${n} guardados, ${((Date.now() - inicio) / 1000).toFixed(0)} s`);
       if (enCurso.size >= 6) await Promise.race(enCurso);
     },
   });
@@ -135,7 +148,7 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
         : `La descarga se cortó (${r.motivoCorte}).`,
     );
   }
-  // Los que no se guardaron (muy grandes) también se listan.
+  // Los que no se guardaron (grandes) también se listan: se bajan del portal al pedirlos.
   const guardados = new Set(archivos.map((a) => a.ruta));
   for (const e of r.entradas) {
     if (!guardados.has(e.ruta)) archivos.push({ ruta: e.ruta, bytes: e.bytes, sha1: "", guardado: false, texto: "grande" });

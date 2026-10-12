@@ -276,10 +276,14 @@ export const HERRAMIENTAS: Herramienta[] = [
     soloLectura: false,
     entrada: z.object({
       codigo: codigoProceso,
-      esperar: z.boolean().default(true).describe("Esperar hasta ~3 min a que el expediente esté listo"),
+      esperar: z.boolean().default(true).describe("Esperar hasta ~2,5 min a que el expediente esté listo"),
+      reintentar: z
+        .boolean()
+        .default(false)
+        .describe("Volver a preparar el expediente aunque haya fallado (el usuario lo pide o el error parece pasajero)"),
     }),
-    async ejecutar({ codigo, esperar }, ctx) {
-      return resultadoProceso(ctx, codigo, esperar);
+    async ejecutar({ codigo, esperar, reintentar }, ctx) {
+      return resultadoProceso(ctx, codigo, esperar, reintentar);
     },
   }),
 

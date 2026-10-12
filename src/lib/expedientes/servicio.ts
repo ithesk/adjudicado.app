@@ -2,16 +2,17 @@
 // (resultado_proceso, leer_expediente, guardar_resultado,
 // estadisticas_licitaciones), sobre la caché y la cola de expedientes.
 
+import { createHash } from "node:crypto";
 import PizZip from "pizzip";
 import * as dgcp from "@/lib/dgcp/api";
-import { partesRuta } from "@/lib/dgcp/expediente";
+import { partesRuta, recorrerExpediente } from "@/lib/dgcp/expediente";
 import { normalizar } from "@/lib/dgcp/relevancia";
 import { extraerTexto, tramo } from "@/lib/dgcp/texto";
 import { empresaBasica, procesosPorCodigo, type Ctx } from "@/lib/mcp/datos";
-import { bajarBinario, bajarTexto, guardarFila, hayQueRefrescar, leerFila, type FilaExpediente } from "./almacen";
+import { bajarBinario, bajarTexto, guardarFila, hayQueRefrescar, leerFila, subirBinario, type FilaExpediente } from "./almacen";
 import { encolarExpediente } from "./cola";
 import { proveedor } from "./llm";
-import { asegurarTexto, ocrArchivo, prioridad } from "./preparar";
+import { asegurarTexto, MAX_BINARIO, ocrArchivo, prioridad } from "./preparar";
 import {
   actualizarLigero,
   analisisVigente,
@@ -39,8 +40,14 @@ async function asegurarExpediente(
   estadoDgcp: string | null,
   objetivo: "descargado" | "listo",
   hasta: number | null,
+  reintentar = false,
 ): Promise<FilaExpediente | null> {
   let fila = await leerFila(ctx.supabase, codigo);
+  if (reintentar && fila && fila.estado !== "listo") {
+    // Pedido explícito: olvidar los fallos (y una reserva colgada) y volver a empezar.
+    await guardarFila(ctx.supabase, codigo, { estado: "pendiente", intentos: 0, error: null, trabajando_hasta: null });
+    fila = await leerFila(ctx.supabase, codigo);
+  }
   const falta = hayQueRefrescar(fila, estadoDgcp) || fila?.estado !== "listo";
   // Alguien lo está procesando (la reserva vence sola si esa función murió).
   const reservado = !!fila?.trabajando_hasta && new Date(fila.trabajando_hasta) > new Date();
@@ -108,13 +115,13 @@ async function documentosClave(ctx: Ctx, fila: FilaExpediente) {
   return salida;
 }
 
-export async function resultadoProceso(ctx: Ctx & { baseUrl: string }, codigo: string, esperar: boolean) {
+export async function resultadoProceso(ctx: Ctx & { baseUrl: string }, codigo: string, esperar: boolean, reintentar = false) {
   const inicio = Date.now();
   const nosotros = await nosotrosDe(ctx);
   const { proceso, ofertas, contratos, ligero } = await actualizarLigero(ctx.supabase, ctx.orgId, codigo, nosotros);
   if (!proceso) throw new Error(`La DGCP no tiene un proceso con código ${codigo}.`);
 
-  const fila = await asegurarExpediente(ctx, codigo, proceso.estado_proceso, "listo", esperar ? inicio + 150_000 : null);
+  const fila = await asegurarExpediente(ctx, codigo, proceso.estado_proceso, "listo", esperar ? inicio + 150_000 : null, reintentar);
 
   const tabla = [...ofertas]
     .sort((x, y) => (x.valor_oferta ?? Infinity) - (y.valor_oferta ?? Infinity))
@@ -238,8 +245,23 @@ export async function leerArchivo(
     );
   }
   const base = { archivo: a.ruta, kb: Math.round(a.bytes / 1024) };
-  if (a.texto === "grande") {
-    return { ...base, aviso: "Demasiado grande para guardarlo (más de 45 MB). Pide al usuario que lo descargue del portal y lo adjunte." };
+  if (!a.guardado) {
+    if (a.bytes > MAX_BINARIO) {
+      return { ...base, aviso: "Pesa más de 45 MB: pide al usuario que lo descargue del portal y lo adjunte." };
+    }
+    // No se guardó al bajar el expediente: se trae del portal (recorriendo el
+    // ZIP hasta él) y queda guardado.
+    const r = await recorrerExpediente(proceso.url!, {
+      guardar: (ruta) => ruta === a.ruta,
+      pararTras: () => true,
+      limite: inicio + 200_000,
+    });
+    const contenido = r.archivos.get(a.ruta);
+    if (!contenido) return { ...base, aviso: "No se pudo traer del portal a tiempo; vuelve a intentarlo." };
+    a.sha1 = createHash("sha1").update(contenido).digest("hex");
+    await subirBinario(ctx.supabase, codigo, a.sha1, contenido);
+    a.guardado = true;
+    a.texto = "sin_procesar";
   }
 
   if (a.texto === "sin_procesar") {
