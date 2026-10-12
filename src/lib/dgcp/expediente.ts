@@ -187,8 +187,22 @@ export async function urlExpediente(urlProceso: string): Promise<string> {
 }
 
 export async function recorrerExpediente(urlProceso: string, op: OpcionesRecorrido) {
-  const res = await abrirPortal(await urlExpediente(urlProceso), 120_000);
-  return recorrerZip(res as AsyncIterable<Buffer>, op);
+  const t0 = Date.now();
+  const url = await urlExpediente(urlProceso);
+  const tEnlace = Date.now() - t0;
+  const res = await abrirPortal(url, 120_000);
+  const tRespuesta = Date.now() - t0;
+  const r = await recorrerZip(res as AsyncIterable<Buffer>, op);
+  return {
+    ...r,
+    tiempos: {
+      enlace_s: Math.round(tEnlace / 1000),
+      primera_respuesta_s: Math.round(tRespuesta / 1000),
+      total_s: Math.round((Date.now() - t0) / 1000),
+      mb_leidos: Math.round(r.entradas.reduce((n, e) => n + e.bytes, 0) / 1048576),
+      mb_total: Math.round(Number(res.headers["content-length"] ?? 0) / 1048576),
+    },
+  };
 }
 
 // ===== Clasificación de las rutas =====

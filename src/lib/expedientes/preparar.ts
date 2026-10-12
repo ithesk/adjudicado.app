@@ -144,7 +144,8 @@ async function descargar(sb: SupabaseClient, fila: FilaExpediente | null, proces
   if (!r.completo) {
     throw new Error(
       r.motivoCorte === "tiempo"
-        ? "El expediente es demasiado grande para bajarlo en una pasada (el portal no permite reanudar)."
+        ? `El expediente no se alcanzó a bajar en una pasada (el portal no permite reanudar). ` +
+          `Diagnóstico: ${JSON.stringify({ ...r.tiempos, archivos_leidos: r.entradas.length, guardados: n })}`
         : `La descarga se cortó (${r.motivoCorte}).`,
     );
   }
