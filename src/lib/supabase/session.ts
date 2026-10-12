@@ -7,8 +7,8 @@ import { isDemo } from "@/lib/demo";
 // PROPIA autenticación: el cron valida Bearer CRON_SECRET y el webhook de
 // correo su x-inbound-secret — el redirect al login los rompía (el cron de
 // Vercel recibía 307 y nunca corría). El conector MCP se autentica con el
-// token de su URL.
-const PUBLIC_PATHS = ["/login", "/registro", "/inicio", "/auth", "/api/cron", "/api/correo-entrante", "/api/mcp"];
+// token de su URL; /api/expedientes, con el CRON_SECRET (llamadas internas).
+const PUBLIC_PATHS = ["/login", "/registro", "/inicio", "/auth", "/api/cron", "/api/correo-entrante", "/api/mcp", "/api/expedientes"];
 
 // Páginas de auth/marketing que no aplican con sesión activa → al tablero.
 const SOLO_ANONIMO = ["/login", "/registro", "/inicio"];
