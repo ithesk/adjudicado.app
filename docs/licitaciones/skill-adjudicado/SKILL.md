@@ -8,7 +8,8 @@ description: >
   en el expediente de la Bid Room. Úsalo SIEMPRE con: "qué licitaciones hay", "qué hay para nosotros",
   "qué cierra hoy/esta semana", "qué hay para trabajar hoy", "analiza el proceso X", "lee el pliego",
   "mira la ficha técnica", "qué producto ponemos", "hazme la oferta técnica", "ficha técnica con
-  nuestro formato", "necesito el cronograma / la carta / la matriz", "súbelo a adjudicado", o cualquier
+  nuestro formato", "necesito el cronograma / la carta / la matriz", "súbelo a adjudicado", "por qué
+  perdimos / ganamos", "quién ganó", "analiza el resultado", "compara las ofertas", o cualquier
   código de proceso (p. ej. OGTIC-CCC-CP-2026-0011). Reemplaza a dgcp-oportunidades-scanner,
   dgcp-daily-pipeline, expediente-rd-analyzer y licitacion-rd-analyzer. Requiere el conector
   "adjudicado".
@@ -104,6 +105,41 @@ Aquí es donde más aportas. Por cada ítem:
 No hace falta esperar al final para guardar: si el usuario ya decidió un producto, guárdalo y sigue.
 Tampoco guardes sin que el usuario lo sepa: di qué vas a dejar en la app.
 
+### Analizar el resultado: por qué ganamos o perdimos
+
+Cuando el proceso ya abrió sobres o se adjudicó, el portal publica el **expediente completo**: las
+ofertas de todos los oferentes, el acta de apertura, los informes periciales, el acta de adjudicación y
+los mensajes. Con eso se explica el resultado con evidencia, no con suposiciones.
+
+1. `resultado_proceso` (tarda 15-60 s): ofertas ordenadas por precio con la **nuestra marcada**,
+   adjudicatarios y montos, el **texto** del acta de adjudicación, informes, acta de apertura, lista de
+   llegada, el **resumen de cada oferta** (precio por artículo y lotes contestados) y los mensajes, más
+   la lista de archivos que subió cada oferente.
+2. `leer_expediente` para lo que haga falta comparar: nuestra oferta técnica y la del ganador, la carta
+   o credencial que descalificó a alguien, la ficha del producto que ofertó el ganador. Usa la ruta
+   exacta que dio `resultado_proceso`.
+3. Entrega el informe en el chat (y en Word/PDF si el usuario lo quiere):
+
+   - **Resultado en una línea**: ganado, perdido, desierto o cancelado; por lote si hay lotes.
+   - **Cuadro de ofertas**: lugar, oferente, monto, cumple / no cumple, adjudicado y diferencia con el
+     ganador (RD$ y %). Si hay lotes, por lote: el total de la API mezcla lotes.
+   - **Por qué**: la causa principal y la evidencia, citando el documento ("Acta de adjudicación, p. 2:
+     *No subsanó: carta de distribuidor*"). Causas típicas: precio, descalificación técnica, credencial
+     o requisito no subsanable, subsanación no atendida, lote no contestado, fuera de plazo.
+   - **Nosotros frente al ganador**: precio por artículo (del resumen de cada oferta), producto y marca
+     ofertados, documentos presentados y faltantes.
+   - **Qué hacer distinto**: acciones concretas para la próxima (precio objetivo, carta que hay que
+     conseguir antes, documento que faltó, presentar antes de la hora…).
+
+   Si ganamos, el mismo informe sirve para saber **por cuánto** y qué no conviene cambiar.
+
+Reglas propias de este análisis:
+- Si el acta o el informe no dicen el motivo, dilo así; no lo deduzcas del precio sin avisar.
+- La lista de archivos dice qué subió cada uno, no si cumplía: el que cumple lo dice el informe pericial.
+- Un oferente sin archivos en el expediente pudo ofertar en papel (mira `tipo_oferta`).
+- Lo recurrente de la institución que salga (*"el MEM descalifica sin carta de distribuidor"*) propónselo
+  al usuario para `guardar_patron`; no lo guardes sin que lo confirme.
+
 ---
 
 ## Lo que el pliego pide (entregables)
@@ -163,6 +199,9 @@ discreta al final (`🧠 Guardado para el equipo: …`); si no, silencio.
 | La API de la DGCP no responde | Dilo; reintenta; como último recurso busca en la web. |
 | "No encontré el documento" | Usa el número de la lista que trae el error. |
 | Escaneado de más de 15 páginas | Pide al usuario que adjunte el PDF en el chat. |
+| `resultado_proceso` sin expediente o cortado por tiempo | El portal pudo ir lento: reintenta; con lo de la API (ofertas y contratos) ya se puede adelantar. |
+| La API no trae ofertas | Aún no se abrieron los sobres; el análisis se hace después de la apertura. |
+| Archivo `.rar` en una oferta | No se lee aquí: pide al usuario que lo extraiga y adjunte. |
 | `generar_oferta_tecnica` dice que falta algo | Complétalo (`actualizar_items`, `importar_proceso` con `oferta_tecnica`) y vuelve a generar. |
 | `crear_documento` rechaza el código | Ese documento lo genera la Bid Room: usa otro código o deja que la app lo haga. |
 | "Conector no válido o revocado" | El admin debe crear una URL nueva en Configuración → Integraciones. |
