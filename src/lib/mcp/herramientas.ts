@@ -7,12 +7,10 @@
 // y la memoria institucional (patrones por entidad) vive en la base, no en
 // la memoria de un chat: la ve todo el equipo y ver_proceso la trae sola.
 
-import { createHash } from "node:crypto";
-import PizZip from "pizzip";
 import { z } from "zod";
 import * as dgcp from "@/lib/dgcp/api";
 import { normalizar, radar, siglasDesdeCodigo, type Nivel } from "@/lib/dgcp/relevancia";
-import { esDocumentoClave, partesRuta, recorrerExpediente, type EntradaZip } from "@/lib/dgcp/expediente";
+import { estadisticasOrg, guardarResultado, leerArchivo, resultadoProceso } from "@/lib/expedientes/servicio";
 import { extraerTexto, tramo, type TextoDocumento } from "@/lib/dgcp/texto";
 import { transcribirPdf } from "@/lib/ocr";
 import { ESTADOS_LICITACION } from "@/lib/licitaciones/tipos";
@@ -22,7 +20,6 @@ import {
   CODIGOS_REQUISITO,
   actualizarItems,
   capacidades,
-  empresaBasica,
   guardarPatron,
   idDeProceso,
   imagenProducto,
@@ -129,54 +126,6 @@ async function textoLegible(
   return { ...texto, paginas: paginas.length ? paginas : [transcrito], ocr: true };
 }
 
-// Razón social comparable: sin tildes, sin la forma societaria ni signos
-// («Innovacion Tecnologica Sk,SRL» = «Innovación Tecnológica SK, S.R.L.»).
-function claveEmpresa(s: string) {
-  return normalizar(s)
-    .replace(/\b(s\.?\s?r\.?\s?l|s\.?\s?a\.?\s?s|s\.?\s?a|e\.?\s?i\.?\s?r\.?\s?l)\.?\s*$/, "")
-    .replace(/[^a-z0-9]/g, "");
-}
-
-function mismoOferente(
-  a: { rpe?: string | null; razon_social?: string | null },
-  b: { rpe?: string | null; razon_social?: string | null },
-) {
-  if (a.rpe && b.rpe) return String(a.rpe).trim() === String(b.rpe).trim();
-  return !!a.razon_social && !!b.razon_social && claveEmpresa(a.razon_social) === claveEmpresa(b.razon_social);
-}
-
-// Texto compacto para mandar muchos documentos en una respuesta.
-function compactar(paginas: string[]) {
-  return paginas
-    .join("\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n\s*\n+/g, "\n")
-    .trim();
-}
-
-// Orden de lectura de los documentos clave: primero lo que dice el resultado.
-function prioridadClave(ruta: string, nuestros: (ruta: string) => boolean) {
-  const { carpeta } = partesRuta(ruta);
-  if (carpeta.startsWith("6_")) return 0;
-  if (carpeta.startsWith("5_")) return 1;
-  if (carpeta.startsWith("4_")) return 2;
-  if (carpeta.startsWith("3_")) return nuestros(ruta) || !/Resumen/i.test(ruta) ? 3 : 4;
-  if (carpeta.startsWith("8_")) return 5;
-  return 6;
-}
-
-const TOPE_DOC = 12_000;
-const TOPE_TOTAL = 100_000;
-
-// Fragmento de ruta → ¿coincide? Todas las palabras deben aparecer.
-function coincideRuta(ruta: string, buscado: string) {
-  if (ruta === buscado) return true;
-  const r = normalizar(ruta);
-  return normalizar(buscado)
-    .split(/[\s/]+/)
-    .filter(Boolean)
-    .every((t) => r.includes(t));
-}
 
 const codigoProceso = z
   .string()
@@ -316,169 +265,21 @@ export const HERRAMIENTAS: Herramienta[] = [
 
   definir({
     nombre: "resultado_proceso",
-    titulo: "Resultado de un proceso: quién ofertó y por qué ganó o perdió",
+    titulo: "Resultado de un proceso: quién ganó y por qué ganamos o perdimos",
     descripcion:
-      "Para un proceso ya abierto o adjudicado: quién ofertó y cuánto (ordenado por precio, marcando NUESTRA oferta), " +
-      "a quién se adjudicó y por cuánto, y el TEXTO de los documentos que explican el resultado, sacados del expediente " +
-      "completo del portal («Descargar procedimiento»): acta de adjudicación (lugares ocupados, quién cumple, motivos de " +
-      "descalificación), informes periciales y acta de apertura, la lista de llegada, el resumen de cada oferta (precio por " +
-      "artículo y lotes contestados) y los mensajes. También lista los archivos que subió cada oferente, para leer los que " +
-      "hagan falta con leer_expediente. Tarda 15-60 s (el expediente pesa ~100 MB). Úsala para el informe de «por qué " +
-      "ganamos / perdimos».",
-    soloLectura: true,
-    entrada: z.object({ codigo: codigoProceso }),
-    async ejecutar({ codigo }, ctx) {
-      const inicio = Date.now();
-      const [proceso, ofertas, contratos, empresa, enApp] = await Promise.all([
-        dgcp.obtenerProceso(codigo),
-        dgcp.listarOfertas(codigo),
-        dgcp.listarContratos(codigo),
-        empresaBasica(ctx),
-        procesosPorCodigo(ctx, [codigo]),
-      ]);
-      if (!proceso) throw new Error(`La DGCP no tiene un proceso con código ${codigo}.`);
-      // Presupuesto dentro de los 300 s de la función: descarga hasta ~170 s y
-      // el OCR de las actas, lo que quede hasta ~250 s.
-      const fin = inicio + 250_000;
-      const nosotros = { rpe: empresa?.rpe ?? null, razon_social: empresa?.nombre_legal ?? null };
-      const esNuestra = (o: { rpe?: string | null; razon_social?: string | null }) => mismoOferente(o, nosotros);
-
-      const tabla = [...ofertas]
-        .sort((x, y) => (x.valor_oferta ?? Infinity) - (y.valor_oferta ?? Infinity))
-        .map((o, i) => {
-          const adj = contratos.filter((c) => mismoOferente(c, o));
-          return {
-            posicion_por_precio: i + 1,
-            razon_social: o.razon_social,
-            rpe: o.rpe,
-            valor_oferta: o.valor_oferta,
-            tipo_oferta: o.tipo_oferta,
-            entregada: o.fecha_entrega_oferta,
-            es_nuestra: esNuestra(o),
-            adjudicado: adj.length > 0,
-            valor_adjudicado: adj.length ? adj.reduce((n, c) => n + (c.valor_contratado ?? 0), 0) : null,
-          };
-        });
-
-      // El expediente: listar todo y guardar solo los documentos clave.
-      let expediente: Awaited<ReturnType<typeof recorrerExpediente>> | null = null;
-      let errorExpediente: string | null = null;
-      if (proceso.url) {
-        try {
-          expediente = await recorrerExpediente(proceso.url, {
-            guardar: esDocumentoClave,
-            limite: inicio + 170_000,
-          });
-        } catch (e) {
-          errorExpediente = e instanceof Error ? e.message : String(e);
-        }
-      }
-
-      const porOferente: Record<string, { ruta: string; kb: number }[]> = {};
-      const otrasCarpetas: Record<string, string[]> = {};
-      for (const e of expediente?.entradas ?? ([] as EntradaZip[])) {
-        const { carpeta, oferente } = partesRuta(e.ruta);
-        if (oferente) (porOferente[oferente] ??= []).push({ ruta: e.ruta, kb: Math.round(e.bytes / 1024) });
-        else (otrasCarpetas[carpeta] ??= []).push(e.ruta);
-      }
-      // Quien ofertó y no tiene archivos en el expediente también es un dato
-      // (oferta en papel o sobre vacío): aparece con la lista vacía.
-      if (expediente) {
-        for (const o of ofertas) {
-          if (!Object.keys(porOferente).some((n) => mismoOferente({ razon_social: n }, { razon_social: o.razon_social }))) {
-            porOferente[o.razon_social] = [];
-          }
-        }
-      }
-      const nuestraCarpeta = Object.keys(porOferente).find((n) => esNuestra({ razon_social: n })) ?? null;
-      const rutaNuestra = (ruta: string) => !!nuestraCarpeta && partesRuta(ruta).oferente === nuestraCarpeta;
-
-      // Texto de los documentos clave, por prioridad y con tope total. El
-      // portal repite archivos idénticos (la misma notificación subida dos
-      // veces, el acta copiada en 7_Contratos): se leen una vez.
-      const vistos = new Set<string>();
-      const claves = [...(expediente?.archivos ?? new Map<string, Uint8Array>())]
-        .filter(([, bytes]) => {
-          const huella = createHash("sha1").update(bytes).digest("hex");
-          return !vistos.has(huella) && !!vistos.add(huella);
-        })
-        .sort(
-        ([a], [b]) => prioridadClave(a, rutaNuestra) - prioridadClave(b, rutaNuestra),
-      );
-      const leidos = await Promise.all(
-        claves.map(async ([ruta, bytes]) => {
-          // OCR solo para lo que decide el resultado: actas e informes.
-          const ocr = /^(4_|5_|6_)/.test(partesRuta(ruta).carpeta);
-          try {
-            return { ruta, ...(await textoLegible(ruta, bytes, ocr, fin)) };
-          } catch (e) {
-            return { ruta, formato: "otro" as const, paginas: [], escaneado: false, ocr: false, aviso: String(e) };
-          }
-        }),
-      );
-      let usados = 0;
-      const documentos = [];
-      const sinLeer: string[] = [];
-      for (const d of leidos) {
-        const texto = compactar(d.paginas);
-        if (d.aviso || !texto) {
-          documentos.push({ ruta: d.ruta, aviso: d.aviso ?? "Sin texto." });
-          continue;
-        }
-        if (usados >= TOPE_TOTAL) {
-          sinLeer.push(d.ruta);
-          continue;
-        }
-        const corte = texto.slice(0, Math.min(TOPE_DOC, TOPE_TOTAL - usados));
-        usados += corte.length;
-        documentos.push({
-          ruta: d.ruta,
-          ocr: d.ocr || undefined,
-          texto: corte.length < texto.length ? corte + "\n[…truncado: sigue con leer_expediente]" : corte,
-        });
-      }
-
-      const p = enApp.get(codigo);
-      return {
-        proceso: {
-          codigo,
-          titulo: proceso.titulo,
-          institucion: proceso.unidad_compra,
-          modalidad: proceso.modalidad,
-          estado: proceso.estado_proceso,
-          monto_estimado: proceso.monto_estimado,
-          divisa: proceso.divisa,
-          url: proceso.url,
-        },
-        nuestra_empresa: { ...nosotros, participo: tabla.some((o) => o.es_nuestra), carpeta_en_expediente: nuestraCarpeta },
-        ofertas: tabla,
-        adjudicaciones: contratos.map((c) => ({
-          razon_social: c.razon_social,
-          valor_contratado: c.valor_contratado,
-          divisa: c.divisa,
-          estado: c.estado_contrato,
-          fecha_adjudicacion: c.fecha_adjudicacion,
-          contrato: c.codigo_contrato,
-        })),
-        avisos: [
-          "valor_oferta es el TOTAL de lo ofertado: si hay lotes, compara por lote con el resumen de cada oferta y el acta.",
-          "estado_evaluacion de la API suele quedarse en «Pendiente»: el resultado real está en el acta de adjudicación.",
-          ...(ofertas.length === 0 ? ["La API aún no tiene ofertas: quizá no se han abierto los sobres."] : []),
-          ...(contratos.length === 0 ? ["Sin contratos en la API: aún no adjudicado, desierto o cancelado (míralo en el acta)."] : []),
-        ],
-        expediente: expediente
-          ? {
-              completo: expediente.completo,
-              corte: expediente.motivoCorte,
-              archivos: expediente.entradas.length,
-              por_oferente: porOferente,
-              otras_carpetas: otrasCarpetas,
-            }
-          : { error: errorExpediente ?? "El proceso no tiene URL pública." },
-        documentos_clave: documentos,
-        sin_leer_por_tope: sinLeer,
-        en_adjudicado: p ? { estado: p.estado, url: `${ctx.baseUrl}/licitaciones/${p.id}` } : null,
-      };
+      "Para un proceso ya abierto o adjudicado: ofertas ordenadas por precio (la NUESTRA marcada), adjudicaciones de la API y, " +
+      "del expediente completo del portal (descargado, transcrito y analizado en segundo plano, y guardado), el ANÁLISIS: " +
+      "quién ganó cada ítem y por cuánto, quién quedó habilitado y por qué, subsanaciones pedidas, precio por ítem de cada " +
+      "oferente y requisitos del pliego; y NUESTRA COMPARACIÓN: qué pedía el pliego frente a lo que subimos, ítem por ítem " +
+      "frente al ganador, causa y lecciones. Más el texto de actas e informes y los archivos de cada oferente. La primera " +
+      "vez el expediente tarda 1-5 min: si responde `expediente.estado` ≠ 'listo', vuelve a llamar en 1-2 min (ya trae lo de la API).",
+    soloLectura: false,
+    entrada: z.object({
+      codigo: codigoProceso,
+      esperar: z.boolean().default(true).describe("Esperar hasta ~3 min a que el expediente esté listo"),
+    }),
+    async ejecutar({ codigo, esperar }, ctx) {
+      return resultadoProceso(ctx, codigo, esperar);
     },
   }),
 
@@ -486,67 +287,64 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: "leer_expediente",
     titulo: "Leer un archivo del expediente completo",
     descripcion:
-      "Lee CUALQUIER archivo del expediente completo de un proceso (el ZIP de «Descargar procedimiento»), incluidas las " +
-      "ofertas de los competidores: oferta técnica, económica, credenciales, cartas, fichas. `archivo` es la ruta que dio " +
-      "resultado_proceso (p. ej. '3_Ofertas/Acme, SRL/DO1_DOC_1_Oferta Técnica.pdf') o palabras de ella ('Acme oferta " +
-      "tecnica'). Para un .zip dentro del expediente: 'ruta/del.zip::archivo interno' (sin '::' lista su contenido). " +
-      "Devuelve el texto por tramos (hay_mas → desde_pagina = hasta + 1); los escaneados de hasta 15 páginas se " +
-      "transcriben con OCR.",
-    soloLectura: true,
+      "Lee CUALQUIER archivo del expediente completo de un proceso, incluidas las ofertas de la competencia (oferta técnica, " +
+      "económica, credenciales, cartas, fichas), desde la copia guardada. `archivo` es la ruta que dio resultado_proceso " +
+      "(p. ej. '3_Ofertas/Acme, SRL/DO1_DOC_1_Oferta Técnica.pdf') o palabras de ella ('Acme oferta tecnica'); para un .zip " +
+      "interno, 'ruta/del.zip::archivo' (sin '::' lista su contenido). Los escaneados se transcriben con Claude por tramos, " +
+      "las tablas como tablas, y quedan guardados. Texto por tramos: hay_mas → desde_pagina = hasta + 1.",
+    soloLectura: false,
     entrada: z.object({
       codigo: codigoProceso,
       archivo: z.string().min(2),
       desde_pagina: z.number().int().positive().default(1),
       max_caracteres: z.number().int().min(5_000).max(120_000).default(60_000),
     }),
-    async ejecutar(a) {
-      const inicio = Date.now();
-      const proceso = await dgcp.obtenerProceso(a.codigo);
-      if (!proceso?.url) throw new Error(`La DGCP no tiene la página pública de ${a.codigo}.`);
-      const [externo, interno] = a.archivo.split("::");
-      const r = await recorrerExpediente(proceso.url, {
-        guardar: (ruta) => coincideRuta(ruta, externo.trim()),
-        pararTras: () => true,
-        limite: inicio + 200_000,
-      });
-      const encontrado = r.archivos.keys().next().value;
-      if (!encontrado) {
-        const parecidos = r.entradas
-          .filter((e) => normalizar(externo).split(/[\s/]+/).some((t) => t.length > 3 && normalizar(e.ruta).includes(t)))
-          .map((e) => e.ruta);
-        throw new Error(
-          `No encontré «${externo}» en el expediente${r.completo ? "" : " (lectura cortada por tiempo)"}. ` +
-            `Rutas ${parecidos.length ? "parecidas" : "disponibles"}: ` +
-            (parecidos.length ? parecidos : r.entradas.map((e) => e.ruta)).slice(0, 80).join(" · "),
-        );
-      }
-      let nombre = encontrado;
-      let bytes = r.archivos.get(encontrado)!;
+    async ejecutar(a, ctx) {
+      return leerArchivo(ctx, a.codigo, a.archivo, a.desde_pagina, a.max_caracteres);
+    },
+  }),
 
-      if (/\.zip$/i.test(encontrado)) {
-        const zip = new PizZip(bytes);
-        const internos = Object.values(zip.files).filter((f) => !f.dir).map((f) => f.name);
-        if (!interno) return { archivo: encontrado, contenido_zip: internos };
-        const elegido = internos.find((n) => coincideRuta(n, interno.trim()));
-        if (!elegido) throw new Error(`«${interno}» no está en ${encontrado}. Contiene: ${internos.join(" · ")}`);
-        nombre = `${encontrado}::${elegido}`;
-        bytes = zip.file(elegido)!.asUint8Array();
-      } else if (/\.rar$/i.test(encontrado)) {
-        return { archivo: encontrado, aviso: "Es un .rar: no se puede leer aquí. Pide al usuario que lo extraiga y adjunte." };
-      }
+  definir({
+    nombre: "guardar_resultado",
+    titulo: "Guardar el resultado y el informe de un proceso",
+    descripcion:
+      "Cierra el ciclo tras el informe de «por qué ganamos o perdimos», CON CONFIRMACIÓN DEL USUARIO: guarda el informe " +
+      "(markdown) en los resultados de la empresa (base de las estadísticas) y, si el proceso está en adjudicado.app, lo pasa " +
+      "a 'adjudicado' (ganado/parcial) o 'perdido' y agrega el informe a sus notas. Los patrones de la institución van aparte, " +
+      "con guardar_patron.",
+    soloLectura: false,
+    entrada: z.object({
+      codigo: codigoProceso,
+      resultado: z.enum(["ganado", "parcial", "perdido", "desierto", "cancelado"]),
+      causa: z
+        .enum(["precio", "descalificacion", "no_subsano", "no_ofertado", "desierto", "otro"])
+        .nullable()
+        .optional()
+        .describe("Causa principal si se perdió"),
+      informe: z.string().min(20).describe("El informe tal como se le presentó al usuario (markdown)"),
+      actualizar_proceso: z.boolean().default(true),
+    }),
+    async ejecutar(a, ctx) {
+      return guardarResultado(ctx, a);
+    },
+  }),
 
-      const texto = await textoLegible(nombre, bytes, true, inicio + 270_000);
-      const base = { archivo: nombre, formato: texto.formato, kb: Math.round(bytes.length / 1024) };
-      if (texto.aviso) return { ...base, aviso: texto.aviso };
-      const t = tramo(texto, a.desde_pagina, a.max_caracteres);
-      return {
-        ...base,
-        ocr: texto.ocr,
-        paginas: `${t.desde}-${t.hasta} de ${t.total}`,
-        hay_mas: t.hasta < t.total,
-        hasta: t.hasta,
-        texto: t.texto,
-      };
+  definir({
+    nombre: "estadisticas_licitaciones",
+    titulo: "Estadísticas de licitaciones de la empresa",
+    descripcion:
+      "Cómo nos va: procesos en que participamos (la DGCP los encuentra por nuestro RPE; un cron diario los actualiza), " +
+      "ganados / perdidos / pendientes, tasa de éxito, monto ofertado y ganado, causas de pérdida, instituciones y competidores " +
+      "que más nos ganan (con su diferencia de precio). Trae también las NOVEDADES: resultados nuevos desde la última vez " +
+      "(y los marca como vistos). Úsala con «cómo nos va», «qué resultados hay», «quién nos gana», o al empezar el día.",
+    soloLectura: false,
+    entrada: z.object({
+      desde: z.string().optional().describe("Fecha ISO: ofertas desde"),
+      hasta: z.string().optional().describe("Fecha ISO: ofertas hasta"),
+      institucion: z.string().optional().describe("Nombre o siglas de la institución"),
+    }),
+    async ejecutar(a, ctx) {
+      return estadisticasOrg(ctx, a);
     },
   }),
 

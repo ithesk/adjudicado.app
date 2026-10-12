@@ -55,6 +55,12 @@ export interface OpcionesRecorrido {
   maxGuardado?: number;
   /** Momento (Date.now()) en que se deja de leer, para no pasarse del tiempo de la función. */
   limite?: number;
+  /**
+   * Si está, cada entrada guardada se entrega aquí (p. ej. para subirla a
+   * storage) y NO se acumula en memoria: así se recorre un expediente de
+   * cientos de MB. Mientras la promesa no se resuelve, no se sigue leyendo.
+   */
+  alGuardar?: (ruta: string, contenido: Uint8Array) => Promise<void>;
 }
 
 // Lector secuencial sobre los trozos que llegan de la red: tomar() copia
@@ -154,9 +160,12 @@ export async function recorrerZip(fuente: AsyncIterable<Buffer>, op: OpcionesRec
     if (op.guardar(ruta, original) && guardado + comprimido <= maxGuardado && (metodo === 0 || metodo === 8)) {
       const dato = await lector.tomar(comprimido);
       if (!dato) throw new Error("El ZIP del expediente llegó cortado.");
-      const contenido = metodo === 8 ? inflateRawSync(dato) : dato;
-      archivos.set(ruta, new Uint8Array(contenido));
-      guardado += comprimido;
+      const contenido = new Uint8Array(metodo === 8 ? inflateRawSync(dato) : dato);
+      if (op.alGuardar) await op.alGuardar(ruta, contenido);
+      else {
+        archivos.set(ruta, contenido);
+        guardado += comprimido;
+      }
       if (op.pararTras?.(ruta)) return cortar("encontrado");
     } else if (!(await lector.saltar(comprimido))) {
       throw new Error("El ZIP del expediente llegó cortado.");

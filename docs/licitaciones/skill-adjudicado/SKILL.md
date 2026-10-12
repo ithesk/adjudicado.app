@@ -9,7 +9,8 @@ description: >
   "qué cierra hoy/esta semana", "qué hay para trabajar hoy", "analiza el proceso X", "lee el pliego",
   "mira la ficha técnica", "qué producto ponemos", "hazme la oferta técnica", "ficha técnica con
   nuestro formato", "necesito el cronograma / la carta / la matriz", "súbelo a adjudicado", "por qué
-  perdimos / ganamos", "quién ganó", "analiza el resultado", "compara las ofertas", o cualquier
+  perdimos / ganamos", "quién ganó", "analiza el resultado", "compara las ofertas", "cómo nos va",
+  "estadísticas", "quién nos gana", o cualquier
   código de proceso (p. ej. OGTIC-CCC-CP-2026-0011). Reemplaza a dgcp-oportunidades-scanner,
   dgcp-daily-pipeline, expediente-rd-analyzer y licitacion-rd-analyzer. Requiere el conector
   "adjudicado".
@@ -108,37 +109,49 @@ Tampoco guardes sin que el usuario lo sepa: di qué vas a dejar en la app.
 ### Analizar el resultado: por qué ganamos o perdimos
 
 Cuando el proceso ya abrió sobres o se adjudicó, el portal publica el **expediente completo**: las
-ofertas de todos los oferentes, el acta de apertura, los informes periciales, el acta de adjudicación y
-los mensajes. Con eso se explica el resultado con evidencia, no con suposiciones.
+ofertas de todos, actas, informes periciales, adjudicación y mensajes. adjudicado.app lo baja **una
+vez**, lo transcribe (OCR por tramos, tablas como tablas), lo analiza y lo guarda; las siguientes
+consultas son inmediatas.
 
-1. `resultado_proceso` (tarda 15-60 s): ofertas ordenadas por precio con la **nuestra marcada**,
-   adjudicatarios y montos, el **texto** del acta de adjudicación, informes, acta de apertura, lista de
-   llegada, el **resumen de cada oferta** (precio por artículo y lotes contestados) y los mensajes, más
-   la lista de archivos que subió cada oferente.
-2. `leer_expediente` para lo que haga falta comparar: nuestra oferta técnica y la del ganador, la carta
-   o credencial que descalificó a alguien, la ficha del producto que ofertó el ganador. Usa la ruta
-   exacta que dio `resultado_proceso`.
-3. Entrega el informe en el chat (y en Word/PDF si el usuario lo quiere):
+1. `resultado_proceso`. Trae siempre lo de la API (ofertas por precio con la **nuestra marcada**,
+   adjudicaciones). La primera vez el expediente tarda 1-5 min: si `expediente.estado` no es `listo`,
+   dile al usuario que se está preparando, adelanta lo que ya dice la API y **vuelve a llamar** en 1-2
+   min. Listo, trae:
+   - `analisis_expediente`: quién ganó cada ítem y por cuánto, habilitados y motivos (preliminar y
+     definitiva), subsanaciones pedidas y si se respondieron, precio por ítem de cada oferente,
+     requisitos del pliego, desiertos. Cada dato con su fuente.
+   - `nuestra_comparacion`: cada requisito del pliego frente a lo que **subimos** (sí / no / dudoso),
+     ítem por ítem frente al ganador, causa, explicación, lecciones y patrones sugeridos.
+   - el texto de actas e informes y los archivos de cada oferente.
+2. `leer_expediente` para verificar o profundizar: la oferta técnica del ganador, la carta que faltó, un
+   mensaje de subsanación. Usa la ruta exacta que dio `resultado_proceso`.
+3. Entrega el informe (en el chat; Word/PDF si lo pide):
+   - **Resultado en una línea**: ganado, parcial, perdido, desierto o cancelado; por lote/ítem si aplica.
+   - **Cuadro**: oferente, monto, habilitado o no (y por qué), ítems adjudicados, diferencia con el
+     ganador (RD$ y %). Si hay ítems/lotes, por ítem: el total de la API mezcla ítems.
+   - **Por qué**: la causa y la evidencia, citando documento y página.
+   - **Frente al pliego**: lo que pedía y no presentamos (de `nuestra_comparacion.cumplimiento`).
+   - **Nosotros frente al ganador**: precio por ítem, producto ofertado.
+   - **Qué hacer distinto**: acciones concretas.
+4. **Cerrar el ciclo, con su confirmación**: *"¿Lo guardo? Paso el proceso a perdido, dejo el informe en
+   sus notas y anoto para PROINDUSTRIA: exige línea de crédito del 50 %."* Si dice que sí,
+   `guardar_resultado` (informe + estado) y `guardar_patron` por cada patrón que apruebe.
 
-   - **Resultado en una línea**: ganado, perdido, desierto o cancelado; por lote si hay lotes.
-   - **Cuadro de ofertas**: lugar, oferente, monto, cumple / no cumple, adjudicado y diferencia con el
-     ganador (RD$ y %). Si hay lotes, por lote: el total de la API mezcla lotes.
-   - **Por qué**: la causa principal y la evidencia, citando el documento ("Acta de adjudicación, p. 2:
-     *No subsanó: carta de distribuidor*"). Causas típicas: precio, descalificación técnica, credencial
-     o requisito no subsanable, subsanación no atendida, lote no contestado, fuera de plazo.
-   - **Nosotros frente al ganador**: precio por artículo (del resumen de cada oferta), producto y marca
-     ofertados, documentos presentados y faltantes.
-   - **Qué hacer distinto**: acciones concretas para la próxima (precio objetivo, carta que hay que
-     conseguir antes, documento que faltó, presentar antes de la hora…).
+Reglas de este análisis:
+- El análisis lo hizo un modelo sobre OCR: cifras y nombres críticos, confírmalos en el texto de
+  `documentos_clave` o con `leer_expediente` antes de afirmarlos. Si el acta no dice el motivo, dilo.
+- La lista de archivos dice qué subió cada uno, no si cumplía: lo dice el informe pericial.
+- Un oferente sin archivos pudo ofertar en papel (mira `tipo_oferta`).
 
-   Si ganamos, el mismo informe sirve para saber **por cuánto** y qué no conviene cambiar.
+### Cómo nos va: estadísticas y novedades
 
-Reglas propias de este análisis:
-- Si el acta o el informe no dicen el motivo, dilo así; no lo deduzcas del precio sin avisar.
-- La lista de archivos dice qué subió cada uno, no si cumplía: el que cumple lo dice el informe pericial.
-- Un oferente sin archivos en el expediente pudo ofertar en papel (mira `tipo_oferta`).
-- Lo recurrente de la institución que salga (*"el MEM descalifica sin carta de distribuidor"*) propónselo
-  al usuario para `guardar_patron`; no lo guardes sin que lo confirme.
+Un cron diario busca en la DGCP **todas nuestras ofertas** (por nuestro RPE), registra el resultado de
+cada proceso, pasa a «adjudicado» o «perdido» los que estaban abiertos en la app y analiza a fondo lo
+reciente. `estadisticas_licitaciones` lo resume: tasa de éxito, monto ofertado y ganado, causas de
+pérdida, instituciones, **quién nos gana y por cuánto**, y las **novedades** (resultados nuevos desde la
+última consulta; las marca como vistas). Úsala con "cómo nos va", "quién nos gana", y **al empezar el
+día** ("qué hay para trabajar hoy"): primero las novedades, luego las oportunidades. Ofrece el informe
+de las novedades perdidas.
 
 ---
 
@@ -199,7 +212,8 @@ discreta al final (`🧠 Guardado para el equipo: …`); si no, silencio.
 | La API de la DGCP no responde | Dilo; reintenta; como último recurso busca en la web. |
 | "No encontré el documento" | Usa el número de la lista que trae el error. |
 | Escaneado de más de 15 páginas | Pide al usuario que adjunte el PDF en el chat. |
-| `resultado_proceso` sin expediente o cortado por tiempo | El portal pudo ir lento: reintenta; con lo de la API (ofertas y contratos) ya se puede adelantar. |
+| `resultado_proceso`: expediente «pendiente» o «procesando» | Se está preparando: adelanta lo de la API y vuelve a llamar en 1-2 min. |
+| Expediente en «error» | Dilo (trae el motivo); con la API se puede adelantar. Se reintenta solo al día siguiente. |
 | La API no trae ofertas | Aún no se abrieron los sobres; el análisis se hace después de la apertura. |
 | Archivo `.rar` en una oferta | No se lee aquí: pide al usuario que lo extraiga y adjunte. |
 | `generar_oferta_tecnica` dice que falta algo | Complétalo (`actualizar_items`, `importar_proceso` con `oferta_tecnica`) y vuelve a generar. |

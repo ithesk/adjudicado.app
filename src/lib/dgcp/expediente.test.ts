@@ -47,6 +47,19 @@ describe("recorrerZip", () => {
     expect(r.entradas.some((e) => e.ruta.startsWith("6_"))).toBe(false);
   });
 
+  it("con alGuardar entrega cada archivo y no acumula", async () => {
+    const entregados: string[] = [];
+    const r = await recorrerZip(enTrozos(zipDePrueba("DEFLATE")), {
+      guardar: () => true,
+      alGuardar: async (ruta, contenido) => {
+        entregados.push(`${ruta}:${contenido.length}`);
+      },
+    });
+    expect(r.archivos.size).toBe(0);
+    expect(entregados).toContain("3_Ofertas/Acme, SRL/DO1_DOC_1_Oferta.pdf:5000");
+    expect(entregados.length).toBe(5);
+  });
+
   it("respeta el tope de lo guardado", async () => {
     const r = await recorrerZip(enTrozos(zipDePrueba("STORE")), { guardar: () => true, maxGuardado: 100 });
     expect(r.archivos.has("3_Ofertas/Acme, SRL/DO1_DOC_1_Oferta.pdf")).toBe(false);

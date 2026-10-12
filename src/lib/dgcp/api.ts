@@ -184,6 +184,17 @@ export async function listarOfertas(codigo: string): Promise<DgcpOferta[]> {
   return r.filter((o) => o.codigo_proceso === codigo);
 }
 
+// Todas las ofertas de un proveedor (por su RPE), para seguir sus resultados.
+export async function listarOfertasDe(rpe: string): Promise<DgcpOferta[]> {
+  const todas: DgcpOferta[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const lote = await pedir<DgcpOferta>(`/ofertas?rpe=${encodeURIComponent(rpe)}&limit=1000&page=${page}`, 40_000);
+    todas.push(...lote.filter((o) => String(o.rpe) === String(rpe)));
+    if (lote.length < 1000) break;
+  }
+  return todas;
+}
+
 // Un contrato/orden por adjudicatario (y por lote, si se adjudicó por lotes).
 export async function listarContratos(codigo: string): Promise<DgcpContrato[]> {
   const r = await pedir<DgcpContrato>(`/contratos?proceso=${encodeURIComponent(codigo)}&limit=500`);
