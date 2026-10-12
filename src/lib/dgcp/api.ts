@@ -1,5 +1,5 @@
 // Cliente de la API de datos abiertos de la DGCP (datosabiertos.dgcp.gob.do).
-// Sin auth y sin imports de servidor de la app: solo fetch.
+// Sin auth y sin imports de servidor de la app (las descargas del portal, por portal.ts).
 //
 // Lo que se aprendió probándola (oct-2026), para no volver a tropezar:
 //   - El filtro por proceso es `?proceso=<código>`. `codigo_proceso=` y
@@ -8,8 +8,11 @@
 //   - /procesos/<código>/documentos no existe (404 "Cannot GET").
 //   - Las URL de los documentos (comunidad.comprasdominicana.gob.do/Public/
 //     Archive/RetrieveFile) se descargan SIN login.
-//   - El certificado del portal falla a veces la verificación; Node lo
-//     acepta hoy, pero si un día no, el error sale con el host para saberlo.
+//   - El portal sirve el certificado sin la cadena intermedia: las descargas
+//     van por portal.ts, que la completa (sin apagar la verificación).
+//   - /ofertas y /contratos también filtran con `?proceso=`.
+
+import { bytesPortal } from "./portal";
 
 const BASE = "https://datosabiertos.dgcp.gob.do/api-dgcp/v1";
 
@@ -56,6 +59,21 @@ interface Respuesta<T> {
   payload: { content: T[] | null; message?: string };
 }
 
+// La API manda las fechas en hora de RD pero marcadas como UTC («Z»):
+// el cierre de las 15:00 del portal llega como "…T15:00:00Z" (comprobado
+// oct-2026 contra el portal y los pliegos de INTRANT, Hacienda y el
+// Ayuntamiento de Santiago). Se corrige aquí, una sola vez: la «Z» pasa a
+// "-04:00" (RD no tiene horario de verano).
+export function fechasEnHoraRd<T>(fila: T): T {
+  const r = { ...fila } as Record<string, unknown>;
+  for (const [k, v] of Object.entries(r)) {
+    if (k.startsWith("fecha") && typeof v === "string" && /T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/.test(v)) {
+      r[k] = v.replace(/Z$/, "-04:00");
+    }
+  }
+  return r as T;
+}
+
 async function pedir<T>(ruta: string, timeoutMs = 25_000): Promise<T[]> {
   const res = await fetch(`${BASE}${ruta}`, {
     signal: AbortSignal.timeout(timeoutMs),
@@ -67,7 +85,7 @@ async function pedir<T>(ruta: string, timeoutMs = 25_000): Promise<T[]> {
   if (j.hasError) {
     throw new Error(`La API de la DGCP devolvió error en ${ruta}: ${j.payload?.message ?? "sin detalle"}`);
   }
-  return j.payload?.content ?? [];
+  return (j.payload?.content ?? []).map(fechasEnHoraRd);
 }
 
 // TODOS los procesos abiertos («Proceso publicado»). La API filtra por
@@ -123,19 +141,51 @@ export async function listarArticulos(codigo: string): Promise<DgcpArticulo[]> {
 
 const MAX_DESCARGA_MB = 40;
 
+// Va por portal.ts: el portal sirve su certificado sin la cadena intermedia y
+// fetch de Node lo rechaza (UNABLE_TO_VERIFY_LEAF_SIGNATURE).
 export async function descargarDocumento(url: string): Promise<{ bytes: Uint8Array; tipo: string }> {
-  const host = new URL(url).hostname;
-  if (!host.endsWith("comprasdominicana.gob.do") && !host.endsWith("dgcp.gob.do")) {
-    throw new Error(`Solo se descargan documentos del portal de la DGCP (no de ${host}).`);
-  }
-  const res = await fetch(url, { signal: AbortSignal.timeout(45_000), cache: "no-store" });
-  if (!res.ok) throw new Error(`El portal respondió ${res.status} al descargar el documento.`);
-  const largo = Number(res.headers.get("content-length") ?? 0);
-  if (largo > MAX_DESCARGA_MB * 1024 * 1024) {
-    throw new Error(`El documento pesa ${(largo / 1048576).toFixed(0)} MB; el tope es ${MAX_DESCARGA_MB} MB.`);
-  }
-  return {
-    bytes: new Uint8Array(await res.arrayBuffer()),
-    tipo: res.headers.get("content-type") ?? "application/octet-stream",
-  };
+  const { bytes, tipo } = await bytesPortal(url, MAX_DESCARGA_MB * 1024 * 1024);
+  return { bytes, tipo: tipo || "application/octet-stream" };
+}
+
+// ===== Resultado de un proceso ya abierto =====
+
+export interface DgcpOferta {
+  id_oferta: string;
+  codigo_proceso: string;
+  rpe: string | null;
+  razon_social: string;
+  nombre_oferta: string | null;
+  valor_oferta: number | null;
+  estado_oferta: string | null;
+  estado_evaluacion: string | null;
+  tipo_oferta: string | null;
+  fecha_entrega_oferta: string | null;
+}
+
+export interface DgcpContrato {
+  codigo_contrato: string;
+  codigo_proceso: string;
+  estado_contrato: string | null;
+  estado_adjudicacion: string | null;
+  fecha_adjudicacion: string | null;
+  divisa: string | null;
+  valor_contratado: number | null;
+  rpe: string | null;
+  razon_social: string;
+  url_contrato: string | null;
+}
+
+// Las ofertas recibidas (quién, cuánto, cuándo). OJO: `estado_evaluacion`
+// suele quedarse en «Pendiente» aunque el proceso esté adjudicado; el
+// resultado real está en el acta de adjudicación del expediente.
+export async function listarOfertas(codigo: string): Promise<DgcpOferta[]> {
+  const r = await pedir<DgcpOferta>(`/ofertas?proceso=${encodeURIComponent(codigo)}&limit=500`);
+  return r.filter((o) => o.codigo_proceso === codigo);
+}
+
+// Un contrato/orden por adjudicatario (y por lote, si se adjudicó por lotes).
+export async function listarContratos(codigo: string): Promise<DgcpContrato[]> {
+  const r = await pedir<DgcpContrato>(`/contratos?proceso=${encodeURIComponent(codigo)}&limit=500`);
+  return r.filter((c) => c.codigo_proceso === codigo);
 }

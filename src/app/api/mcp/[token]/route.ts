@@ -14,9 +14,10 @@ import { HERRAMIENTAS, type CtxHerramienta } from "@/lib/mcp/herramientas";
 import { atender } from "@/lib/mcp/protocolo";
 
 export const runtime = "nodejs";
-// Escanear 7 páginas de la DGCP o bajar un pliego de 5 MB cabe de sobra,
-// pero el portal a veces va lento.
-export const maxDuration = 60;
+// Escanear la DGCP o bajar un pliego cabe en un minuto, pero resultado_proceso
+// y leer_expediente recorren el expediente completo (100 MB o más) y pueden
+// transcribir actas escaneadas: 300 s (tope de Vercel con Fluid compute).
+export const maxDuration = 300;
 
 function noPermitido() {
   return new NextResponse(null, { status: 405, headers: { Allow: "POST" } });

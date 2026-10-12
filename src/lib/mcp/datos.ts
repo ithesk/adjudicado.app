@@ -41,6 +41,16 @@ export async function capacidades(ctx: Ctx) {
   };
 }
 
+// Lo justo para reconocer nuestra oferta entre las de un proceso.
+export async function empresaBasica(ctx: Ctx) {
+  const { data } = await ctx.supabase
+    .from("empresa_perfil")
+    .select("nombre_legal, rnc, rpe")
+    .eq("org_id", ctx.orgId)
+    .maybeSingle();
+  return data as { nombre_legal: string | null; rnc: string | null; rpe: string | null } | null;
+}
+
 export async function perfilEmpresa(ctx: Ctx) {
   const [perfil, firmantes, docs, caps] = await Promise.all([
     ctx.supabase
