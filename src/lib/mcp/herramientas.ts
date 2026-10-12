@@ -7,6 +7,7 @@
 // y la memoria institucional (patrones por entidad) vive en la base, no en
 // la memoria de un chat: la ve todo el equipo y ver_proceso la trae sola.
 
+import { createHash } from "node:crypto";
 import PizZip from "pizzip";
 import { z } from "zod";
 import * as dgcp from "@/lib/dgcp/api";
@@ -102,6 +103,14 @@ async function textoLegible(
     };
   }
   const transcrito = await transcribirPdf(Buffer.from(bytes).toString("base64"));
+  // El modelo a veces se niega («Lo siento, no puedo transcribir…»): eso no es el documento.
+  if (transcrito.length < 300 && /no puedo|lo siento|can.?t assist|cannot|unable to|i.?m sorry/i.test(transcrito)) {
+    return {
+      ...texto,
+      ocr: false,
+      aviso: "PDF escaneado que el OCR no quiso transcribir. Pide al usuario que lo adjunte en el chat.",
+    };
+  }
   const paginas = transcrito.split(/^-{3}\s*p[aá]gina\s+\d+\s*-{3}\s*$/im).map((p) => p.trim()).filter(Boolean);
   return { ...texto, paginas: paginas.length ? paginas : [transcrito], ocr: true };
 }
@@ -366,8 +375,16 @@ export const HERRAMIENTAS: Herramienta[] = [
       const nuestraCarpeta = Object.keys(porOferente).find((n) => esNuestra({ razon_social: n })) ?? null;
       const rutaNuestra = (ruta: string) => !!nuestraCarpeta && partesRuta(ruta).oferente === nuestraCarpeta;
 
-      // Texto de los documentos clave, por prioridad y con tope total.
-      const claves = [...(expediente?.archivos ?? new Map<string, Uint8Array>())].sort(
+      // Texto de los documentos clave, por prioridad y con tope total. El
+      // portal repite archivos idénticos (la misma notificación subida dos
+      // veces, el acta copiada en 7_Contratos): se leen una vez.
+      const vistos = new Set<string>();
+      const claves = [...(expediente?.archivos ?? new Map<string, Uint8Array>())]
+        .filter(([, bytes]) => {
+          const huella = createHash("sha1").update(bytes).digest("hex");
+          return !vistos.has(huella) && !!vistos.add(huella);
+        })
+        .sort(
         ([a], [b]) => prioridadClave(a, rutaNuestra) - prioridadClave(b, rutaNuestra),
       );
       const leidos = await Promise.all(
