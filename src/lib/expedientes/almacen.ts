@@ -16,8 +16,11 @@ export interface ArchivoExpediente {
   sha1: string;
   /** El binario está en storage ({codigo}/{sha1}.bin). Los muy grandes solo se listan. */
   guardado: boolean;
-  /** listo: hay texto ({codigo}/{sha1}.json) · escaneado: falta OCR · ilegible: no es texto · grande: no se guardó */
-  texto: "listo" | "escaneado" | "ilegible" | "grande";
+  /**
+   * listo: hay texto ({codigo}/{sha1}.json) · escaneado: falta OCR · ilegible: no es texto ·
+   * grande: no se guardó · sin_procesar: guardado, el texto se extrae al pedirlo
+   */
+  texto: "listo" | "escaneado" | "ilegible" | "grande" | "sin_procesar";
   paginas?: number;
   ocr?: boolean;
   /** El OCR se intentó y no salió (negativa del modelo, error): no reintentar en bucle. */
