@@ -18,7 +18,7 @@ export interface ArchivoExpediente {
   guardado: boolean;
   /**
    * listo: hay texto ({codigo}/{sha1}.json) · escaneado: falta OCR · ilegible: no es texto ·
-   * grande: no se guardó · sin_procesar: guardado, el texto se extrae al pedirlo
+   * grande: no se guardó al bajar (se trae del portal al pedirlo) · sin_procesar: guardado, el texto se extrae al pedirlo
    */
   texto: "listo" | "escaneado" | "ilegible" | "grande" | "sin_procesar";
   paginas?: number;

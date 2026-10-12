@@ -3,7 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import type { DgcpContrato, DgcpOferta } from "@/lib/dgcp/api";
 import { hayQueRefrescar, type FilaExpediente } from "./almacen";
 import { esNegativa, partirPdf, separarPaginas } from "./ocr";
-import { esPliego, prioridad } from "./preparar";
+import { esPliego, guardarAlBajar, prioridad } from "./preparar";
 import { claveEmpresa, estadisticas, mismoOferente, resultadoLigero } from "./resultados";
 import { coincideRuta } from "./servicio";
 
@@ -138,6 +138,14 @@ describe("caché del expediente", () => {
     expect([...rutas].sort((a, b) => prioridad(a) - prioridad(b))[0]).toBe("6_Adjudicacion/Acta.pdf");
     expect(esPliego("1_Publicaciones/Adjuntos/DO1_CDOC_1_Ficha Técnica - Drones.pdf")).toBe(true);
     expect(esPliego("1_Publicaciones/Adjuntos/Certificacion de fondos.pdf")).toBe(false);
+  });
+
+  it("al bajar guarda lo clave y lo chico; lo grande solo se lista", () => {
+    const MB = 1024 * 1024;
+    expect(guardarAlBajar("6_Adjudicacion/Acta.pdf", 20 * MB)).toBe(true);
+    expect(guardarAlBajar("3_Ofertas/Acme/DO1_DOC_1_Oferta Técnica.pdf", 2 * MB)).toBe(true);
+    expect(guardarAlBajar("3_Ofertas/Acme/DO1_DOC_2_Estatutos.pdf", 9 * MB)).toBe(false);
+    expect(guardarAlBajar("6_Adjudicacion/Enorme.pdf", 60 * MB)).toBe(false);
   });
 
   it("encuentra un archivo por palabras de su ruta", () => {
