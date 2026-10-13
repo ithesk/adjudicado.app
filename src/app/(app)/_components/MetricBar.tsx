@@ -105,12 +105,17 @@ export default function MetricBar({ ordenes }: { ordenes: OrdenConItems[] }) {
         {elegidas.map((c) => {
           const v = valorMetrica(c, ordenes);
           const activo = filtroActivo === c.key;
+          // Las dos lecturas siempre: la principal en grande y la otra
+          // debajo. Un conteo sin su dinero (o al revés) obligaba a abrir
+          // la tabla y sumar a mano.
+          const ordenesTxt = `${v.n} orden${v.n === 1 ? "" : "es"}`;
           return (
             <Metrica
               key={c.key}
               href={activo ? "/" : `/?filtro=${c.key}`}
               label={c.label}
-              valor={c.fmt === "monto" ? formatRD(v) : String(v)}
+              valor={c.principal === "monto" ? formatRD(v.monto) : String(v.n)}
+              secundario={c.principal === "monto" ? ordenesTxt : formatRD(v.monto)}
               tono={c.tono?.(v)}
               activo={activo}
             />
@@ -125,12 +130,14 @@ function Metrica({
   href,
   label,
   valor,
+  secundario,
   tono,
   activo,
 }: {
   href: string;
   label: string;
   valor: string;
+  secundario: string;
   tono?: TonoMetrica;
   activo: boolean;
 }) {
@@ -142,7 +149,10 @@ function Metrica({
     <Link
       href={href}
       title={activo ? "Quitar filtro" : `Filtrar: ${label}`}
-      className={`block px-4 py-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${
+      // min-w-0: una celda de grid no encoge por debajo de su contenido, y
+      // un monto en mono a 390px ensanchaba la fila entera fuera de la
+      // pantalla en vez de recortarse.
+      className={`block min-w-0 px-4 py-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${
         activo ? "bg-primary/5 ring-1 ring-inset ring-primary" : "hover:bg-surface-2"
       }`}
     >
@@ -152,10 +162,15 @@ function Metrica({
           {label}
         </span>
       </dt>
-      <dd
-        className={`mt-1 truncate font-mono text-lg font-semibold tracking-tight tabular-nums sm:text-xl ${color}`}
-      >
-        {valor}
+      <dd className="mt-1 min-w-0">
+        <span
+          className={`block truncate font-mono text-lg font-semibold tracking-tight tabular-nums sm:text-xl ${color}`}
+        >
+          {valor}
+        </span>
+        <span className="block truncate font-mono text-[11px] tabular-nums text-muted">
+          {secundario}
+        </span>
       </dd>
     </Link>
   );
