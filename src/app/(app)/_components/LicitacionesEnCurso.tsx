@@ -110,10 +110,19 @@ export default function LicitacionesEnCurso({
                   </span>
                   <span
                     className="w-[84px] shrink-0 text-right font-mono text-[12.5px] tabular-nums"
-                    title={v.monto !== null ? formatRD(v.monto) : "Sin cotizar"}
+                    title={
+                      v.monto !== null
+                        ? formatRD(v.monto)
+                        : v.presupuesto !== null
+                          ? `Sin cotizar. Presupuesto de la entidad: ${formatRD(v.presupuesto)}`
+                          : "Sin cotizar"
+                    }
                   >
                     {v.monto !== null ? (
                       <span className="text-ink">{formatCorto(v.monto)}</span>
+                    ) : v.presupuesto !== null ? (
+                      // Sin cotizar aún: el presupuesto de la entidad como referencia.
+                      <span className="text-[11px] text-muted">ref. {formatCorto(v.presupuesto)}</span>
                     ) : (
                       <span className="text-[11px] text-muted">sin cotizar</span>
                     )}

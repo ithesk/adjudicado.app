@@ -138,6 +138,23 @@ export default function DatosProceso({
           />
         </label>
 
+        <label className="w-40 text-[12.5px] text-muted">
+          Presupuesto entidad
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="monto estimado DGCP"
+            title="El monto estimado del portal: la referencia de cuánto vale el proceso mientras no se cotiza"
+            defaultValue={proceso.monto_estimado ?? ""}
+            onBlur={(e) => {
+              const v = e.target.value === "" ? null : Number(e.target.value);
+              if (v !== proceso.monto_estimado) autosave({ monto_estimado: v });
+            }}
+            className={`${inputBase} mt-1 text-right font-mono`}
+          />
+        </label>
+
         <label className="w-32 text-[12.5px] text-muted">
           Tasa USD→DOP
           <input

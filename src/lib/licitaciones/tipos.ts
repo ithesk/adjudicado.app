@@ -100,6 +100,8 @@ export interface EmpresaPerfil {
   margen_pct: number;
   margen_modo: "markup" | "margen";
   itbis_pct: number;
+  // Meta anual de ventas (RD$ de órdenes recibidas en el año); null = sin meta.
+  meta_anual: number | null;
   updated_at: string;
 }
 
@@ -126,6 +128,9 @@ export interface LicProceso {
   plazo_pago_dias: number | null;
   cierre: string | null;
   estado: EstadoLicitacion;
+  // Presupuesto de la entidad (monto estimado de la DGCP): la referencia
+  // mientras no se cotiza.
+  monto_estimado: number | null;
   tasa_usd_dop: number | null;
   margen_pct: number | null;
   itbis_pct: number | null;

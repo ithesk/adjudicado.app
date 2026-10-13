@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import { listarActividad, listarOrdenes } from "@/lib/queries";
 import { CabeceraPagina, Hoja, btnPrimary } from "@/components/ui";
 import { getMiembro } from "@/lib/auth";
-import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
+import { ESTADO_LABEL, esViva, normalizarEntidad, type Estado } from "@/lib/types";
 import { metricaPorKey } from "@/lib/metricas";
 import {
   listarProcesos,
@@ -18,6 +18,7 @@ import TriageTable from "./_components/TriageTable";
 import VistaBandeja from "./_components/VistaBandeja";
 import ActividadReciente from "./_components/ActividadReciente";
 import DondeEstaElDinero from "./_components/DondeEstaElDinero";
+import QuienNosDebe from "./_components/QuienNosDebe";
 import LicitacionesEnCurso from "./_components/LicitacionesEnCurso";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +26,9 @@ export const dynamic = "force-dynamic";
 export default async function TableroPage({
   searchParams,
 }: {
-  searchParams: Promise<{ estado?: string; filtro?: string }>;
+  searchParams: Promise<{ estado?: string; filtro?: string; institucion?: string }>;
 }) {
-  const { estado, filtro } = await searchParams;
+  const { estado, filtro, institucion } = await searchParams;
   // Todo en paralelo: la bandeja ya cuenta las dos mitades del trabajo
   // (órdenes y licitaciones) y en fila sumaría las latencias.
   const [ordenes, miembro, actividad, procesos, perfil, subsanaciones, entidades] =
@@ -46,19 +47,29 @@ export default async function TableroPage({
     entidades.map((e) => [e.id, { nombre: e.nombre, siglas: e.siglas }]),
   );
 
-  // El filtro puede venir de una métrica (?filtro=) o de un estado (?estado=).
+  // El filtro puede venir de una métrica (?filtro=), de un estado (?estado=)
+  // o de una institución (?institucion=, desde «Quién nos debe»: sus
+  // órdenes vivas).
   const metrica = metricaPorKey(filtro);
-  const hayFiltro = Boolean(metrica || estado);
+  const hayFiltro = Boolean(metrica || estado || institucion);
   const titulo = metrica
     ? metrica.label
     : estado
       ? ESTADO_LABEL[estado as Estado]
-      : "Órdenes vivas";
+      : institucion
+        ? institucion
+        : "Órdenes vivas";
   const lista = metrica
     ? ordenes.filter(metrica.predicado)
     : estado
       ? ordenes.filter((o) => o.estado === estado)
-      : ordenes.filter((o) => esViva(o.estado));
+      : institucion
+        ? ordenes.filter(
+            (o) =>
+              esViva(o.estado) &&
+              normalizarEntidad(o.institucion ?? "Sin institución") === normalizarEntidad(institucion),
+          )
+        : ordenes.filter((o) => esViva(o.estado));
   const cerradas = hayFiltro ? [] : ordenes.filter((o) => !esViva(o.estado));
 
   return (
@@ -68,7 +79,13 @@ export default async function TableroPage({
     <Hoja ancho="mesa" className="space-y-6">
       <CabeceraPagina
         titulo="Bandeja"
-        descripcion={`${lista.length} orden${lista.length === 1 ? "" : "es"} ${hayFiltro ? `en ${titulo.toLowerCase()}` : "vivas"} — el trabajo del día, ordenado por urgencia.`}
+        descripcion={`${lista.length} orden${lista.length === 1 ? "" : "es"} ${
+          institucion
+            ? `vivas de ${titulo}`
+            : hayFiltro
+              ? `en ${titulo.toLowerCase()}`
+              : "vivas"
+        } — el trabajo del día, ordenado por urgencia.`}
         acciones={
           <Link href="/orden/nueva" className={btnPrimary()}>
             <Plus className="h-4 w-4" strokeWidth={2.4} aria-hidden />
@@ -82,10 +99,13 @@ export default async function TableroPage({
           licitaciones con reloj) solo sin filtro: con uno puesto, la persona
           vino a ver UNA lista y lo demás la aleja de ella. */}
       {!hayFiltro && (ordenes.length > 0 || procesos.length > 0) && (
-        <div className="grid gap-4 xl:grid-cols-2">
-          <DondeEstaElDinero ordenes={ordenes} />
-          <LicitacionesEnCurso resumen={resumenLic} entidades={entidadPorId} />
-        </div>
+        <>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <DondeEstaElDinero ordenes={ordenes} metaAnual={perfil?.meta_anual ?? null} />
+            <LicitacionesEnCurso resumen={resumenLic} entidades={entidadPorId} />
+          </div>
+          <QuienNosDebe ordenes={ordenes} />
+        </>
       )}
 
       {ordenes.length === 0 ? (

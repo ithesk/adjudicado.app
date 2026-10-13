@@ -138,14 +138,43 @@ function Cabecera({
 // la bandeja). Aquí, lo que solo tiene sentido en la lista.
 
 // El monto de la oferta: lo cotizado, con ITBIS. Sin líneas con precio no
-// es «RD$0,00», es «sin cotizar» — un cero diría que la oferta vale nada.
-function MontoOferta({ monto }: { monto: number | undefined }) {
+// es «RD$0,00», es «sin cotizar» — un cero diría que la oferta vale nada;
+// mientras tanto, el presupuesto de la entidad dice cuánto vale el proceso.
+function MontoOferta({
+  monto,
+  presupuesto,
+}: {
+  monto: number | undefined;
+  presupuesto: number | null;
+}) {
   if (monto === undefined) {
-    return <span className="text-[11px] text-muted">sin cotizar</span>;
+    return (
+      <span className="block">
+        <span className="block text-[11px] text-muted">sin cotizar</span>
+        {presupuesto !== null && presupuesto > 0 && (
+          <span
+            className="block font-mono text-[11px] tabular-nums text-muted"
+            title={`Presupuesto de la entidad: ${formatRD(presupuesto)}`}
+          >
+            ref. {formatCorto(presupuesto)}
+          </span>
+        )}
+      </span>
+    );
   }
   return (
-    <span className="font-mono text-[12.5px] font-medium tabular-nums text-ink" title={formatRD(monto)}>
-      {formatCorto(monto)}
+    <span className="block">
+      <span className="font-mono text-[12.5px] font-medium tabular-nums text-ink" title={formatRD(monto)}>
+        {formatCorto(monto)}
+      </span>
+      {presupuesto !== null && presupuesto > 0 && (
+        <span
+          className="block font-mono text-[10.5px] tabular-nums text-muted"
+          title={`Presupuesto de la entidad: ${formatRD(presupuesto)}`}
+        >
+          de {formatCorto(presupuesto)}
+        </span>
+      )}
     </span>
   );
 }
@@ -643,7 +672,7 @@ export default function ProcesosLista({
                     </td>
 
                     <td className="px-3 py-2.5 text-right align-middle">
-                      <MontoOferta monto={montos[p.id]} />
+                      <MontoOferta monto={montos[p.id]} presupuesto={p.monto_estimado} />
                     </td>
 
                     <td className="px-3 py-2.5 align-middle">
@@ -685,7 +714,7 @@ export default function ProcesosLista({
                     <Identidad p={p} ent={ent} sub={sub} conEntidad />
                   </span>
                   <span className="mt-1 block">
-                    <MontoOferta monto={montos[p.id]} />
+                    <MontoOferta monto={montos[p.id]} presupuesto={p.monto_estimado} />
                   </span>
                 </Link>
                 <AccionesFila proceso={p} className="my-2 mr-1 shrink-0" />
