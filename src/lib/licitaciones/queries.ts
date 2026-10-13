@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getMiembro, getUser, orgActivaLigera } from "@/lib/auth";
 import { isDemo } from "@/lib/demo";
 import { ProcesoCanonico, traducirIssue } from "./contrato";
-import { paramsCotizacion, precioBaseUnitario, precioVentaUnitario } from "./cotizador";
+import { paramsCotizacion, precioBaseUnitario, precioVentaUnitario, totalesProceso } from "./cotizador";
 import { requisitoEstandar } from "./requisitos-estandar";
 import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
 import { coberturaPorTipo } from "./cobertura-empresa";
@@ -169,6 +169,39 @@ export async function listarPaquetes(
     .order("version", { ascending: false })
     .limit(5);
   return (data ?? []) as { version: number; storage_path: string; generado_at: string }[];
+}
+
+// Para la lista y la bandeja: el TOTAL de la oferta (con ITBIS) de cada
+// proceso, en una sola consulta sobre todas sus líneas. Solo entran los
+// procesos con alguna línea ofertada y con precio; el resto no aparece en el
+// mapa (= «sin cotizar»), que no es lo mismo que cero.
+export async function montosDeProcesos(
+  procesos: Pick<LicProceso, "id" | "itbis_pct">[],
+  itbisPorDefecto: number,
+): Promise<Record<string, number>> {
+  if (isDemo() || procesos.length === 0) return {};
+  const orgId = await orgActivaLigera();
+  if (!orgId) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lic_item")
+    .select("proceso_id, cantidad, precio_unitario, itbis_modo, ofertamos")
+    .eq("org_id", orgId)
+    .eq("ofertamos", true)
+    .not("precio_unitario", "is", null);
+  const porProceso = new Map<string, LicItem[]>();
+  for (const it of (data ?? []) as LicItem[]) {
+    const lista = porProceso.get(it.proceso_id) ?? [];
+    lista.push(it);
+    porProceso.set(it.proceso_id, lista);
+  }
+  const montos: Record<string, number> = {};
+  for (const p of procesos) {
+    const items = porProceso.get(p.id);
+    if (!items?.length) continue;
+    montos[p.id] = totalesProceso(items, p.itbis_pct ?? itbisPorDefecto).total;
+  }
+  return montos;
 }
 
 // Para la lista: qué procesos tienen una subsanación ABIERTA y su límite —

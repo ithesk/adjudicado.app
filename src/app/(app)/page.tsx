@@ -5,10 +5,20 @@ import { CabeceraPagina, Hoja, btnPrimary } from "@/components/ui";
 import { getMiembro } from "@/lib/auth";
 import { ESTADO_LABEL, esViva, type Estado } from "@/lib/types";
 import { metricaPorKey } from "@/lib/metricas";
+import {
+  listarProcesos,
+  montosDeProcesos,
+  perfilEmpresa,
+  subsanacionesAbiertas,
+} from "@/lib/licitaciones/queries";
+import { listarEntidadesLigero } from "@/lib/entidades/queries";
+import { resumenLicitaciones } from "@/lib/licitaciones/resumen";
 import MetricBar from "./_components/MetricBar";
 import TriageTable from "./_components/TriageTable";
 import VistaBandeja from "./_components/VistaBandeja";
 import ActividadReciente from "./_components/ActividadReciente";
+import DondeEstaElDinero from "./_components/DondeEstaElDinero";
+import LicitacionesEnCurso from "./_components/LicitacionesEnCurso";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +28,23 @@ export default async function TableroPage({
   searchParams: Promise<{ estado?: string; filtro?: string }>;
 }) {
   const { estado, filtro } = await searchParams;
-  const ordenes = await listarOrdenes();
-  const miembro = await getMiembro();
-  const actividad = await listarActividad();
+  // Todo en paralelo: la bandeja ya cuenta las dos mitades del trabajo
+  // (órdenes y licitaciones) y en fila sumaría las latencias.
+  const [ordenes, miembro, actividad, procesos, perfil, subsanaciones, entidades] =
+    await Promise.all([
+      listarOrdenes(),
+      getMiembro(),
+      listarActividad(),
+      listarProcesos(),
+      perfilEmpresa(),
+      subsanacionesAbiertas(),
+      listarEntidadesLigero(),
+    ]);
+  const montos = await montosDeProcesos(procesos, perfil?.itbis_pct ?? 18);
+  const resumenLic = resumenLicitaciones({ procesos, montos, subsanaciones });
+  const entidadPorId = Object.fromEntries(
+    entidades.map((e) => [e.id, { nombre: e.nombre, siglas: e.siglas }]),
+  );
 
   // El filtro puede venir de una métrica (?filtro=) o de un estado (?estado=).
   const metrica = metricaPorKey(filtro);
@@ -53,6 +77,16 @@ export default async function TableroPage({
         }
       />
       <MetricBar ordenes={ordenes} />
+
+      {/* Los dos bloques de inteligencia (dónde está el dinero y las
+          licitaciones con reloj) solo sin filtro: con uno puesto, la persona
+          vino a ver UNA lista y lo demás la aleja de ella. */}
+      {!hayFiltro && (ordenes.length > 0 || procesos.length > 0) && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <DondeEstaElDinero ordenes={ordenes} />
+          <LicitacionesEnCurso resumen={resumenLic} entidades={entidadPorId} />
+        </div>
+      )}
 
       {ordenes.length === 0 ? (
         <EmptyState />

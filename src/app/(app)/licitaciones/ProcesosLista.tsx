@@ -20,7 +20,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowDown,
   ArrowRight,
@@ -32,16 +32,15 @@ import {
   Rows3,
   Search,
 } from "lucide-react";
-import { diasRestantes, nivelUrgencia, type NivelUrgencia } from "@/lib/types";
-import { urgenciaChip, urgenciaDot, textoDias } from "@/lib/ui";
+import { diasRestantes, formatCorto, formatRD, nivelUrgencia } from "@/lib/types";
 import { btnGhost } from "@/components/ui";
 import { coincideTexto } from "@/lib/buscar-texto";
 import { avisoError, avisoOk } from "@/lib/avisos";
 import { actualizarProcesoAction } from "@/lib/actions/licitaciones";
 import DuplicarProceso from "./_components/DuplicarProceso";
 import TableroLicitaciones from "./_components/TableroLicitaciones";
+import { ChipCierre, ChipEstado } from "./_components/Chips";
 import {
-  ESTADO_LIC_CHIP,
   ESTADO_LIC_LABEL,
   ESTADOS_LICITACION,
   MODALIDAD_LABEL,
@@ -73,7 +72,7 @@ const FILTROS: { key: string; label: string; estados: EstadoLicitacion[] | null 
   { key: "cerradas", label: "Perdidas y descartadas", estados: ["perdido", "descartado"] },
 ];
 
-type Orden = { col: "cierre" | "codigo" | "estado"; asc: boolean };
+type Orden = { col: "cierre" | "codigo" | "estado" | "monto"; asc: boolean };
 
 const LS_VISTA = "licitaciones-vista";
 
@@ -135,40 +134,18 @@ function Cabecera({
 }
 
 // ===== Piezas compartidas por la tabla y las tarjetas =====
-// Definirlas una vez evita que las dos presentaciones se desincronicen.
+// Los chips de reloj y etapa viven en ./_components/Chips (también los usa
+// la bandeja). Aquí, lo que solo tiene sentido en la lista.
 
-function ChipCierre({
-  dias,
-  nivel,
-  esSub,
-}: {
-  dias: number | null;
-  nivel: NivelUrgencia;
-  esSub: boolean;
-}) {
+// El monto de la oferta: lo cotizado, con ITBIS. Sin líneas con precio no
+// es «RD$0,00», es «sin cotizar» — un cero diría que la oferta vale nada.
+function MontoOferta({ monto }: { monto: number | undefined }) {
+  if (monto === undefined) {
+    return <span className="text-[11px] text-muted">sin cotizar</span>;
+  }
   return (
-    <span className="flex items-center gap-1.5 whitespace-nowrap">
-      <span className={`h-2 w-2 shrink-0 rounded-full ${urgenciaDot(nivel)}`} aria-hidden />
-      <span
-        className={`rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(nivel)}`}
-        title={esSub ? "Fecha límite de la subsanación abierta" : "Cierre del proceso"}
-      >
-        {textoDias(dias)}
-      </span>
-    </span>
-  );
-}
-
-function ChipEstado({ estado }: { estado: EstadoLicitacion }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium ${ESTADO_LIC_CHIP[estado].chip}`}
-    >
-      <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${ESTADO_LIC_CHIP[estado].dot}`}
-        aria-hidden
-      />
-      {ESTADO_LIC_LABEL[estado]}
+    <span className="font-mono text-[12.5px] font-medium tabular-nums text-ink" title={formatRD(monto)}>
+      {formatCorto(monto)}
     </span>
   );
 }
@@ -332,14 +309,22 @@ export default function ProcesosLista({
   procesos,
   subsanaciones = {},
   entidades = {},
+  montos = {},
 }: {
   procesos: LicProceso[];
   // proceso_id → fecha límite de su subsanación ABIERTA: ese reloj manda.
   subsanaciones?: Record<string, string>;
   entidades?: Record<string, EntidadMini>;
+  // proceso_id → total de la oferta (con ITBIS); ausente = sin cotizar.
+  montos?: Record<string, number>;
 }) {
+  const sp = useSearchParams();
   const [q, setQ] = useState("");
-  const [filtro, setFiltro] = useState("todas");
+  // El filtro inicial puede venir de un clic en el resumen (?filtro=).
+  const [filtro, setFiltro] = useState(() => {
+    const f = sp.get("filtro");
+    return f && FILTROS.some((x) => x.key === f) ? f : "todas";
+  });
   const [orden, setOrden] = useState<Orden>({ col: "cierre", asc: true });
   // Tabla o tablero. La preferencia se recuerda; se lee tras montar para no
   // desajustar la hidratación (el servidor siempre pinta la tabla), igual
@@ -359,18 +344,20 @@ export default function ProcesosLista({
     } catch {}
   }
 
+  // Por filtro: cuántos procesos y cuánto dinero suman (lo cotizado). El
+  // número solo decía «3 sometidas»; con el monto dice qué hay en juego.
   const conteos = useMemo(() => {
-    const m = new Map<string, number>();
+    const m = new Map<string, { n: number; monto: number }>();
     for (const f of FILTROS) {
-      m.set(
-        f.key,
-        f.estados === null
-          ? procesos.length
-          : procesos.filter((p) => f.estados!.includes(p.estado)).length,
-      );
+      const del =
+        f.estados === null ? procesos : procesos.filter((p) => f.estados!.includes(p.estado));
+      m.set(f.key, {
+        n: del.length,
+        monto: del.reduce((s, p) => s + (montos[p.id] ?? 0), 0),
+      });
     }
     return m;
-  }, [procesos]);
+  }, [procesos, montos]);
 
   // Solo el BUSCADOR, sin el filtro por etapa: es lo que alimenta el tablero,
   // donde las columnas YA son las etapas y filtrar por etapa lo dejaría medio
@@ -395,6 +382,15 @@ export default function ProcesosLista({
     const dir = orden.asc ? 1 : -1;
     lista.sort((a, b) => {
       if (orden.col === "codigo") return dir * a.codigo.localeCompare(b.codigo);
+      // monto: sin cotizar al final, se ordene como se ordene.
+      if (orden.col === "monto") {
+        const ma = montos[a.id];
+        const mb = montos[b.id];
+        if (ma === undefined && mb === undefined) return 0;
+        if (ma === undefined) return 1;
+        if (mb === undefined) return -1;
+        return dir * (ma - mb);
+      }
       if (orden.col === "estado")
         return (
           dir *
@@ -417,7 +413,7 @@ export default function ProcesosLista({
       return dir * (da - db);
     });
     return lista;
-  }, [buscados, filtro, orden, subsanaciones]);
+  }, [buscados, filtro, orden, subsanaciones, montos]);
 
   function ordenarPor(col: Orden["col"]) {
     setOrden((prev) =>
@@ -475,7 +471,7 @@ export default function ProcesosLista({
         {vista === "tabla" && (
           <div className="flex flex-wrap gap-1">
             {FILTROS.map((f) => {
-              const nf = conteos.get(f.key) ?? 0;
+              const { n: nf, monto: mf } = conteos.get(f.key) ?? { n: 0, monto: 0 };
               if (f.key !== "todas" && nf === 0) return null;
               return (
                 <button
@@ -490,6 +486,14 @@ export default function ProcesosLista({
                 >
                   {f.label}
                   <span className="font-mono text-[10.5px] text-muted">{nf}</span>
+                  {mf > 0 && (
+                    <span
+                      className="hidden font-mono text-[10.5px] text-muted md:inline"
+                      title={formatRD(mf)}
+                    >
+                      · {formatCorto(mf)}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -581,6 +585,13 @@ export default function ProcesosLista({
                   </th>
                   <th
                     scope="col"
+                    className={`${TH} w-[112px] text-right`}
+                    aria-sort={orden.col === "monto" ? (orden.asc ? "ascending" : "descending") : "none"}
+                  >
+                    <Cabecera col="monto" orden={orden} onOrdenar={ordenarPor}>Oferta</Cabecera>
+                  </th>
+                  <th
+                    scope="col"
                     className={`${TH} w-[148px]`}
                     aria-sort={orden.col === "estado" ? (orden.asc ? "ascending" : "descending") : "none"}
                   >
@@ -631,6 +642,10 @@ export default function ProcesosLista({
                       </span>
                     </td>
 
+                    <td className="px-3 py-2.5 text-right align-middle">
+                      <MontoOferta monto={montos[p.id]} />
+                    </td>
+
                     <td className="px-3 py-2.5 align-middle">
                       <ChipEstado estado={p.estado} />
                     </td>
@@ -668,6 +683,9 @@ export default function ProcesosLista({
                   </span>
                   <span className="mt-1.5 block min-w-0">
                     <Identidad p={p} ent={ent} sub={sub} conEntidad />
+                  </span>
+                  <span className="mt-1 block">
+                    <MontoOferta monto={montos[p.id]} />
                   </span>
                 </Link>
                 <AccionesFila proceso={p} className="my-2 mr-1 shrink-0" />

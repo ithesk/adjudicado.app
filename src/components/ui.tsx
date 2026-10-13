@@ -59,7 +59,7 @@ export function SectionTitle({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-      <h2 className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+      <h2 className="flex shrink-0 items-center gap-2 text-[13px] font-semibold text-ink">
         <Icon className="h-4 w-4 text-muted" strokeWidth={2} aria-hidden />
         {children}
       </h2>

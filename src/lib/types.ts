@@ -472,6 +472,22 @@ export function formatRD(monto: number | null, moneda = "DOP"): string {
   );
 }
 
+// Monto compacto para chips e indicadores donde «RD$1,234,567.89» no cabe:
+// «RD$1,23 MM», «RD$436 mil», «RD$950». La cifra exacta va en el title.
+export function formatCorto(monto: number | null, moneda = "DOP"): string {
+  const valor = Math.abs(monto ?? 0);
+  const signo = (monto ?? 0) < 0 ? "-" : "";
+  const simbolo = moneda === "USD" ? "US$" : "RD$";
+  const num = (v: number, dec: number) =>
+    new Intl.NumberFormat("es-DO", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: dec,
+    }).format(v);
+  if (valor >= 1_000_000) return `${signo}${simbolo}${num(valor / 1_000_000, 2)} MM`;
+  if (valor >= 1_000) return `${signo}${simbolo}${num(valor / 1_000, 0)} mil`;
+  return `${signo}${simbolo}${num(valor, 0)}`;
+}
+
 // Tiempo relativo corto en español ("hace 2 d", "hace 3 h", "ahora").
 export function tiempoRelativo(iso: string): string {
   const ahora = Date.now();
