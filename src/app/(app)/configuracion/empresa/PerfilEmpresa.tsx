@@ -163,6 +163,31 @@ export default function PerfilEmpresa({
                 />
               </label>
             </div>
+          </div>
+
+          <div className="mt-1 border-t border-line pt-3 sm:col-span-2">
+            <p className="mb-2 text-[13px] font-semibold text-ink">Meta del año</p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="text-[12.5px] text-muted">
+                Meta anual de ventas (RD$)
+                <input
+                  type="number"
+                  min={0}
+                  step="1000"
+                  placeholder="sin meta"
+                  defaultValue={perfil?.meta_anual ?? ""}
+                  onBlur={(e) => {
+                    const v = e.target.value === "" ? null : Number(e.target.value) || null;
+                    if (v !== (perfil?.meta_anual ?? null)) autosave({ meta_anual: v });
+                  }}
+                  className={`${inputBase} mt-1 text-right font-mono`}
+                />
+              </label>
+              <p className="self-end pb-2 text-[11.5px] text-muted sm:col-span-2">
+                Órdenes de compra recibidas en el año. La bandeja muestra el % alcanzado en
+                «Dónde está el dinero».
+              </p>
+            </div>
 
             {/* El modo del margen con los DOS números en vivo: la diferencia
                 es plata en cada oferta. Elegir guarda al instante. */}

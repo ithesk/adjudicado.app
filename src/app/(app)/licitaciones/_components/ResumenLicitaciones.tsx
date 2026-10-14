@@ -27,9 +27,17 @@ export default function ResumenLicitaciones({
       secundario:
         r.enTrabajo.monto > 0
           ? `${formatCorto(r.enTrabajo.monto)} cotizado${r.enTrabajo.conMonto < r.enTrabajo.n ? ` en ${r.enTrabajo.conMonto}` : ""}`
-          : r.enTrabajo.n > 0
-            ? "sin cotizar"
-            : "—",
+          : r.enTrabajo.presupuesto > 0
+            ? `presupuesto ${formatCorto(r.enTrabajo.presupuesto)}`
+            : r.enTrabajo.n > 0
+              ? "sin cotizar"
+              : "—",
+      // Con cotización Y presupuesto, el presupuesto va como nota: dice
+      // cuánto vale el tramo según la entidad frente a lo que cotizamos.
+      nota:
+        r.enTrabajo.monto > 0 && r.enTrabajo.presupuesto > 0
+          ? `presupuesto ${formatCorto(r.enTrabajo.presupuesto)}`
+          : null,
       extra: r.listas > 0 ? `${plural(r.listas, "lista", "listas")} para someter` : null,
       tono: "text-ink",
     },
@@ -39,6 +47,10 @@ export default function ResumenLicitaciones({
       valor: formatCorto(r.enJuego.monto),
       title: formatRD(r.enJuego.monto),
       secundario: plural(r.enJuego.n, "sometida", "sometidas"),
+      nota:
+        r.enJuego.presupuesto > 0 && r.enJuego.conMonto < r.enJuego.n
+          ? `presupuesto ${formatCorto(r.enJuego.presupuesto)}`
+          : null,
       extra: r.subsanacion > 0 ? `${r.subsanacion} en subsanación` : null,
       tono: r.subsanacion > 0 ? "text-warn" : "text-primary",
     },
@@ -48,6 +60,7 @@ export default function ResumenLicitaciones({
       valor: formatCorto(r.adjudicadasAnio.monto),
       title: formatRD(r.adjudicadasAnio.monto),
       secundario: plural(r.adjudicadasAnio.n, "adjudicada", "adjudicadas"),
+      nota: null,
       extra: null,
       tono: "text-ok",
     },
@@ -60,6 +73,7 @@ export default function ResumenLicitaciones({
         r.decididas > 0
           ? `${r.adjudicadas.n} de ${plural(r.decididas, "decidida", "decididas")}`
           : "ninguna decidida aún",
+      nota: null,
       extra: null,
       tono: "text-ink",
     },
@@ -91,6 +105,9 @@ export default function ResumenLicitaciones({
             <span className="block truncate font-mono text-[11px] tabular-nums text-muted">
               {c.secundario}
             </span>
+            {c.nota && (
+              <span className="block truncate text-[11px] text-muted">{c.nota}</span>
+            )}
             {c.extra && (
               <span className="block truncate text-[11px] font-medium text-warn">{c.extra}</span>
             )}
