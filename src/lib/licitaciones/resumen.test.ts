@@ -19,6 +19,7 @@ function proceso(p: Partial<LicProceso> & { estado: EstadoLicitacion }): LicProc
     criterio: "menor_precio",
     plazo_pago_dias: null,
     cierre: null,
+    monto_estimado: null,
     tasa_usd_dop: null,
     margen_pct: null,
     itbis_pct: null,
@@ -33,7 +34,7 @@ function proceso(p: Partial<LicProceso> & { estado: EstadoLicitacion }): LicProc
 describe("resumenLicitaciones", () => {
   it("reparte los procesos por tramo con su dinero", () => {
     const ps = [
-      proceso({ estado: "costeo" }), // p1, sin cotizar
+      proceso({ estado: "costeo", monto_estimado: 450 }), // p1, sin cotizar pero con presupuesto
       proceso({ estado: "listo" }), // p2
       proceso({ estado: "sometido" }), // p3
       proceso({ estado: "subsanacion" }), // p4
@@ -48,12 +49,13 @@ describe("resumenLicitaciones", () => {
       subsanaciones: {},
       hoy: HOY,
     });
-    expect(r.enTrabajo).toEqual({ n: 2, monto: 300, conMonto: 1 });
+    expect(r.enTrabajo).toEqual({ n: 2, monto: 300, conMonto: 1, presupuesto: 450, conPresupuesto: 1 });
     expect(r.listas).toBe(1);
-    expect(r.enJuego).toEqual({ n: 2, monto: 1500, conMonto: 2 });
+    expect(r.enJuego).toMatchObject({ n: 2, monto: 1500, conMonto: 2, presupuesto: 0 });
     expect(r.subsanacion).toBe(1);
-    expect(r.adjudicadas).toEqual({ n: 2, monto: 9000, conMonto: 2 });
-    expect(r.adjudicadasAnio).toEqual({ n: 1, monto: 2000, conMonto: 1 });
+    expect(r.adjudicadas).toMatchObject({ n: 2, monto: 9000, conMonto: 2 });
+    expect(r.adjudicadasAnio).toMatchObject({ n: 1, monto: 2000, conMonto: 1 });
+    expect(r.vivos.find((v) => v.id === "p1")?.presupuesto).toBe(450);
     expect(r.perdidas).toBe(1);
     expect(r.decididas).toBe(3);
     expect(r.tasaExito).toBe(67);

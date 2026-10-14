@@ -27,6 +27,7 @@ export default function NuevoProcesoForm({
         objeto: String(fd.get("objeto") || ""),
         modalidad: String(fd.get("modalidad") || "OTRO"),
         cierre: String(fd.get("cierre") || "") || null,
+        monto_estimado: Number(fd.get("monto_estimado")) || null,
         institucion_id: institucionId || null,
         institucion_nueva: institucionId ? null : nombreEntidad.trim() || null,
         adjudicacion: (String(fd.get("adjudicacion")) || "total") as
@@ -103,6 +104,18 @@ export default function NuevoProcesoForm({
             name="cierre"
             required
             className={`${inputBase} mt-1`}
+          />
+        </label>
+
+        <label className="text-[12.5px] text-muted">
+          Presupuesto de la entidad (RD$)
+          <input
+            type="number"
+            name="monto_estimado"
+            min={0}
+            step="0.01"
+            placeholder="monto estimado del portal"
+            className={`${inputBase} mt-1 text-right font-mono`}
           />
         </label>
 

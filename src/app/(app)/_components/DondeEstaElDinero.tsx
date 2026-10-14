@@ -2,7 +2,8 @@
 // barra de métricas da cifras sueltas; esto pone el dinero vivo en UNA
 // línea, de izquierda a derecha, en el orden en que avanza hacia la cuenta
 // (por entregar → sin facturar → facturado → libramiento), y al lado el
-// ritmo: cuánto entró y cuánto se cobró, este mes, este año y mes a mes.
+// ritmo: cuánto entró y cuánto se cobró, este mes y este año, frente al
+// mismo periodo del año pasado y a la meta.
 //
 // Componente de servidor: no tiene estado; cada tramo es un enlace al
 // filtro de la bandeja, así «ver las órdenes de ese tramo» es un clic.
@@ -10,7 +11,7 @@
 import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { Panel, SectionTitle } from "@/components/ui";
-import { dondeEstaElDinero, type TramoDinero } from "@/lib/dinero";
+import { dondeEstaElDinero, type Acumulado, type TramoDinero } from "@/lib/dinero";
 import { formatCorto, formatRD, type Orden } from "@/lib/types";
 
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
@@ -27,9 +28,15 @@ function avisoTramo(t: TramoDinero): { texto: string; tono: string } | null {
   return null;
 }
 
-export default function DondeEstaElDinero({ ordenes }: { ordenes: Orden[] }) {
-  const d = dondeEstaElDinero(ordenes);
-  if (d.vivasN === 0 && d.cobradoAnioN === 0) return null;
+export default function DondeEstaElDinero({
+  ordenes,
+  metaAnual = null,
+}: {
+  ordenes: Orden[];
+  metaAnual?: number | null;
+}) {
+  const d = dondeEstaElDinero(ordenes, { metaAnual });
+  if (d.vivasN === 0 && d.cobradoAnio.n === 0) return null;
 
   const anio = new Date().getFullYear();
   const tope = Math.max(1, ...d.meses.map((m) => Math.max(m.generado, m.cobrado)));
@@ -52,7 +59,7 @@ export default function DondeEstaElDinero({ ordenes }: { ordenes: Orden[] }) {
         Dónde está el dinero
       </SectionTitle>
 
-      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_230px]">
+      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_240px]">
         {/* ===== El embudo del dinero vivo ===== */}
         <div className="min-w-0 space-y-3">
           <div
@@ -112,14 +119,26 @@ export default function DondeEstaElDinero({ ordenes }: { ordenes: Orden[] }) {
 
         {/* ===== El ritmo: lo que entra y lo que se cobra ===== */}
         <div className="min-w-0 space-y-2.5 border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+          <Ritmo label="Cobrado este mes" valor={d.cobradoMes} n={d.cobradoMesN} tono="text-ok" />
           <Ritmo
-            label="Cobrado este mes"
-            valor={d.cobradoMes}
-            n={d.cobradoMesN}
+            label={`Cobrado en ${anio}`}
+            valor={d.cobradoAnio.monto}
+            n={d.cobradoAnio.n}
             tono="text-ok"
+            frente={d.cobradoAnio}
+            anio={anio}
           />
-          <Ritmo label={`Cobrado en ${anio}`} valor={d.cobradoAnio} n={d.cobradoAnioN} tono="text-ok" />
-          <Ritmo label={`Entró en ${anio}`} valor={d.generadoAnio} n={d.generadoAnioN} tono="text-ink" />
+          <Ritmo
+            label={`Entró en ${anio}`}
+            valor={d.generadoAnio.monto}
+            n={d.generadoAnio.n}
+            tono="text-ink"
+            frente={d.generadoAnio}
+            anio={anio}
+          />
+          {d.metaAnual !== null && d.metaPct !== null && (
+            <Meta meta={d.metaAnual} pct={d.metaPct} anio={anio} />
+          )}
 
           <div className="pt-1">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted">
@@ -168,24 +187,72 @@ function Ritmo({
   valor,
   n,
   tono,
+  frente,
+  anio,
 }: {
   label: string;
   valor: number;
   n: number;
   tono: string;
+  // El mismo periodo del año anterior, para decir si vamos mejor o peor.
+  frente?: Acumulado;
+  anio?: number;
 }) {
+  const v = frente?.variacionPct ?? null;
   return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="min-w-0 truncate text-[12px] text-muted">{label}</span>
-      <span className="shrink-0 text-right">
-        <span
-          className={`font-mono text-[14px] font-semibold tabular-nums ${tono}`}
-          title={formatRD(valor)}
-        >
-          {formatCorto(valor)}
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="min-w-0 truncate text-[12px] text-muted">{label}</span>
+        <span className="shrink-0 text-right">
+          <span
+            className={`font-mono text-[14px] font-semibold tabular-nums ${tono}`}
+            title={formatRD(valor)}
+          >
+            {formatCorto(valor)}
+          </span>
+          <span className="ml-1.5 font-mono text-[10.5px] text-muted">{n}</span>
         </span>
-        <span className="ml-1.5 font-mono text-[10.5px] text-muted">{n}</span>
-      </span>
+      </div>
+      {frente && anio && (
+        <p
+          className="truncate text-right text-[10.5px] text-muted"
+          title={`Mismo periodo de ${anio - 1} (1 de enero a hoy): ${formatRD(frente.anterior)} en ${plural(frente.anteriorN, "orden", "órdenes")}`}
+        >
+          {v === null ? (
+            `sin datos de ${anio - 1}`
+          ) : (
+            <>
+              <span className={`font-mono font-medium ${v >= 0 ? "text-ok" : "text-danger"}`}>
+                {v >= 0 ? "▲" : "▼"} {Math.abs(v)} %
+              </span>{" "}
+              frente a {anio - 1} ({formatCorto(frente.anterior)})
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// La meta del año y cuánto va: barra simple, sin dramatismo. Verde al
+// cumplirla; antes, el color de la marca.
+function Meta({ meta, pct, anio }: { meta: number; pct: number; anio: number }) {
+  const cumplida = pct >= 100;
+  return (
+    <div className="min-w-0" title={`Meta ${anio}: ${formatRD(meta)} en órdenes recibidas`}>
+      <div className="flex items-baseline justify-between gap-2 text-[11px]">
+        <span className="truncate text-muted">Meta {anio}</span>
+        <span className={`shrink-0 font-mono font-semibold tabular-nums ${cumplida ? "text-ok" : "text-ink"}`}>
+          {pct} %
+          <span className="ml-1 font-normal text-muted">de {formatCorto(meta)}</span>
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+        <span
+          className={`block h-full rounded-full ${cumplida ? "bg-ok" : "bg-primary"}`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </div>
     </div>
   );
 }

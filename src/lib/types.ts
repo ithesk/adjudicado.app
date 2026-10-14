@@ -37,6 +37,13 @@ export interface Miembro {
   organizacion?: Organizacion;
 }
 
+// Un cambio de estado de la orden, con su fecha real (tabla orden_hist,
+// escrita por trigger). Ordenados del más viejo al más nuevo.
+export interface CambioEstado {
+  estado: Estado;
+  desde: string;
+}
+
 export interface Orden {
   id: string;
   org_id: string;
@@ -72,6 +79,26 @@ export interface Orden {
   creado_por: string | null;
   created_at: string;
   updated_at: string;
+  // Historial de estados (lo carga listarOrdenes). Ausente en órdenes
+  // anteriores al historial o en consultas que no lo piden.
+  hist?: CambioEstado[];
+}
+
+// Desde cuándo está la orden en su racha actual dentro de `estados`: el
+// primer cambio de la racha que sigue vigente. Para «cobrado» se pasan
+// cobrado y cerrado (cerrar no es volver a cobrar); si la orden salió de
+// esos estados y volvió, cuenta la vuelta. Sin historial, null.
+export function desdeEstado(orden: Orden, estados: Estado[]): string | null {
+  if (!orden.hist?.length) return null;
+  let desde: string | null = null;
+  for (const c of orden.hist) {
+    if (estados.includes(c.estado)) {
+      if (desde === null) desde = c.desde;
+    } else {
+      desde = null;
+    }
+  }
+  return desde;
 }
 
 // Persona (resuelta) que aparece como responsable de una orden.

@@ -284,6 +284,7 @@ export interface NuevoProceso {
   institucion_nueva: string | null; // crea la institución si no existe
   adjudicacion: "item" | "lote" | "total";
   criterio: "menor_precio" | "calidad_precio" | "calidad";
+  monto_estimado?: number | null; // presupuesto de la entidad
 }
 
 export async function crearProceso(
@@ -319,6 +320,7 @@ export async function crearProceso(
       institucion_id: institucionId,
       adjudicacion: datos.adjudicacion,
       criterio: datos.criterio,
+      monto_estimado: datos.monto_estimado ?? null,
       creado_por: user?.id ?? null,
     })
     .select("id")
@@ -343,6 +345,7 @@ export async function actualizarProceso(
       | "adjudicacion"
       | "criterio"
       | "plazo_pago_dias"
+      | "monto_estimado"
       | "institucion_id"
       | "tasa_usd_dop"
       | "margen_pct"

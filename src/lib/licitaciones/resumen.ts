@@ -19,6 +19,10 @@ export interface Tramo {
   monto: number;
   // Cuántos de los n tienen monto (no todo está cotizado).
   conMonto: number;
+  // Presupuesto de la entidad (monto estimado DGCP) de los que lo tienen:
+  // la referencia de cuánto vale el tramo aunque no esté cotizado.
+  presupuesto: number;
+  conPresupuesto: number;
 }
 
 export interface ProcesoVivo {
@@ -29,6 +33,7 @@ export interface ProcesoVivo {
   estado: EstadoLicitacion;
   institucion_id: string | null;
   monto: number | null;
+  presupuesto: number | null;
   // Fecha límite de la subsanación abierta, si la hay (ese reloj manda).
   subsanacion: string | null;
   dias: number | null;
@@ -64,14 +69,20 @@ export interface EntradaResumen {
 function tramo(ps: LicProceso[], montos: Record<string, number>): Tramo {
   let monto = 0;
   let conMonto = 0;
+  let presupuesto = 0;
+  let conPresupuesto = 0;
   for (const p of ps) {
     const m = montos[p.id];
     if (m !== undefined && m > 0) {
       monto += m;
       conMonto++;
     }
+    if (p.monto_estimado && p.monto_estimado > 0) {
+      presupuesto += p.monto_estimado;
+      conPresupuesto++;
+    }
   }
-  return { n: ps.length, monto, conMonto };
+  return { n: ps.length, monto, conMonto, presupuesto, conPresupuesto };
 }
 
 // El cierre es fecha+hora; para el contador de días basta el día.
@@ -106,6 +117,7 @@ export function resumenLicitaciones({
         estado: p.estado,
         institucion_id: p.institucion_id,
         monto: montos[p.id] ?? null,
+        presupuesto: p.monto_estimado ?? null,
         subsanacion: sub,
         dias,
         nivel: nivelUrgencia(dias),

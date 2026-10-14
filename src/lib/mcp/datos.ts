@@ -234,6 +234,9 @@ export async function importarProceso(ctx: Ctx, a: Analisis, dgcp: DgcpProceso |
     ...(a.adjudicacion ? { adjudicacion: a.adjudicacion } : {}),
     ...(a.criterio ? { criterio: a.criterio } : {}),
     ...(a.plazo_pago_dias != null ? { plazo_pago_dias: a.plazo_pago_dias } : {}),
+    // El presupuesto de la entidad: la referencia de cuánto vale el proceso
+    // mientras no se cotiza. Solo si la DGCP lo trae (no se pisa con null).
+    ...(dgcp?.monto_estimado != null ? { monto_estimado: dgcp.monto_estimado } : {}),
     institucion_id: inst?.id ?? null,
   };
 

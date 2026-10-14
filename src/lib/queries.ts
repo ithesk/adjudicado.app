@@ -25,6 +25,7 @@ import {
   porCobrar,
   type Bitacora,
   type Documento,
+  type Estado,
   type Institucion,
   type Item,
   type Orden,
@@ -395,6 +396,8 @@ export async function listarOrdenes(): Promise<OrdenConItems[]> {
           fecha_estim: i.fecha_estim,
         })),
         responsable: demoPersona(o.responsable_id),
+        // En demo no hay historial: el último cambio hace de fecha del estado.
+        hist: [{ estado: o.estado, desde: o.updated_at }],
       })) as OrdenConItems[],
     );
   }
@@ -404,7 +407,7 @@ export async function listarOrdenes(): Promise<OrdenConItems[]> {
   const { data, error } = await supabase
     .from("orden")
     .select(
-      "*, item(entregado, suplidor, nombre, tipo, estado_item, fecha_estim, parent_id), grupo(nombre)",
+      "*, item(entregado, suplidor, nombre, tipo, estado_item, fecha_estim, parent_id), grupo(nombre), orden_hist(estado, desde)",
     )
     .eq("org_id", miembro.org_id)
     .order("created_at", { ascending: false });
@@ -415,12 +418,17 @@ export async function listarOrdenes(): Promise<OrdenConItems[]> {
   // El roll-up del tablero solo cuenta ítems de primer nivel (no componentes).
   const personas = await listarPersonas();
   const porId = new Map(personas.map((p) => [p.id, p]));
-  const ordenes = (data as OrdenConItems[]).map((o) => ({
+  type Fila = OrdenConItems & { orden_hist?: { estado: Estado; desde: string }[] };
+  const ordenes = (data as Fila[]).map(({ orden_hist, ...o }) => ({
     ...o,
     item: o.item.filter(
       (i) => !(i as { parent_id?: string | null }).parent_id,
     ),
     responsable: o.responsable_id ? porId.get(o.responsable_id) ?? null : null,
+    // El historial viene sin orden garantizado; del más viejo al más nuevo.
+    hist: (orden_hist ?? [])
+      .slice()
+      .sort((a, b) => a.desde.localeCompare(b.desde)),
   }));
   return ordenarPorUrgencia(ordenes);
 }
