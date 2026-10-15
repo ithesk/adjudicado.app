@@ -20,6 +20,8 @@ import ActividadReciente from "./_components/ActividadReciente";
 import DondeEstaElDinero from "./_components/DondeEstaElDinero";
 import QuienNosDebe from "./_components/QuienNosDebe";
 import LicitacionesEnCurso from "./_components/LicitacionesEnCurso";
+import OportunidadesDetectadas from "./_components/OportunidadesDetectadas";
+import { oportunidadesDetectadas } from "@/lib/licitaciones/oportunidades";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,7 @@ export default async function TableroPage({
   const { estado, filtro, institucion } = await searchParams;
   // Todo en paralelo: la bandeja ya cuenta las dos mitades del trabajo
   // (órdenes y licitaciones) y en fila sumaría las latencias.
-  const [ordenes, miembro, actividad, procesos, perfil, subsanaciones, entidades] =
+  const [ordenes, miembro, actividad, procesos, perfil, subsanaciones, entidades, oportunidades] =
     await Promise.all([
       listarOrdenes(),
       getMiembro(),
@@ -40,6 +42,7 @@ export default async function TableroPage({
       perfilEmpresa(),
       subsanacionesAbiertas(),
       listarEntidadesLigero(),
+      oportunidadesDetectadas(),
     ]);
   const montos = await montosDeProcesos(procesos, perfil?.itbis_pct ?? 18);
   const resumenLic = resumenLicitaciones({ procesos, montos, subsanaciones });
@@ -104,6 +107,9 @@ export default async function TableroPage({
             <DondeEstaElDinero ordenes={ordenes} metaAnual={perfil?.meta_anual ?? null} />
             <LicitacionesEnCurso resumen={resumenLic} entidades={entidadPorId} />
           </div>
+          {/* Lo que la DGCP publicó y es nuestro, según el último barrido
+              (API + portal). Solo aparece si hay algo o si una fuente cojea. */}
+          <OportunidadesDetectadas filas={oportunidades.filas} salud={oportunidades.salud} />
           <QuienNosDebe ordenes={ordenes} />
         </>
       )}

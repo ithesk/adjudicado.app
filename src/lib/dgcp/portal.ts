@@ -80,11 +80,39 @@ async function construirAgente(host: string): Promise<https.Agent> {
   return new https.Agent({ ca: [...tls.rootCertificates, ...intermedios], keepAlive: false });
 }
 
-function pedir(url: string, agente: https.Agent | undefined, timeoutMs: number): Promise<IncomingMessage> {
+export interface OpcionesPortal {
+  /** Cabeceras extra: la cookie de sesión del buscador, X-Requested-With… */
+  headers?: Record<string, string>;
+  /** Si se da, la petición es POST con este cuerpo (x-www-form-urlencoded). */
+  cuerpo?: string;
+}
+
+function pedir(
+  url: string,
+  agente: https.Agent | undefined,
+  timeoutMs: number,
+  op: OpcionesPortal,
+): Promise<IncomingMessage> {
   return new Promise((ok, ko) => {
-    const req = https.get(url, { agent: agente, timeout: timeoutMs }, ok);
+    const post = op.cuerpo !== undefined;
+    const req = https.request(
+      url,
+      {
+        method: post ? "POST" : "GET",
+        agent: agente,
+        timeout: timeoutMs,
+        headers: {
+          ...(op.headers ?? {}),
+          ...(post
+            ? { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(op.cuerpo!) }
+            : {}),
+        },
+      },
+      ok,
+    );
     req.on("timeout", () => req.destroy(new Error(`El portal no respondió en ${timeoutMs / 1000} s`)));
     req.on("error", ko);
+    req.end(post ? op.cuerpo : undefined);
   });
 }
 
@@ -96,25 +124,28 @@ function hostPermitido(url: string) {
   return host;
 }
 
-/** GET al portal siguiendo redirecciones HTTP; el cuerpo queda como stream. */
-export async function abrirPortal(url: string, timeoutMs = 45_000): Promise<IncomingMessage> {
+/** GET (o POST, con `cuerpo`) al portal siguiendo redirecciones HTTP; el cuerpo queda como stream. */
+export async function abrirPortal(url: string, timeoutMs = 45_000, op: OpcionesPortal = {}): Promise<IncomingMessage> {
   let actual = url;
+  let actualOp = op;
   for (let saltos = 0; saltos < 5; saltos++) {
     const host = hostPermitido(actual);
     let res: IncomingMessage;
     try {
-      res = await pedir(actual, agenteConIntermedios ? await agenteConIntermedios : undefined, timeoutMs);
+      res = await pedir(actual, agenteConIntermedios ? await agenteConIntermedios : undefined, timeoutMs, actualOp);
     } catch (e) {
       const codigo = (e as NodeJS.ErrnoException).code ?? "";
       if (!ERRORES_CADENA.has(codigo) || agenteConIntermedios) throw e;
       agenteConIntermedios = construirAgente(host);
       agenteConIntermedios.catch(() => (agenteConIntermedios = null));
-      res = await pedir(actual, await agenteConIntermedios, timeoutMs);
+      res = await pedir(actual, await agenteConIntermedios, timeoutMs, actualOp);
     }
     const destino = res.headers.location;
     if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && destino) {
       res.resume();
       actual = new URL(destino, actual).toString();
+      // Tras una redirección se sigue con GET (las cookies se mantienen).
+      actualOp = { headers: actualOp.headers };
       continue;
     }
     if (!res.statusCode || res.statusCode >= 400) {
@@ -127,8 +158,8 @@ export async function abrirPortal(url: string, timeoutMs = 45_000): Promise<Inco
 }
 
 /** Cuerpo completo, con tope de tamaño. */
-export async function bytesPortal(url: string, maxBytes: number, timeoutMs?: number) {
-  const res = await abrirPortal(url, timeoutMs);
+export async function bytesPortal(url: string, maxBytes: number, timeoutMs?: number, op?: OpcionesPortal) {
+  const res = await abrirPortal(url, timeoutMs, op);
   const largo = Number(res.headers["content-length"] ?? 0);
   if (largo > maxBytes) {
     res.destroy();
@@ -144,10 +175,22 @@ export async function bytesPortal(url: string, maxBytes: number, timeoutMs?: num
     }
     partes.push(d);
   }
-  return { bytes: new Uint8Array(Buffer.concat(partes)), tipo: String(res.headers["content-type"] ?? "") };
+  const setCookie = res.headers["set-cookie"] ?? [];
+  return {
+    bytes: new Uint8Array(Buffer.concat(partes)),
+    tipo: String(res.headers["content-type"] ?? ""),
+    // Las cookies que el portal quiere dejar (la sesión anónima del buscador).
+    cookies: setCookie.map((c) => c.split(";")[0]),
+  };
 }
 
-export async function textoPortal(url: string, timeoutMs?: number) {
-  const { bytes } = await bytesPortal(url, 5 * 1024 * 1024, timeoutMs);
+export async function textoPortal(url: string, timeoutMs?: number, op?: OpcionesPortal) {
+  const { bytes } = await bytesPortal(url, 5 * 1024 * 1024, timeoutMs, op);
   return Buffer.from(bytes).toString("utf8");
+}
+
+/** Una página HTML del portal y las cookies que manda con ella. */
+export async function paginaPortal(url: string, op?: OpcionesPortal, timeoutMs?: number) {
+  const { bytes, cookies } = await bytesPortal(url, 5 * 1024 * 1024, timeoutMs, op);
+  return { texto: Buffer.from(bytes).toString("utf8"), cookies };
 }

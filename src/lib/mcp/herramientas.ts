@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import * as dgcp from "@/lib/dgcp/api";
+import { documentosDe, listarAbiertos, localizarProceso } from "@/lib/dgcp/fuentes";
 import { normalizar, radar, siglasDesdeCodigo, type Nivel } from "@/lib/dgcp/relevancia";
 import { estadisticasOrg, guardarResultado, leerArchivo, resultadoProceso } from "@/lib/expedientes/servicio";
 import { extraerTexto, tramo, type TextoDocumento } from "@/lib/dgcp/texto";
@@ -132,15 +133,26 @@ const codigoProceso = z
   .min(5)
   .describe("Código del proceso en ComprasDominicana, p. ej. OGTIC-CCC-CP-2026-0011");
 
+// Donde además vale el enlace del portal: lo recién publicado aún no está en
+// datos abiertos y el usuario suele traerlo como URL.
+const referenciaProceso = z
+  .string()
+  .min(5)
+  .describe(
+    "Código del proceso (OGTIC-CCC-CP-2026-0011), el enlace del portal (…OpportunityDetail/Index?noticeUID=DO1.NTC.n) o el noticeUID",
+  );
+
 export const HERRAMIENTAS: Herramienta[] = [
   definir({
     nombre: "buscar_oportunidades",
     titulo: "Buscar oportunidades en la DGCP",
     descripcion:
-      "Revisa TODOS los procesos abiertos («Proceso publicado») de ComprasDominicana y devuelve los relevantes para la empresa, " +
-      "ordenados por puntaje (urgencia×3 + relevancia×2 + valor). Relevancia 'alta' = menciona un socio de la empresa " +
-      "(lic_capability) o uno de sus productos (FortiGate → Fortinet, ThinkPad → Lenovo…); 'media' = producto/marca TI; " +
-      "'explorar' = TI genérico. `dias_restantes` y `cierre_rd` van en hora de RD (0 = cierra hoy). Marca los que ya están en adjudicado.app.",
+      "Revisa TODOS los procesos abiertos de ComprasDominicana — la API de datos abiertos MÁS el portal, que trae lo publicado " +
+      "hoy (la API va horas atrás) — y devuelve los relevantes para la empresa, ordenados por puntaje (urgencia×3 + relevancia×2 + " +
+      "valor). Relevancia 'alta' = menciona un socio de la empresa (lic_capability) o uno de sus productos (FortiGate → Fortinet, " +
+      "ThinkPad → Lenovo…); 'media' = producto/marca TI; 'explorar' = TI genérico. `dias_restantes` y `cierre_rd` van en hora de RD " +
+      "(0 = cierra hoy). `origen: 'portal'` = recién publicado (la ficha completa sale con ver_proceso). SIEMPRE lee `frescura`: " +
+      "hasta cuándo llega cada fuente y sus `avisos`; si la lista sale vacía, di hasta dónde se miró. Marca los que ya están en adjudicado.app.",
     soloLectura: true,
     entrada: z.object({
       texto: z.string().optional().describe("Filtrar por palabras en el título (todas deben aparecer). Sin texto, usa el vocabulario TI."),
@@ -155,7 +167,7 @@ export const HERRAMIENTAS: Herramienta[] = [
       limite: z.number().int().min(1).max(100).default(25),
     }),
     async ejecutar(a, ctx) {
-      const [{ procesos, paginasFallidas }, caps] = await Promise.all([dgcp.listarProcesos(), capacidades(ctx)]);
+      const [{ procesos, origen, frescura }, caps] = await Promise.all([listarAbiertos(), capacidades(ctx)]);
       const todas = radar(procesos, {
         socios: caps.socios,
         bloqueados: caps.bloqueados,
@@ -170,7 +182,15 @@ export const HERRAMIENTAS: Herramienta[] = [
       const enApp = await procesosPorCodigo(ctx, lista.map((o) => o.codigo));
       return {
         escaneados: procesos.length,
-        paginas_fallidas: paginasFallidas,
+        frescura: {
+          api_hasta: frescura.api.hasta,
+          api_retraso_horas: frescura.api.retraso_horas ?? null,
+          portal_hasta: frescura.portal.hasta,
+          portal_cubre_desde: frescura.portal.desde,
+          nuevos_del_portal: frescura.nuevos_del_portal,
+          fuentes: { api: frescura.api.ok, portal: frescura.portal.ok },
+          avisos: frescura.avisos,
+        },
         relevantes: todas.length,
         cierran_en_7_dias: todas.filter((o) => (o.dias_restantes ?? 99) <= 7).length,
         socios_de_la_empresa: caps.socios,
@@ -178,6 +198,7 @@ export const HERRAMIENTAS: Herramienta[] = [
           const p = enApp.get(o.codigo);
           return {
             ...o,
+            origen: origen.get(o.codigo) ?? "api",
             en_adjudicado: p ? { estado: p.estado, url: `${ctx.baseUrl}/licitaciones/${p.id}` } : null,
           };
         }),
@@ -190,31 +211,28 @@ export const HERRAMIENTAS: Herramienta[] = [
     titulo: "Ver un proceso de la DGCP",
     descripcion:
       "Ficha completa de un proceso: datos y fechas de la DGCP, artículos con cantidades y precio estimado, la lista NUMERADA " +
-      "de documentos (pliego, ficha técnica, formularios…), si ya está en adjudicado.app y los PATRONES conocidos de la " +
-      "institución convocante (memoria del equipo). Llamar antes de analizar.",
+      "de documentos (pliego, ficha técnica, formularios, enmiendas…), si ya está en adjudicado.app y los PATRONES conocidos de la " +
+      "institución convocante (memoria del equipo). Acepta el código, el enlace del portal o el noticeUID: lo recién publicado " +
+      "(aún fuera de datos abiertos) se lee del portal (`origen: 'portal'`, con `aviso`). Llamar antes de analizar.",
     soloLectura: true,
-    entrada: z.object({ codigo: codigoProceso }),
+    entrada: z.object({ codigo: referenciaProceso }),
     async ejecutar({ codigo }, ctx) {
-      const [proceso, articulos, documentos, enApp] = await Promise.all([
-        dgcp.obtenerProceso(codigo),
-        dgcp.listarArticulos(codigo),
-        dgcp.listarDocumentos(codigo),
-        procesosPorCodigo(ctx, [codigo]),
+      const l = await localizarProceso(codigo);
+      const real = l.proceso.codigo_proceso;
+      const [enApp, inst] = await Promise.all([
+        procesosPorCodigo(ctx, [real]),
+        resolverInstitucion(ctx, { siglas: siglasDesdeCodigo(real), nombre: l.proceso.unidad_compra }, false),
       ]);
-      if (!proceso) throw new Error(`La DGCP no tiene un proceso con código ${codigo}.`);
-      const inst = await resolverInstitucion(
-        ctx,
-        { siglas: siglasDesdeCodigo(codigo), nombre: proceso.unidad_compra },
-        false,
-      );
-      const p = enApp.get(codigo);
+      const p = enApp.get(real);
       return {
-        proceso,
-        articulos,
-        documentos: documentos.map((d, i) => ({
+        origen: l.origen,
+        aviso: l.aviso,
+        proceso: l.proceso,
+        articulos: l.articulos,
+        documentos: l.documentos.map((d, i) => ({
           n: i + 1,
           nombre: d.nombre_documento,
-          tipo: d.tipo_documento.trim(),
+          tipo: d.tipo_documento,
           fecha: d.fecha_carga_archivo,
         })),
         en_adjudicado: p ? { estado: p.estado, url: `${ctx.baseUrl}/licitaciones/${p.id}` } : null,
@@ -233,23 +251,24 @@ export const HERRAMIENTAS: Herramienta[] = [
       "automáticamente (`ocr: true` en la respuesta: revisar cifras críticas contra el original si algo no cuadra).",
     soloLectura: true,
     entrada: z.object({
-      codigo: codigoProceso,
+      codigo: referenciaProceso,
       documento: z.union([z.number().int().positive(), z.string().min(1)]),
       desde_pagina: z.number().int().positive().default(1),
       max_caracteres: z.number().int().min(5_000).max(120_000).default(60_000),
     }),
     async ejecutar(a) {
-      const docs = await dgcp.listarDocumentos(a.codigo);
+      // La misma lista numerada que dio ver_proceso (API + lo que solo tiene el portal).
+      const { documentos: docs } = await documentosDe(a.codigo);
       const doc = elegirDocumento(docs, a.documento);
       if (!doc) {
         throw new Error(
           `No encontré el documento «${a.documento}» (las compras menores no suelen traer pliego). Disponibles: ` +
-            docs.map((d, i) => `${i + 1}. ${d.nombre_documento} [${d.tipo_documento.trim()}]`).join("; "),
+            docs.map((d, i) => `${i + 1}. ${d.nombre_documento} [${d.tipo_documento}]`).join("; "),
         );
       }
       const { bytes } = await dgcp.descargarDocumento(doc.url_documento);
       const texto = await textoLegible(doc.nombre_documento, bytes);
-      const base = { documento: doc.nombre_documento, tipo: doc.tipo_documento.trim(), formato: texto.formato };
+      const base = { documento: doc.nombre_documento, tipo: doc.tipo_documento, formato: texto.formato };
       if (texto.aviso) return { ...base, aviso: texto.aviso, url: doc.url_documento };
       const t = tramo(texto, a.desde_pagina, a.max_caracteres);
       return {
@@ -446,7 +465,10 @@ export const HERRAMIENTAS: Herramienta[] = [
         .optional(),
     }),
     async ejecutar(a, ctx) {
-      const proceso = await dgcp.obtenerProceso(a.codigo).catch(() => null);
+      // API o portal: lo recién publicado también llega con su cierre y su institución.
+      const proceso = await localizarProceso(a.codigo)
+        .then((l) => l.proceso)
+        .catch(() => null);
       const r = await importarProceso(ctx, a, proceso);
       return { ...r, url: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
     },
