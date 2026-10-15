@@ -1,6 +1,8 @@
 // Tipos de las filas de la base y helpers de presentación del módulo de
 // Licitaciones. Sin imports de servidor: se usa en cliente y servidor.
 
+import type { EmpresaRelacionada, PersonaEmpresa } from "@/lib/empresa/diligencia";
+
 export type EstadoLicitacion =
   | "captura"
   | "calificacion"
@@ -102,6 +104,15 @@ export interface EmpresaPerfil {
   itbis_pct: number;
   // Meta anual de ventas (RD$ de órdenes recibidas en el año); null = sin meta.
   meta_anual: number | null;
+  // Debida diligencia (supabase_empresa_diligencia.sql): se cargan una vez y
+  // salen en los formularios de «conozca a su proveedor».
+  registro_mercantil?: string | null;
+  fecha_constitucion?: string | null;
+  financiamiento_principal?: string | null;
+  financiamiento_secundario?: string | null;
+  relacion_pep?: string | null;
+  personas?: PersonaEmpresa[];
+  empresas_relacionadas?: EmpresaRelacionada[];
   updated_at: string;
 }
 
