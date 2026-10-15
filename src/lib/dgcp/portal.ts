@@ -104,7 +104,7 @@ function pedir(
         headers: {
           ...(op.headers ?? {}),
           ...(post
-            ? { "content-type": "application/x-www-form-urlencoded", "content-length": Buffer.byteLength(op.cuerpo!) }
+            ? { "content-type": "application/x-www-form-urlencoded", "content-length": String(Buffer.byteLength(op.cuerpo!)) }
             : {}),
         },
       },
