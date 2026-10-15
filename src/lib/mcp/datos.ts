@@ -10,6 +10,7 @@ import { requisitoEstandar, REQUISITOS_ESTANDAR } from "@/lib/licitaciones/requi
 import { coberturaPorTipo } from "@/lib/licitaciones/cobertura-empresa";
 import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
 import { alertasPerfil, cedulaValida, normalizarRpe, rpeValido } from "@/lib/empresa/validar";
+import { anosOperando, diligenciaDe, faltantesDiligencia, limpiarPersonas, limpiarRelacionadas } from "@/lib/empresa/diligencia";
 import {
   bajarImagenDeUrl,
   guardarImagenItem,
@@ -53,23 +54,55 @@ export async function empresaBasica(ctx: Ctx) {
 }
 
 export async function perfilEmpresa(ctx: Ctx) {
-  const [perfil, firmantes, docs, caps] = await Promise.all([
-    ctx.supabase
-      .from("empresa_perfil")
-      .select("nombre_legal, rnc, rpe, direccion, telefono, email, tasa_usd_dop, tasa_fecha, margen_pct, margen_modo, itbis_pct")
-      .eq("org_id", ctx.orgId)
-      .maybeSingle(),
+  const [perfil, firmantes, docs, caps, ganados] = await Promise.all([
+    // select("*"): las columnas de debida diligencia pueden no existir aún
+    // (supabase_empresa_diligencia.sql sin correr) y no deben romper nada.
+    ctx.supabase.from("empresa_perfil").select("*").eq("org_id", ctx.orgId).maybeSingle(),
     ctx.supabase.from("lic_firmante").select("rol, nombre, cargo, cedula").eq("org_id", ctx.orgId),
     ctx.supabase.from("documento_empresa").select("*").eq("org_id", ctx.orgId),
     capacidades(ctx),
+    // Experiencia: lo ganado, para los formularios que piden «procesos
+    // adjudicados con el mismo objeto o similar».
+    ctx.supabase
+      .from("lic_resultado")
+      .select("codigo, institucion, objeto, fecha_adjudicacion, monto_adjudicado, resultado")
+      .eq("org_id", ctx.orgId)
+      .in("resultado", ["ganado", "parcial"])
+      .order("fecha_adjudicacion", { ascending: false, nullsFirst: false })
+      .limit(30),
   ]);
+  const fila = (perfil.data ?? null) as Record<string, unknown> | null;
   const cobertura = coberturaPorTipo((docs.data ?? []) as DocumentoEmpresa[]);
   const fs = (firmantes.data ?? []) as { rol: string; nombre: string; cargo: string | null; cedula: string | null }[];
+  const diligencia = diligenciaDe(fila);
+  const empresa = fila
+    ? {
+        nombre_legal: fila.nombre_legal,
+        rnc: fila.rnc,
+        rpe: fila.rpe,
+        direccion: fila.direccion,
+        telefono: fila.telefono,
+        email: fila.email,
+        tasa_usd_dop: fila.tasa_usd_dop,
+        tasa_fecha: fila.tasa_fecha,
+        margen_pct: fila.margen_pct,
+        margen_modo: fila.margen_modo,
+        itbis_pct: fila.itbis_pct,
+      }
+    : null;
   return {
     // Lo que saldría mal impreso en un formulario: decirlo ANTES de generar.
-    alertas: alertasPerfil(perfil.data, fs),
-    empresa: perfil.data,
+    alertas: alertasPerfil(fila as Parameters<typeof alertasPerfil>[0], fs),
+    empresa,
     firmantes: fs,
+    // Para los formularios de «conozca a su proveedor» (ADM-FO-031, F-040,
+    // beneficiarios finales): se llenan desde aquí, no preguntando cada vez.
+    debida_diligencia: {
+      ...diligencia,
+      anos_operando: anosOperando(diligencia.fecha_constitucion),
+      experiencia: ganados.data ?? [],
+      faltan: faltantesDiligencia(diligencia),
+    },
     capacidades: caps.filas,
     documentos_vigentes: Object.values(cobertura).map((c) => ({
       tipo: c.tipo,
@@ -85,17 +118,45 @@ export async function perfilEmpresa(ctx: Ctx) {
 // fiscal y los márgenes se tocan en Configuración → Empresa.
 export async function actualizarPerfilEmpresa(
   ctx: Ctx,
-  p: { rpe?: string; direccion?: string; telefono?: string; email?: string; cedula_gerente_general?: string },
+  p: {
+    rpe?: string;
+    direccion?: string;
+    telefono?: string;
+    email?: string;
+    cedula_gerente_general?: string;
+    registro_mercantil?: string;
+    fecha_constitucion?: string;
+    financiamiento_principal?: string;
+    financiamiento_secundario?: string;
+    relacion_pep?: string;
+    personas?: unknown[];
+    empresas_relacionadas?: unknown[];
+  },
 ) {
-  const patch: Record<string, string> = {};
+  const patch: Record<string, unknown> = {};
   if (p.rpe !== undefined) {
     const rpe = normalizarRpe(p.rpe);
     if (!rpeValido(rpe)) throw new Error(`El RPE debe ser el número de la DGCP (p. ej. 116764), no «${p.rpe}».`);
     patch.rpe = rpe;
   }
-  for (const k of ["direccion", "telefono", "email"] as const) {
+  for (const k of [
+    "direccion",
+    "telefono",
+    "email",
+    "registro_mercantil",
+    "financiamiento_principal",
+    "financiamiento_secundario",
+    "relacion_pep",
+  ] as const) {
     if (p[k] !== undefined && p[k]!.trim()) patch[k] = p[k]!.trim();
   }
+  if (p.fecha_constitucion !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(p.fecha_constitucion)) throw new Error("La fecha de constitución va como AAAA-MM-DD.");
+    patch.fecha_constitucion = p.fecha_constitucion;
+  }
+  // Las listas reemplazan a las anteriores enteras: manda la lista completa.
+  if (p.personas !== undefined) patch.personas = limpiarPersonas(p.personas);
+  if (p.empresas_relacionadas !== undefined) patch.empresas_relacionadas = limpiarRelacionadas(p.empresas_relacionadas);
   const cambios: string[] = [];
   if (Object.keys(patch).length) {
     const { error } = await ctx.supabase.from("empresa_perfil").update(patch).eq("org_id", ctx.orgId);
@@ -115,7 +176,12 @@ export async function actualizarPerfilEmpresa(
     cambios.push("cedula_gerente_general");
   }
   const perfil = await perfilEmpresa(ctx);
-  return { cambios, alertas: perfil.alertas, empresa: perfil.empresa };
+  return {
+    cambios,
+    alertas: perfil.alertas,
+    empresa: perfil.empresa,
+    debida_diligencia_faltan: perfil.debida_diligencia.faltan,
+  };
 }
 
 // ===== Procesos ya en la app =====

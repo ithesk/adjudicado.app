@@ -379,7 +379,11 @@ export const HERRAMIENTAS: Herramienta[] = [
       "Datos de la empresa en adjudicado.app: razón social, RNC, RPE, contacto, tasa USD/DOP y margen por defecto, firmantes " +
       "por rol (con cédula), socios/vendors (lic_capability) y documentación VIGENTE (para marcar qué requisitos ya están " +
       "cubiertos). `alertas`: lo que saldría mal impreso en un formulario (RPE que no es número, falta la cédula del firmante…): " +
-      "si trae alguna, díselo al usuario ANTES de generar formularios o cartas y corrígelo con actualizar_perfil_empresa.",
+      "si trae alguna, díselo al usuario ANTES de generar formularios o cartas y corrígelo con actualizar_perfil_empresa. " +
+      "`debida_diligencia`: registro mercantil, constitución y años operando, financiamiento, relación con PEP, personas " +
+      "(accionistas con %, beneficiarios finales, directivos, personal técnico, con documento) y empresas relacionadas, más la " +
+      "`experiencia` (procesos ganados). Llena con esto los formularios de «conozca a su proveedor»; si `faltan` no está vacío, " +
+      "pide esos datos UNA vez y guárdalos con actualizar_perfil_empresa (sirven para todos los procesos).",
     soloLectura: true,
     entrada: z.object({}),
     async ejecutar(_a, ctx) {
@@ -391,9 +395,11 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: "actualizar_perfil_empresa",
     titulo: "Corregir los datos de la empresa que salen en los formularios",
     descripcion:
-      "Corrige el RPE (solo el número de la DGCP), la dirección, el teléfono, el correo o la cédula del Gerente General, que " +
-      "salen impresos en el F.042, el F.034 y los membretes. Solo con un dato que el usuario dio o confirmó: nunca inventado. " +
-      "Devuelve las `alertas` que queden. Después, regenerar los formularios y documentos ya hechos.",
+      "Guarda en el perfil de la empresa los datos que salen en los formularios: RPE (solo el número), dirección, teléfono, " +
+      "correo, cédula del Gerente General y la DEBIDA DILIGENCIA (registro mercantil, fecha de constitución, financiamiento, " +
+      "relación con PEP, personas y empresas relacionadas). Las listas reemplazan a las anteriores: manda la lista completa. " +
+      "Solo con datos que el usuario dio o confirmó: nunca inventados. Devuelve las `alertas` y lo que aún falta. Después, " +
+      "regenerar los formularios y documentos ya hechos.",
     soloLectura: false,
     entrada: z.object({
       rpe: z.string().optional().describe("Número del Registro de Proveedores del Estado, p. ej. 116764"),
@@ -401,6 +407,29 @@ export const HERRAMIENTAS: Herramienta[] = [
       telefono: z.string().optional(),
       email: z.string().optional(),
       cedula_gerente_general: z.string().optional().describe("11 dígitos, con o sin guiones"),
+      registro_mercantil: z.string().optional().describe("Número del registro mercantil, p. ej. 12345SD"),
+      fecha_constitucion: z.string().optional().describe("AAAA-MM-DD"),
+      financiamiento_principal: z.string().optional().describe("p. ej. 'Fondos propios'"),
+      financiamiento_secundario: z.string().optional().describe("p. ej. 'Línea de crédito bancaria'"),
+      relacion_pep: z.string().optional().describe("Relación con personas políticamente expuestas: 'No' o el detalle"),
+      personas: z
+        .array(
+          z.object({
+            nombre: z.string(),
+            documento: z.string().optional(),
+            nacionalidad: z.string().optional(),
+            cargo: z.string().optional(),
+            formacion: z.string().optional(),
+            porcentaje: z.number().min(0).max(100).optional(),
+            roles: z.array(z.enum(["accionista", "beneficiario_final", "directivo", "tecnico"])),
+          }),
+        )
+        .optional()
+        .describe("Lista COMPLETA de personas (reemplaza la anterior)"),
+      empresas_relacionadas: z
+        .array(z.object({ empresa: z.string(), pais: z.string().optional(), rnc: z.string().optional(), servicio: z.string().optional() }))
+        .optional()
+        .describe("Lista COMPLETA (vacía = ninguna)"),
     }),
     async ejecutar(a, ctx) {
       return actualizarPerfilEmpresa(ctx, a);

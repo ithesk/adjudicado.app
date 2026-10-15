@@ -20,6 +20,7 @@ import { paramsCotizacion, precioBaseUnitario, precioVentaUnitario, totalesProce
 import { requisitoEstandar } from "./requisitos-estandar";
 import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
 import { normalizarRpe, rpeValido } from "@/lib/empresa/validar";
+import { limpiarPersonas, limpiarRelacionadas } from "@/lib/empresa/diligencia";
 import { coberturaPorTipo } from "./cobertura-empresa";
 import type {
   EmpresaPerfil,
@@ -91,6 +92,12 @@ export async function guardarPerfil(
     const rpe = normalizarRpe(patch.rpe);
     if (!rpeValido(rpe)) return `El RPE debe ser el número de la DGCP (p. ej. 116764), no «${patch.rpe}».`;
     patch = { ...patch, rpe };
+  }
+  // Las listas de debida diligencia se guardan limpias (sin filas vacías ni
+  // roles inventados).
+  if ("personas" in patch) patch = { ...patch, personas: limpiarPersonas(patch.personas) };
+  if ("empresas_relacionadas" in patch) {
+    patch = { ...patch, empresas_relacionadas: limpiarRelacionadas(patch.empresas_relacionadas) };
   }
 
   // Actualizar la tasa deja constancia de cuándo (para avisar si envejece).

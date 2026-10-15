@@ -2,6 +2,7 @@ import { listarDocsEmpresa } from "@/lib/empresa/queries";
 import { listarFirmantes, perfilEmpresa } from "@/lib/licitaciones/queries";
 import PerfilEmpresa from "./PerfilEmpresa";
 import DocsEmpresa from "./DocsEmpresa";
+import DiligenciaEmpresa from "./DiligenciaEmpresa";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export default async function EmpresaPage() {
       </div>
 
       <PerfilEmpresa perfil={perfil} firmantes={firmantes} />
+
+      <DiligenciaEmpresa perfil={perfil} />
 
       <div>
         <h3 className="mb-2 text-[13px] font-semibold text-ink">
