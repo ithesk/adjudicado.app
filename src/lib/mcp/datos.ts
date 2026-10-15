@@ -9,6 +9,7 @@ import { modalidadDesdeDgcp, normalizar, siglasDesdeCodigo } from "@/lib/dgcp/re
 import { requisitoEstandar, REQUISITOS_ESTANDAR } from "@/lib/licitaciones/requisitos-estandar";
 import { coberturaPorTipo } from "@/lib/licitaciones/cobertura-empresa";
 import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
+import { alertasPerfil, cedulaValida, normalizarRpe, rpeValido } from "@/lib/empresa/validar";
 import {
   bajarImagenDeUrl,
   guardarImagenItem,
@@ -55,17 +56,20 @@ export async function perfilEmpresa(ctx: Ctx) {
   const [perfil, firmantes, docs, caps] = await Promise.all([
     ctx.supabase
       .from("empresa_perfil")
-      .select("nombre_legal, rnc, rpe, tasa_usd_dop, tasa_fecha, margen_pct, margen_modo, itbis_pct")
+      .select("nombre_legal, rnc, rpe, direccion, telefono, email, tasa_usd_dop, tasa_fecha, margen_pct, margen_modo, itbis_pct")
       .eq("org_id", ctx.orgId)
       .maybeSingle(),
-    ctx.supabase.from("lic_firmante").select("rol, nombre, cargo").eq("org_id", ctx.orgId),
+    ctx.supabase.from("lic_firmante").select("rol, nombre, cargo, cedula").eq("org_id", ctx.orgId),
     ctx.supabase.from("documento_empresa").select("*").eq("org_id", ctx.orgId),
     capacidades(ctx),
   ]);
   const cobertura = coberturaPorTipo((docs.data ?? []) as DocumentoEmpresa[]);
+  const fs = (firmantes.data ?? []) as { rol: string; nombre: string; cargo: string | null; cedula: string | null }[];
   return {
+    // Lo que saldría mal impreso en un formulario: decirlo ANTES de generar.
+    alertas: alertasPerfil(perfil.data, fs),
     empresa: perfil.data,
-    firmantes: firmantes.data ?? [],
+    firmantes: fs,
     capacidades: caps.filas,
     documentos_vigentes: Object.values(cobertura).map((c) => ({
       tipo: c.tipo,
@@ -74,6 +78,44 @@ export async function perfilEmpresa(ctx: Ctx) {
       vencido: c.vencido,
     })),
   };
+}
+
+// Corregir los datos que salen impresos en los formularios (RPE, contacto,
+// cédula del Gerente General) sin ir a la pantalla. Solo estos campos: lo
+// fiscal y los márgenes se tocan en Configuración → Empresa.
+export async function actualizarPerfilEmpresa(
+  ctx: Ctx,
+  p: { rpe?: string; direccion?: string; telefono?: string; email?: string; cedula_gerente_general?: string },
+) {
+  const patch: Record<string, string> = {};
+  if (p.rpe !== undefined) {
+    const rpe = normalizarRpe(p.rpe);
+    if (!rpeValido(rpe)) throw new Error(`El RPE debe ser el número de la DGCP (p. ej. 116764), no «${p.rpe}».`);
+    patch.rpe = rpe;
+  }
+  for (const k of ["direccion", "telefono", "email"] as const) {
+    if (p[k] !== undefined && p[k]!.trim()) patch[k] = p[k]!.trim();
+  }
+  const cambios: string[] = [];
+  if (Object.keys(patch).length) {
+    const { error } = await ctx.supabase.from("empresa_perfil").update(patch).eq("org_id", ctx.orgId);
+    if (error) throw new Error(`No se pudo guardar el perfil: ${error.message}`);
+    cambios.push(...Object.keys(patch));
+  }
+  if (p.cedula_gerente_general !== undefined) {
+    if (!cedulaValida(p.cedula_gerente_general)) throw new Error("La cédula debe tener 11 dígitos (con o sin guiones).");
+    const { data, error } = await ctx.supabase
+      .from("lic_firmante")
+      .update({ cedula: p.cedula_gerente_general.trim() })
+      .eq("org_id", ctx.orgId)
+      .eq("rol", "gerente_general")
+      .select("rol");
+    if (error) throw new Error(`No se pudo guardar la cédula: ${error.message}`);
+    if (!data?.length) throw new Error("No hay firmante Gerente General: créalo en Configuración → Empresa.");
+    cambios.push("cedula_gerente_general");
+  }
+  const perfil = await perfilEmpresa(ctx);
+  return { cambios, alertas: perfil.alertas, empresa: perfil.empresa };
 }
 
 // ===== Procesos ya en la app =====
@@ -208,7 +250,14 @@ export interface Analisis {
   requisitos_estandar?: string[];
   requisitos_extra?: { codigo: string; nombre: string; subsanable: boolean; fuente?: string }[];
   /** Las preguntas de la oferta técnica (PROP-TEC), si el pliego las dice. */
-  oferta_tecnica?: { validez_dias?: string; plazo_entrega?: string; lugar_entrega?: string; garantia?: string };
+  oferta_tecnica?: {
+    validez_dias?: string;
+    plazo_entrega?: string;
+    lugar_entrega?: string;
+    garantia?: string;
+    /** false = el PDF no copia la especificación del pliego (pliegos que lo prohíben). */
+    incluir_pliego?: boolean;
+  };
 }
 
 export const CODIGOS_REQUISITO = REQUISITOS_ESTANDAR.map((r) => r.codigo);
@@ -369,9 +418,13 @@ export async function importarProceso(ctx: Ctx, a: Analisis, dgcp: DgcpProceso |
 
   // --- Datos de la oferta técnica: se mezclan con lo ya capturado ---
   if (a.oferta_tecnica) {
-    const nuevos = Object.fromEntries(
+    const nuevos: Record<string, string> = Object.fromEntries(
       Object.entries(a.oferta_tecnica).filter(([, v]) => typeof v === "string" && v.trim()),
-    );
+    ) as Record<string, string>;
+    // Los datos del requisito son texto: el sí/no viaja como "si"/"no".
+    if (typeof a.oferta_tecnica.incluir_pliego === "boolean") {
+      nuevos.incluir_pliego = a.oferta_tecnica.incluir_pliego ? "si" : "no";
+    }
     const { data: req } = await ctx.supabase
       .from("lic_requisito")
       .select("id, datos")

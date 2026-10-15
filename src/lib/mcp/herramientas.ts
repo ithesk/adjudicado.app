@@ -20,6 +20,7 @@ import { GENERABLES } from "@/lib/licitaciones/generador";
 import {
   CODIGOS_REQUISITO,
   actualizarItems,
+  actualizarPerfilEmpresa,
   capacidades,
   guardarPatron,
   idDeProceso,
@@ -375,12 +376,34 @@ export const HERRAMIENTAS: Herramienta[] = [
     nombre: "perfil_empresa",
     titulo: "Perfil de la empresa oferente",
     descripcion:
-      "Datos de la empresa en adjudicado.app: razón social, RNC, tasa USD/DOP y margen por defecto, firmantes por rol, " +
-      "socios/vendors (lic_capability) y documentación VIGENTE (para marcar qué requisitos ya están cubiertos).",
+      "Datos de la empresa en adjudicado.app: razón social, RNC, RPE, contacto, tasa USD/DOP y margen por defecto, firmantes " +
+      "por rol (con cédula), socios/vendors (lic_capability) y documentación VIGENTE (para marcar qué requisitos ya están " +
+      "cubiertos). `alertas`: lo que saldría mal impreso en un formulario (RPE que no es número, falta la cédula del firmante…): " +
+      "si trae alguna, díselo al usuario ANTES de generar formularios o cartas y corrígelo con actualizar_perfil_empresa.",
     soloLectura: true,
     entrada: z.object({}),
     async ejecutar(_a, ctx) {
       return perfilEmpresa(ctx);
+    },
+  }),
+
+  definir({
+    nombre: "actualizar_perfil_empresa",
+    titulo: "Corregir los datos de la empresa que salen en los formularios",
+    descripcion:
+      "Corrige el RPE (solo el número de la DGCP), la dirección, el teléfono, el correo o la cédula del Gerente General, que " +
+      "salen impresos en el F.042, el F.034 y los membretes. Solo con un dato que el usuario dio o confirmó: nunca inventado. " +
+      "Devuelve las `alertas` que queden. Después, regenerar los formularios y documentos ya hechos.",
+    soloLectura: false,
+    entrada: z.object({
+      rpe: z.string().optional().describe("Número del Registro de Proveedores del Estado, p. ej. 116764"),
+      direccion: z.string().optional(),
+      telefono: z.string().optional(),
+      email: z.string().optional(),
+      cedula_gerente_general: z.string().optional().describe("11 dígitos, con o sin guiones"),
+    }),
+    async ejecutar(a, ctx) {
+      return actualizarPerfilEmpresa(ctx, a);
     },
   }),
 
@@ -450,6 +473,13 @@ export const HERRAMIENTAS: Herramienta[] = [
           plazo_entrega: z.string().optional().describe("p. ej. '30 días calendario'"),
           lugar_entrega: z.string().optional(),
           garantia: z.string().optional().describe("Garantía ofrecida, p. ej. '1 año del fabricante'"),
+          incluir_pliego: z
+            .boolean()
+            .optional()
+            .describe(
+              "false si el pliego prohíbe presentar como oferta técnica una copia de sus especificaciones: el PDF lleva solo " +
+                "nuestra descripción punto por punto, sin la columna con la spec del pliego",
+            ),
         })
         .optional()
         .describe("Datos del pliego que pide la oferta técnica (PROP-TEC); lo que falte se completa en la Bid Room"),
@@ -581,7 +611,9 @@ export const HERRAMIENTAS: Herramienta[] = [
       "trabajo, matriz de cumplimiento, metodología, carta de garantía, declaración, listado de personal… Tú escribes el " +
       "CUERPO en HTML simple (h2, h3, p, ul/ol, table con th/td, strong) con contenido real del pliego y de lo acordado con " +
       "el usuario; la app le pone el membrete de la empresa, el título, la firma y el sello, lo convierte a PDF, lo deja como " +
-      "archivo del requisito en la Bid Room (lo crea si no existe) y devuelve un enlace (7 días). Sin estilos, scripts ni " +
+      "archivo del requisito en la Bid Room (lo crea si no existe) y devuelve un enlace (7 días). Si el cuerpo trae huecos " +
+      "('____' o celdas vacías), el requisito queda PENDIENTE y vuelve `campos_en_blanco`: pide los datos y regenéralo; no " +
+      "lo des por listo. Sin estilos, scripts ni " +
       "imágenes externas: el motor no tiene red. Mostrar antes al usuario lo que vas a poner y ajustar si pide cambios: " +
       "volver a llamarla con el mismo requisito reemplaza el archivo.",
     soloLectura: false,

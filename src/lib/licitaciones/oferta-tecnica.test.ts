@@ -72,6 +72,15 @@ describe("htmlOfertaTecnica", () => {
   it("el pie numera las páginas", () => {
     expect(pie).toContain('class="pageNumber"');
   });
+  it("con incluir_pliego = no, no copia la especificación del pliego", () => {
+    const c = canonico({ marca: "Dell", modelo: "Latitude 5450", descripcion: "Laptop empresarial\nRAM: 16 GB (req. mín. 16 GB)" });
+    expect(html).toContain("Requerimiento del pliego");
+    expect(html).toContain("Laptop i7, 16 GB");
+    const sin = htmlOfertaTecnica(c, { datos: { ...DATOS, incluir_pliego: "no" }, imagenes: {} }).html;
+    expect(sin).not.toContain("Requerimiento del pliego");
+    expect(sin).not.toContain("Laptop i7, 16 GB");
+    expect(sin).toContain("<strong>RAM:</strong> 16 GB (req. mín. 16 GB)");
+  });
 });
 
 describe("foto del producto", () => {
