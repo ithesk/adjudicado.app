@@ -38,6 +38,7 @@ export interface DgcpProceso {
 
 export interface DgcpDocumento {
   nombre_documento: string;
+  /** Nunca null aquí: la API lo manda vacío en circulares y enmiendas y se rellena con «Otro». */
   tipo_documento: string;
   fecha_carga_archivo: string | null;
   url_documento: string;
@@ -74,18 +75,53 @@ export function fechasEnHoraRd<T>(fila: T): T {
   return r as T;
 }
 
+// Reintentos ante caídas cortas: el 15-10-2026 la API respondió 502 de 8:00 a
+// 8:11 y el barrido de la mañana se quedó en nada. Se reintenta lo pasajero
+// (502/503/504/429, red, tiempo agotado) con espera; un 400 o un 404 no,
+// que son de la petición. Las esperas se exponen para que las pruebas no duerman.
+export const REINTENTOS = { esperas: [2_000, 5_000] };
+const ESTADOS_PASAJEROS = new Set([429, 502, 503, 504]);
+
+class ErrorPasajero extends Error {}
+
+const dormir = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+
+function esPasajero(e: unknown): boolean {
+  if (e instanceof ErrorPasajero) return true;
+  if (!(e instanceof Error)) return false;
+  return (
+    e.name === "TimeoutError" ||
+    e.name === "AbortError" ||
+    /fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up/i.test(`${e.message} ${(e as { cause?: unknown }).cause ?? ""}`)
+  );
+}
+
 async function pedir<T>(ruta: string, timeoutMs = 25_000): Promise<T[]> {
-  const res = await fetch(`${BASE}${ruta}`, {
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: { accept: "application/json" },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`La API de la DGCP respondió ${res.status} en ${ruta}`);
-  const j = (await res.json()) as Respuesta<T>;
-  if (j.hasError) {
-    throw new Error(`La API de la DGCP devolvió error en ${ruta}: ${j.payload?.message ?? "sin detalle"}`);
+  for (let intento = 0; ; intento++) {
+    try {
+      const res = await fetch(`${BASE}${ruta}`, {
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: { accept: "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        const msg = `La API de la DGCP respondió ${res.status} en ${ruta}`;
+        throw ESTADOS_PASAJEROS.has(res.status) ? new ErrorPasajero(msg) : new Error(msg);
+      }
+      const j = (await res.json()) as Respuesta<T>;
+      if (j.hasError) {
+        throw new Error(`La API de la DGCP devolvió error en ${ruta}: ${j.payload?.message ?? "sin detalle"}`);
+      }
+      return (j.payload?.content ?? []).map(fechasEnHoraRd);
+    } catch (e) {
+      const espera = REINTENTOS.esperas[intento];
+      if (!esPasajero(e) || espera === undefined) {
+        if (e instanceof ErrorPasajero) throw new Error(`${e.message} (${intento + 1} intentos)`);
+        throw e;
+      }
+      await dormir(espera);
+    }
   }
-  return (j.payload?.content ?? []).map(fechasEnHoraRd);
 }
 
 // TODOS los procesos abiertos («Proceso publicado»). La API filtra por
@@ -95,9 +131,14 @@ async function pedir<T>(ruta: string, timeoutMs = 25_000): Promise<T[]> {
 // cualquier estado ≈ 4 días de publicaciones) y se perdía lo publicado hace
 // una semana que cierra hoy — p. ej. MITUR-DAF-CM-2026-0106, publicado el
 // 30-sep y con cierre el 6-oct, vivía en la página 10.
+//
+// OJO: esta API es una COPIA que va con retraso respecto al portal (el
+// 15-10-2026 a las 8:30 su proceso más nuevo era de la víspera a las 18:00):
+// lo publicado hoy no está. Por eso `hasta` dice hasta cuándo llega, y
+// fuentes.ts completa el hueco con el portal.
 export async function listarProcesos(
   maxPaginas = 5,
-): Promise<{ procesos: DgcpProceso[]; paginasFallidas: number }> {
+): Promise<{ procesos: DgcpProceso[]; paginasFallidas: number; hasta: string | null }> {
   const procesos: DgcpProceso[] = [];
   let paginasFallidas = 0;
   for (let page = 1; page <= maxPaginas; page++) {
@@ -116,10 +157,12 @@ export async function listarProcesos(
     if (lote.length < 1000) break;
   }
   const vistos = new Set<string>();
-  return {
-    procesos: procesos.filter((p) => !vistos.has(p.codigo_proceso) && vistos.add(p.codigo_proceso)),
-    paginasFallidas,
-  };
+  const unicos = procesos.filter((p) => !vistos.has(p.codigo_proceso) && vistos.add(p.codigo_proceso));
+  const hasta = unicos.reduce<string | null>(
+    (max, p) => (p.fecha_publicacion && (!max || p.fecha_publicacion > max) ? p.fecha_publicacion : max),
+    null,
+  );
+  return { procesos: unicos, paginasFallidas, hasta };
 }
 
 export async function obtenerProceso(codigo: string): Promise<DgcpProceso | null> {
@@ -127,8 +170,19 @@ export async function obtenerProceso(codigo: string): Promise<DgcpProceso | null
   return r.find((p) => p.codigo_proceso === codigo) ?? null;
 }
 
+// Circulares, enmiendas y convocatorias llegan con tipo_documento: null
+// (INFOTEP-CCC-LPN-2026-0001, ARS SENASA-CCC-PEEX-2026-0001, 15-10-2026):
+// se rellena aquí para que nadie vuelva a hacer .trim() sobre un null.
 export async function listarDocumentos(codigo: string): Promise<DgcpDocumento[]> {
-  return pedir<DgcpDocumento>(`/procesos/documentos?proceso=${encodeURIComponent(codigo)}`);
+  const r = await pedir<Partial<DgcpDocumento>>(`/procesos/documentos?proceso=${encodeURIComponent(codigo)}`);
+  return r
+    .filter((d) => typeof d.url_documento === "string" && d.url_documento)
+    .map((d) => ({
+      nombre_documento: (d.nombre_documento ?? "").trim() || "(sin nombre)",
+      tipo_documento: (d.tipo_documento ?? "").trim() || "Otro",
+      fecha_carga_archivo: d.fecha_carga_archivo ?? null,
+      url_documento: d.url_documento as string,
+    }));
 }
 
 export async function listarArticulos(codigo: string): Promise<DgcpArticulo[]> {
