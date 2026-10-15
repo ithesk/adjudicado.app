@@ -168,9 +168,13 @@ export function parsearListado(html: string): { avisos: AvisoPortal[]; hayMas: b
   // (el mensaje viene codificado en la URL, con «+» por espacios).
   const caducado = /page(\+| )has(\+| )expired/i.test(html);
   const avisos: AvisoPortal[] = [];
-  for (let i = 0; i < 1000; i++) {
+  // Los índices de fila siguen la paginación: la página 2 trae _100 … _199.
+  const indices = [...new Set([...html.matchAll(/spnMatchingResultReference_(\d+)"/g)].map((m) => Number(m[1])))].sort(
+    (a, b) => a - b,
+  );
+  for (const i of indices) {
     const codigo = span(html, `spnMatchingResultReference_${i}`);
-    if (!codigo) break;
+    if (!codigo) continue;
     const uid = new RegExp(`lnkDetailLink_${i}"[^>]*'noticeUID=' \\+ '(DO1\\.NTC\\.\\d+)'`).exec(html)?.[1] ?? null;
     const { monto, divisa } = montoPortal(span(html, `cbxBasePriceValue_${i}`));
     avisos.push({

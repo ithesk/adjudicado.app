@@ -73,6 +73,14 @@ describe("parsearListado", () => {
     expect(b.fase).toContain("LicitacionPublicaNacional");
   });
 
+  it("lee las páginas siguientes, cuyas filas van numeradas desde 100", () => {
+    const pagina2 = fixture("portal-listado.html").replace(/(spnMatchingResultReference|spnMatchingResultAuthorityName|spnMatchingResultDescription|spnMatchingResultPhaseCode|spnMatchingResultContractNoticeState|cbxBasePriceValue|lnkDetailLink|dtmbNationalOfficialPublishingDate|dtmbDueDateForReceivingReplies)_(\d+)/g, (_m, id, n) => `${id}_${Number(n) + 100}`);
+    const p = parsearListado(pagina2);
+    expect(p.avisos.map((a) => a.codigo)).toEqual(["FAD-DAF-CM-2026-0068", "EDESUR-CCC-LPN-2026-0031"]);
+    expect(p.avisos[0].uid).toMatch(/^DO1\.NTC\.\d+$/);
+    expect(p.avisos[0].publicado).toMatch(/^2026-10-14T/);
+  });
+
   it("sabe si hay más páginas y si la sesión caducó", () => {
     expect(l.hayMas).toBe(true);
     expect(l.caducado).toBe(false);
