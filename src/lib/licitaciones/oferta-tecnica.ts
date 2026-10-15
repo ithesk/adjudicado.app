@@ -146,6 +146,11 @@ export function htmlOfertaTecnica(c: ProcesoCanonico, op: OpcionesOferta): { htm
     })
     .join("");
 
+  // Hay pliegos que prohíben presentar «una copia o imagen de las
+  // especificaciones» como oferta técnica (TSS-DAF-CM-2026-0065, no
+  // subsanable). Con incluir_pliego = "no" la tarjeta lleva solo lo nuestro.
+  const conPliego = (d.incluir_pliego ?? "").trim().toLowerCase() !== "no";
+
   const tarjetas = items
     .map((i) => {
       const p = i.producto!;
@@ -162,8 +167,8 @@ export function htmlOfertaTecnica(c: ProcesoCanonico, op: OpcionesOferta): { htm
         <div class="item-cuerpo">
           <div>
             ${foto ? `<div class="foto"><img src="${foto}" alt=""/></div>` : ""}
-            <div class="etiqueta">Requerimiento del pliego</div>
-            <div class="pliego">${esc(i.spec_cruda)}</div>
+            ${conPliego ? `<div class="etiqueta">Requerimiento del pliego</div>
+            <div class="pliego">${esc(i.spec_cruda)}</div>` : ""}
             ${puntos.length ? `<div class="etiqueta">Descripción</div><div class="valor">${esc(resumen)}</div>` : ""}
             <div class="etiqueta">Garantía</div>
             <div class="valor">${esc(garantia)}</div>

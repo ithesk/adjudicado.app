@@ -14,6 +14,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import * as dgcp from "@/lib/dgcp/api";
+import { rpeValido } from "@/lib/empresa/validar";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { leerFila } from "@/lib/expedientes/almacen";
 import { encolarExpediente } from "@/lib/expedientes/cola";
@@ -41,6 +42,12 @@ export async function GET(req: NextRequest) {
   const resumen: Record<string, unknown>[] = [];
   for (const p of perfiles ?? []) {
     if (Date.now() > fin) break;
+    // Con un RPE que no es número («sn»), la DGCP no devuelve nuestras
+    // ofertas y todo saldría «no participamos». Mejor decirlo que inventar.
+    if (!rpeValido(p.rpe)) {
+      resumen.push({ org_id: p.org_id, omitido: `El RPE del perfil es «${p.rpe}», no un número: corrígelo en Configuración → Empresa.` });
+      continue;
+    }
     const nosotros: Nosotros = { rpe: String(p.rpe), razon_social: p.nombre_legal };
     const r = { org_id: p.org_id, consultados: 0, nuevos: 0, procesos_actualizados: 0, profundos: 0, errores: [] as string[] };
     try {

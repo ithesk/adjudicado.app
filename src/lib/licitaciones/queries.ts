@@ -19,6 +19,7 @@ import { ProcesoCanonico, traducirIssue } from "./contrato";
 import { paramsCotizacion, precioBaseUnitario, precioVentaUnitario, totalesProceso } from "./cotizador";
 import { requisitoEstandar } from "./requisitos-estandar";
 import type { DocumentoEmpresa } from "@/lib/empresa/documentos";
+import { normalizarRpe, rpeValido } from "@/lib/empresa/validar";
 import { coberturaPorTipo } from "./cobertura-empresa";
 import type {
   EmpresaPerfil,
@@ -83,6 +84,14 @@ export async function guardarPerfil(
   const miembro = await getMiembro();
   if (!miembro) return "No autorizado.";
   const supabase = await createClient();
+
+  // El RPE sale impreso en el F.042 y en los membretes: solo el número.
+  // («sn» llegó a un F.042 el 15-10-2026.) Vacío se permite: es «aún no».
+  if ("rpe" in patch && patch.rpe) {
+    const rpe = normalizarRpe(patch.rpe);
+    if (!rpeValido(rpe)) return `El RPE debe ser el número de la DGCP (p. ej. 116764), no «${patch.rpe}».`;
+    patch = { ...patch, rpe };
+  }
 
   // Actualizar la tasa deja constancia de cuándo (para avisar si envejece).
   const conFecha =

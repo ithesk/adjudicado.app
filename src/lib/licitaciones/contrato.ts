@@ -81,7 +81,8 @@ const Proceso = z.object({
 const Oferente = z.object({
   razon_social: z.string().min(1),
   rnc: z.string().min(1),
-  rpe: z.string().min(1),
+  // Solo el número de la DGCP: «sn» llegó impreso a un F.042 (15-10-2026).
+  rpe: z.string().regex(/^\d{1,7}$/, "rpe_no_numerico"),
   direccion: z.string().min(1),
   telefono: z.string().min(1),
   email: z.string().email(),
@@ -223,6 +224,9 @@ export function traducirIssue(
   const [raiz, ...resto] = path.map(String);
 
   if (raiz === "oferente") {
+    if (resto[0] === "rpe" && mensaje === "rpe_no_numerico") {
+      return "El RPE de la empresa no es un número (p. ej. 116764): saldría así en el formulario — corrígelo en Configuración → Empresa";
+    }
     return `Falta ${CAMPO_EMPRESA[resto[0]] ?? `el dato "${resto[0]}"`} de la empresa — complétalo en Configuración → Empresa`;
   }
   if (raiz === "firmantes") {

@@ -24,6 +24,7 @@ import {
   pieDocumento,
 } from "./oferta-tecnica";
 import { htmlAPdf, pdfDisponible } from "./pdf";
+import { camposEnBlanco, rpeValido } from "@/lib/empresa/validar";
 
 const BUCKET = "documentos";
 const DIAS_ENLACE = 7;
@@ -298,6 +299,12 @@ export async function entregarDocumentoLibre(
   if (!perfil?.nombre_legal || !perfil.rnc) {
     throw new Error("Faltan la razón social o el RNC de la empresa — Configuración → Empresa.");
   }
+  // El membrete lleva el RPE: «sn» salió impreso en cartas el 15-10-2026.
+  if (perfil.rpe && !rpeValido(perfil.rpe)) {
+    throw new Error(
+      `El RPE de la empresa es «${perfil.rpe}», no un número (p. ej. 116764): saldría así en el membrete. Corrígelo en Configuración → Empresa.`,
+    );
+  }
   const inst = p.institucion as { nombre?: string } | { nombre?: string }[] | null;
   const gg = firmantes.find((f) => f.rol === "gerente_general") ?? firmantes[0] ?? null;
   const { html, pie } = htmlDocumentoLibre(
@@ -332,5 +339,27 @@ export async function entregarDocumentoLibre(
     archivo,
     null,
   );
-  return { archivo, kb: Math.round(pdf.length / 1024), ...g };
+  // Un documento con huecos («____», celdas vacías) no está listo para
+  // presentar: el requisito queda pendiente y se dice cuántos faltan.
+  const huecos = camposEnBlanco(op.cuerpoHtml);
+  if (huecos > 0) {
+    await a.supabase
+      .from("lic_requisito")
+      .update({ estado: "pendiente" })
+      .eq("org_id", a.orgId)
+      .eq("proceso_id", procesoId)
+      .eq("codigo", codigo);
+  }
+  return {
+    archivo,
+    kb: Math.round(pdf.length / 1024),
+    ...g,
+    campos_en_blanco: huecos,
+    estado_requisito: huecos > 0 ? "pendiente" : "listo",
+    ...(huecos > 0
+      ? {
+          aviso: `El documento tiene ${huecos} campo(s) en blanco: el requisito queda PENDIENTE. Pide los datos al usuario y vuelve a generarlo.`,
+        }
+      : {}),
+  };
 }
