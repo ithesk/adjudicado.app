@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Download,
+  ExternalLink,
   Loader2,
   PackageOpen,
   ShieldAlert,
@@ -403,6 +404,18 @@ export default function BidRoom({
                 <DuplicarProceso procesoId={proceso.id} codigoActual={proceso.codigo} />
               </>
             )}
+            {/* La ficha en ComprasDominicana: <a> y no <Link>, para que no se
+                precargue (la ruta puede buscar en la DGCP y anotar el enlace). */}
+            <a
+              href={`/licitaciones/${proceso.id}/portal`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abrir este proceso en ComprasDominicana (pliego, enmiendas, ofertas)"
+              className={btnGhost("!px-2.5 !py-1.5 !text-[12.5px]")}
+            >
+              <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              Portal
+            </a>
           </span>
         }
       />

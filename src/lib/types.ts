@@ -452,9 +452,9 @@ export function porCobrar(estado: Estado): boolean {
 
 export type NivelUrgencia = "vencido" | "rojo" | "ambar" | "verde" | "neutro";
 
-export function diasRestantes(fechaISO: string | null): number | null {
+export function diasRestantes(fechaISO: string | null, desde: Date = new Date()): number | null {
   if (!fechaISO) return null;
-  const hoy = new Date();
+  const hoy = new Date(desde);
   hoy.setHours(0, 0, 0, 0);
   const objetivo = new Date(fechaISO + "T00:00:00");
   const ms = objetivo.getTime() - hoy.getTime();
