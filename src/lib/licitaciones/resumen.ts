@@ -86,8 +86,8 @@ function tramo(ps: LicProceso[], montos: Record<string, number>): Tramo {
 }
 
 // El cierre es fecha+hora; para el contador de días basta el día.
-function diasAl(iso: string | null): number | null {
-  return diasRestantes(iso ? iso.slice(0, 10) : null);
+function diasAl(iso: string | null, hoy: Date): number | null {
+  return diasRestantes(iso ? iso.slice(0, 10) : null, hoy);
 }
 
 export function resumenLicitaciones({
@@ -108,7 +108,7 @@ export function resumenLicitaciones({
     .map((p) => {
       const sub = subsanaciones[p.id] ?? null;
       // Una vez sometido, el cierre ya pasó: solo la subsanación tiene reloj.
-      const dias = sub ? diasAl(sub) : EN_TRABAJO.includes(p.estado) ? diasAl(p.cierre) : null;
+      const dias = sub ? diasAl(sub, hoy) : EN_TRABAJO.includes(p.estado) ? diasAl(p.cierre, hoy) : null;
       return {
         id: p.id,
         codigo: p.codigo,
