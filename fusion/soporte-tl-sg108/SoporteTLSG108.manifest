@@ -1,0 +1,10 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "",
+  "description": {
+    "": "Crea un soporte de pared con peine de cables para el switch TP-Link TL-SG108"
+  },
+  "supportedOS": "windows|mac",
+  "editEnabled": true
+}

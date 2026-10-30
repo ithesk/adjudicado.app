@@ -1,0 +1,351 @@
+<title>Soporte TL-SG108</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: banda de título compacta, visor 3D grande, controles y leyenda debajo como hoja de taller */
+:root {
+  --bg: #f1f2ee;
+  --surface: #ffffff;
+  --fg: #1f2421;
+  --muted: #5d655f;
+  --line: #d5d9d2;
+  --accent: #d9821f;       /* PETG naranja del soporte */
+  --scene: #e7e9e3;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161917; --surface: #1f2321; --fg: #e8ebe6; --muted: #9aa39c;
+    --line: #333a35; --accent: #f0a043; --scene: #232825; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161917; --surface: #1f2321; --fg: #e8ebe6; --muted: #9aa39c;
+  --line: #333a35; --accent: #f0a043; --scene: #232825; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+}
+.wrap {
+  max-width: 1100px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+  display: grid; gap: 16px;
+}
+header { display: grid; gap: 4px; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+h1 {
+  font-family: var(--font-display); font-weight: 800; font-size: clamp(24px, 4vw, 34px);
+  line-height: 1.1; margin: 0; text-wrap: balance;
+}
+h1 span { color: var(--accent); }
+.lede { margin: 0; color: var(--muted); max-width: 65ch; }
+.viewer {
+  position: relative; width: 100%; height: min(68vh, 620px); min-height: 360px;
+  border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--scene);
+}
+.viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hint {
+  position: absolute; left: 12px; bottom: 10px; font-family: var(--font-mono); font-size: 12px;
+  color: var(--muted); background: color-mix(in srgb, var(--surface) 80%, transparent);
+  padding: 4px 8px; border-radius: 4px; pointer-events: none;
+}
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls .label {
+  font-family: var(--font-mono); font-size: 12px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); margin-right: 4px;
+}
+.sep { width: 1px; height: 24px; background: var(--line); margin: 0 6px; }
+button {
+  font: 500 14px var(--font-body); color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; padding: 7px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1b1206; }
+.parts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px;
+  margin: 0; padding: 0; list-style: none;
+}
+.parts li {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px 14px; display: grid; gap: 2px; min-width: 0;
+}
+.parts b { font-family: var(--font-display); font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.sw { width: 12px; height: 12px; border-radius: 2px; flex: none; }
+.parts span { color: var(--muted); font-size: 14px; }
+.dims { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Vista previa conceptual · medidas aproximadas en mm</div>
+    <h1>Soporte de pared <span>TL-SG108</span></h1>
+    <p class="lede">El switch entra deslizándose desde arriba con los puertos hacia abajo. Debajo, el peine sujeta cada cable para que su peso no tire de los conectores.</p>
+  </header>
+
+  <div class="viewer" id="viewer">
+    <div class="hint">Arrastra para girar · rueda o pellizco para acercar</div>
+  </div>
+
+  <div class="controls">
+    <span class="label">Vista</span>
+    <button id="v-iso" type="button">3/4</button>
+    <button id="v-front" type="button">Frontal</button>
+    <button id="v-side" type="button">Lateral</button>
+    <button id="v-bottom" type="button">Peine (de cerca)</button>
+    <span class="sep" aria-hidden="true"></span>
+    <span class="label">Mostrar</span>
+    <button id="t-switch" type="button" aria-pressed="true">Switch</button>
+    <button id="t-cables" type="button" aria-pressed="true">Cables</button>
+    <button id="t-slide" type="button" aria-pressed="false">Sacar switch</button>
+  </div>
+
+  <ul class="parts">
+    <li><b><i class="sw" style="background:#d9821f"></i>Soporte (PETG)</b><span>Placa trasera, laterales con ventilación, labios frontales y apoyo inferior.</span></li>
+    <li><b><i class="sw" style="background:#d9821f"></i>Peine de cables</b><span>8 ranuras de clic para RJ45 (Ø 6.2, entrada 5 mm) y 1 más fina para la corriente.</span></li>
+    <li><b><i class="sw" style="background:#3b3f45"></i>TL-SG108</b><span class="dims">158 × 101 × 25</span></li>
+    <li><b><i class="sw" style="background:#9aa0a6"></i>Tornillos</b><span>4 tornillos de 4 mm con taco: 2 arriba y 2 entre el switch y el peine.</span></li>
+  </ul>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function () {
+  const host = document.getElementById('viewer');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  host.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 1, 5000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.target.set(0, 10, 15);
+
+  function sceneColor() {
+    return getComputedStyle(document.documentElement).getPropertyValue('--scene').trim() || '#e7e9e3';
+  }
+  function applyTheme() { scene.background = new THREE.Color(sceneColor()); }
+  applyTheme();
+  try {
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+    new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  } catch (e) {}
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a80, 0.75));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.7);
+  sun.position.set(180, 260, 300);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -250, right: 250, top: 250, bottom: -250, near: 10, far: 1000 });
+  scene.add(sun);
+
+  const petg = new THREE.MeshStandardMaterial({ color: 0xd9821f, roughness: 0.45, metalness: 0.0 });
+  const metal = new THREE.MeshStandardMaterial({ color: 0x3b3f45, roughness: 0.5, metalness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.8 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.3, metalness: 0.9 });
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x3a6fd8, roughness: 0.6 });
+  const plugMat = new THREE.MeshStandardMaterial({ color: 0xdfe6ee, roughness: 0.15, transparent: true, opacity: 0.75 });
+  const powerMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.5 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xf3f1ec, roughness: 0.95 });
+  const ledMat = new THREE.MeshStandardMaterial({ color: 0x3ddc84, emissive: 0x2fbf6a, emissiveIntensity: 0.9 });
+
+  function box(w, h, d, mat, x, y, z) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+  // box por coordenadas min/max
+  function boxMM(x0, x1, y0, y1, z0, z1, mat) {
+    return box(x1 - x0, y1 - y0, z1 - z0, mat, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  }
+
+  // ---- Medidas (mm). Pared en z=0, el switch queda de pie con los puertos hacia abajo.
+  const SW = { w: 158, h: 101, d: 25 };
+  const T = 3, GAP = 0.4;
+  const zSw0 = T, zSw1 = T + SW.d;            // 3 .. 28
+  const zFront = zSw1 + GAP + T;              // 31.4
+  const xIn = SW.w / 2 + GAP, xOut = xIn + T; // 79.4 / 82.4
+  const zCable = (zSw0 + zSw1) / 2;           // 15.5
+  const portX = Array.from({ length: 8 }, (_, i) => -44 + i * 14.6);
+  const powerX = -66;
+  const combTop = -42, combH = 8;
+
+  // Pared
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(900, 700), wallMat);
+  wall.position.set(0, 0, -0.05); wall.receiveShadow = true;
+  scene.add(wall);
+
+  // ---- Soporte
+  const holder = new THREE.Group();
+  scene.add(holder);
+
+  // Placa trasera
+  holder.add(boxMM(-xOut, xOut, combTop - combH - 6, 118, 0, T, petg));
+
+  // Laterales con ranuras de ventilación (forma extruida)
+  function sideWall(xPos) {
+    const s = new THREE.Shape();
+    s.moveTo(T, -T); s.lineTo(zFront, -T); s.lineTo(zFront, SW.h + 4); s.lineTo(T, SW.h + 4); s.lineTo(T, -T);
+    [14, 34, 54, 74].forEach(y => {
+      const h = new THREE.Path();
+      h.moveTo(9, y); h.lineTo(23, y); h.lineTo(23, y + 11); h.lineTo(9, y + 11); h.lineTo(9, y);
+      s.holes.push(h);
+    });
+    const g = new THREE.ExtrudeGeometry(s, { depth: T, bevelEnabled: false });
+    const m = new THREE.Mesh(g, petg);
+    m.rotation.y = -Math.PI / 2; m.position.x = xPos;
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+  holder.add(sideWall(xOut));
+  holder.add(sideWall(-xIn));
+
+  // Labios frontales (evitan que el switch se caiga hacia adelante)
+  holder.add(boxMM(xIn - 9, xOut, -T, SW.h + 4, zSw1 + GAP, zFront, petg));
+  holder.add(boxMM(-xOut, -xIn + 9, -T, SW.h + 4, zSw1 + GAP, zFront, petg));
+
+  // Apoyo inferior: extremos sólidos + franja frontal; el centro queda abierto para los conectores
+  holder.add(boxMM(-xOut, powerX - 7, -T, 0, T, zFront, petg));
+  holder.add(boxMM(portX[7] + 8, xOut, -T, 0, T, zFront, petg));
+  holder.add(boxMM(-xOut, xOut, -T, 0, zSw1 - 2, zFront, petg));
+
+  // Peine: perfil visto desde arriba con ranuras tipo "ojo de cerradura", extruido hacia abajo
+  function combShape() {
+    const s = new THREE.Shape();
+    s.moveTo(-xOut, T); s.lineTo(xOut, T); s.lineTo(xOut, zFront);
+    const slots = portX.map(x => ({ x, r: 3.1, e: 2.5 })).concat([{ x: powerX, r: 2.1, e: 1.6 }]).sort((a, b) => b.x - a.x);
+    slots.forEach(({ x, r, e }) => {
+      const a0 = Math.asin(Math.min(1, Math.sqrt(r * r - e * e) / r));
+      s.lineTo(x + e, zFront);
+      s.lineTo(x + e, zCable + Math.sqrt(r * r - e * e));
+      s.absarc(x, zCable, r, a0, Math.PI - a0, true);
+      s.lineTo(x - e, zFront);
+    });
+    s.lineTo(-xOut, zFront); s.lineTo(-xOut, T);
+    return s;
+  }
+  const comb = new THREE.Mesh(new THREE.ExtrudeGeometry(combShape(), { depth: combH, bevelEnabled: false, curveSegments: 24 }), petg);
+  comb.rotation.x = Math.PI / 2; comb.position.y = combTop;
+  comb.castShadow = true; comb.receiveShadow = true;
+  holder.add(comb);
+  // Refuerzos del peine contra la placa
+  [-xOut + 1.5, xOut - 1.5].forEach(x => {
+    const g = new THREE.Shape();
+    g.moveTo(T, 0); g.lineTo(zFront, 0); g.lineTo(T, 22); g.lineTo(T, 0);
+    const m = new THREE.Mesh(new THREE.ExtrudeGeometry(g, { depth: 3, bevelEnabled: false }), petg);
+    m.rotation.y = -Math.PI / 2; m.position.set(x + 1.5, combTop, 0);
+    m.castShadow = true; holder.add(m);
+  });
+
+  // Tornillos avellanados
+  [[-62, 110], [62, 110], [-62, combTop + 22], [62, combTop + 22]].forEach(([x, y]) => {
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(4, 2, 2.2, 24), steel);
+    head.rotation.x = -Math.PI / 2; head.position.set(x, y, T + 0.1);
+    holder.add(head);
+    const cross1 = box(5, 0.8, 0.6, dark, x, y, T + 1.3);
+    const cross2 = box(0.8, 5, 0.6, dark, x, y, T + 1.3);
+    holder.add(cross1, cross2);
+  });
+
+  // ---- Switch
+  const sw = new THREE.Group();
+  sw.add(boxMM(-SW.w / 2, SW.w / 2, 0, SW.h, zSw0, zSw1, metal));
+  // Puertos (cara inferior)
+  portX.forEach(x => sw.add(boxMM(x - 6, x + 6, -0.1, 4, zCable - 6, zCable + 6, dark)));
+  sw.add(boxMM(powerX - 4, powerX + 4, -0.1, 4, zCable - 4, zCable + 4, dark));
+  // LEDs (cara superior, quedan mirando hacia arriba)
+  for (let i = 0; i < 9; i++) {
+    const led = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.8, 12), ledMat);
+    led.position.set(-40 + i * 11, SW.h + 0.3, zCable);
+    sw.add(led);
+  }
+  sw.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(sw);
+
+  // ---- Cables
+  const cables = new THREE.Group();
+  const cableLen = 150;
+  portX.forEach(x => {
+    cables.add(boxMM(x - 5.8, x + 5.8, -18, 0, zCable - 6.7, zCable + 6.7, plugMat));
+    const boot = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 4.6, 10, 20), plugMat);
+    boot.position.set(x, -23, zCable); cables.add(boot);
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, cableLen, 20), cableMat);
+    c.position.set(x, -18 - cableLen / 2, zCable); c.castShadow = true; cables.add(c);
+  });
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 14, 20), powerMat);
+  barrel.position.set(powerX, -7, zCable); cables.add(barrel);
+  const pc = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, cableLen, 16), powerMat);
+  pc.position.set(powerX, -14 - cableLen / 2, zCable); cables.add(pc);
+  scene.add(cables);
+
+  // ---- Vistas
+  const views = {
+    iso:    { p: [250, 90, 330],  t: [0, 10, 15] },
+    front:  { p: [0, 15, 430],    t: [0, 15, 15] },
+    side:   { p: [400, 15, 120],  t: [0, 15, 15] },
+    bottom: { p: [90, -150, 150], t: [0, -46, 15] }
+  };
+  let anim = null;
+  function goTo(name) {
+    const v = views[name];
+    anim = { p0: camera.position.clone(), t0: controls.target.clone(),
+             p1: new THREE.Vector3(...v.p), t1: new THREE.Vector3(...v.t), k: 0 };
+  }
+  camera.position.set(...views.iso.p);
+  controls.update();
+  ['iso', 'front', 'side', 'bottom'].forEach(n => document.getElementById('v-' + n).addEventListener('click', () => goTo(n)));
+
+  function toggle(id, fn) {
+    const b = document.getElementById(id);
+    b.addEventListener('click', () => {
+      const on = b.getAttribute('aria-pressed') !== 'true';
+      b.setAttribute('aria-pressed', String(on));
+      fn(on);
+    });
+  }
+  let slideTarget = 0;
+  toggle('t-switch', on => { sw.visible = on; });
+  toggle('t-cables', on => { cables.visible = on; });
+  toggle('t-slide', on => {
+    slideTarget = on ? 150 : 0;
+    if (on) { cables.visible = false; document.getElementById('t-cables').setAttribute('aria-pressed', 'false'); }
+  });
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function resize() {
+    const w = host.clientWidth, h = host.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function frame() {
+    if (anim) {
+      anim.k = reduce ? 1 : Math.min(1, anim.k + 0.05);
+      const e = 1 - Math.pow(1 - anim.k, 3);
+      camera.position.lerpVectors(anim.p0, anim.p1, e);
+      controls.target.lerpVectors(anim.t0, anim.t1, e);
+      if (anim.k >= 1) anim = null;
+    }
+    sw.position.y += reduce ? (slideTarget - sw.position.y) : (slideTarget - sw.position.y) * 0.08;
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
