@@ -1,9 +1,11 @@
 // Los chips de un proceso (reloj y etapa), compartidos por la lista, las
 // tarjetas y el bloque de licitaciones de la bandeja. Definirlos una vez
-// evita que las presentaciones se desincronicen. Sin estado ni efectos:
+// evita que las presentaciones se desincronicen. Sin estado ni efectos (el
+// contador vivo es su propio componente de cliente):
 // sirven igual desde un componente de servidor o de cliente.
 
 import type { NivelUrgencia } from "@/lib/types";
+import ContadorCierre from "@/components/ContadorCierre";
 import { urgenciaChip, urgenciaDot, textoDias } from "@/lib/ui";
 import {
   ESTADO_LIC_CHIP,
@@ -15,20 +17,28 @@ export function ChipCierre({
   dias,
   nivel,
   esSub,
+  reloj,
 }: {
   dias: number | null;
   nivel: NivelUrgencia;
   esSub: boolean;
+  /** Fecha y hora del reloj vivo: con ella el chip cuenta hacia atrás
+   *  (horas y minutos) en lugar de decir solo «Hoy» o «Mañana». */
+  reloj?: string | null;
 }) {
   return (
     <span className="flex items-center gap-1.5 whitespace-nowrap">
       <span className={`h-2 w-2 shrink-0 rounded-full ${urgenciaDot(nivel)}`} aria-hidden />
-      <span
-        className={`rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(nivel)}`}
-        title={esSub ? "Fecha límite de la subsanación abierta" : "Cierre del proceso"}
-      >
-        {textoDias(dias)}
-      </span>
+      {reloj ? (
+        <ContadorCierre cierre={reloj} compacto />
+      ) : (
+        <span
+          className={`rounded px-1.5 py-0.5 font-mono text-xs font-medium ${urgenciaChip(nivel)}`}
+          title={esSub ? "Fecha límite de la subsanación abierta" : "Cierre del proceso"}
+        >
+          {textoDias(dias)}
+        </span>
+      )}
     </span>
   );
 }
