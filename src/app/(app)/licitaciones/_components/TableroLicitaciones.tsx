@@ -16,6 +16,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { diasRestantes, nivelUrgencia } from "@/lib/types";
+import { cierreLocalRd } from "@/lib/licitaciones/hora-rd";
 import { urgenciaChip, urgenciaDot, textoDias } from "@/lib/ui";
 import { avisoError } from "@/lib/avisos";
 import { actualizarProcesoAction } from "@/lib/actions/licitaciones";
@@ -63,7 +64,7 @@ const VIVO: Record<string, boolean> = {
 };
 
 function diasAlCierre(cierre: string | null): number | null {
-  return diasRestantes(cierre ? cierre.slice(0, 10) : null);
+  return diasRestantes(cierre ? cierreLocalRd(cierre).slice(0, 10) || null : null);
 }
 
 export default function TableroLicitaciones({

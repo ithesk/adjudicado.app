@@ -48,6 +48,9 @@ import {
 import DuplicarProceso from "../_components/DuplicarProceso";
 import LineaTiempo from "./_components/LineaTiempo";
 import ProgresoLargo from "@/components/ProgresoLargo";
+import ContadorCierre from "@/components/ContadorCierre";
+import { cierreCortoRd, cierreLocalRd } from "@/lib/licitaciones/hora-rd";
+import { EN_TRABAJO } from "@/lib/licitaciones/resumen";
 import OrdenesDelProceso, {
   type OrdenDelProceso,
 } from "./_components/OrdenesDelProceso";
@@ -195,7 +198,7 @@ export default function BidRoom({
   const [unir, setUnir] = useState(true);
   const [pendiente, startTransition] = useTransition();
 
-  const dias = diasRestantes(proceso.cierre ? proceso.cierre.slice(0, 10) : null);
+  const dias = diasRestantes(proceso.cierre ? cierreLocalRd(proceso.cierre).slice(0, 10) || null : null);
   const nivel = nivelUrgencia(dias);
   const criticosPendientes = noSubsanablesPendientes(requisitos);
   // El gate del paquete no cuenta los que la propia generación produce —
@@ -327,9 +330,7 @@ export default function BidRoom({
           institucion?.nombre ?? "Sin entidad",
           MODALIDAD_LABEL[proceso.modalidad] ?? proceso.modalidad,
           proceso.objeto ?? null,
-          proceso.cierre
-            ? `cierra ${proceso.cierre.slice(8, 10)}/${proceso.cierre.slice(5, 7)} ${proceso.cierre.slice(11, 16)}`
-            : null,
+          proceso.cierre ? `cierra ${cierreCortoRd(proceso.cierre)}` : null,
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -337,9 +338,14 @@ export default function BidRoom({
           // En móvil las acciones toman el ancho completo y el botón primario
           // se estira (objetivo táctil y jerarquía clara); desktop igual.
           <span className="flex flex-wrap items-center justify-end gap-1.5 max-sm:w-full">
-            <span className={`rounded px-2 py-1 font-mono text-[13px] font-semibold ${urgenciaChip(nivel)}`}>
-              {textoDias(dias)}
-            </span>
+            {proceso.cierre && EN_TRABAJO.includes(proceso.estado) ? (
+              // Mientras se prepara la oferta, el reloj real hasta el cierre.
+              <ContadorCierre cierre={proceso.cierre} />
+            ) : (
+              <span className={`rounded px-2 py-1 font-mono text-[13px] font-semibold ${urgenciaChip(nivel)}`}>
+                {textoDias(dias)}
+              </span>
+            )}
             {pasoTexto ? (
               // Se conserva el texto del paso (describe de verdad el orden en
               // que trabaja el servidor) pero AHORA con el reloj al lado: los

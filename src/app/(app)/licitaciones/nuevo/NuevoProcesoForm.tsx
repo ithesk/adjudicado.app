@@ -7,6 +7,7 @@ import { Panel, SectionTitle, btnPrimary, btnGhost, inputBase } from "@/componen
 import SelectorEntidad from "@/components/SelectorEntidad";
 import { crearProcesoAction } from "@/lib/actions/licitaciones";
 import { MODALIDAD_LABEL } from "@/lib/licitaciones/tipos";
+import { cierreDesdeLocalRd } from "@/lib/licitaciones/hora-rd";
 
 export default function NuevoProcesoForm({
   instituciones,
@@ -26,7 +27,8 @@ export default function NuevoProcesoForm({
         codigo: String(fd.get("codigo") || ""),
         objeto: String(fd.get("objeto") || ""),
         modalidad: String(fd.get("modalidad") || "OTRO"),
-        cierre: String(fd.get("cierre") || "") || null,
+        // Lo escrito es hora de RD: se guarda con su -04:00.
+        cierre: cierreDesdeLocalRd(String(fd.get("cierre") || "")),
         monto_estimado: Number(fd.get("monto_estimado")) || null,
         institucion_id: institucionId || null,
         institucion_nueva: institucionId ? null : nombreEntidad.trim() || null,

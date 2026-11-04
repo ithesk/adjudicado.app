@@ -38,6 +38,8 @@ import { coincideTexto } from "@/lib/buscar-texto";
 import { avisoError, avisoOk } from "@/lib/avisos";
 import { actualizarProcesoAction } from "@/lib/actions/licitaciones";
 import DuplicarProceso from "./_components/DuplicarProceso";
+import { cierreLocalRd } from "@/lib/licitaciones/hora-rd";
+import { EN_TRABAJO } from "@/lib/licitaciones/resumen";
 import TableroLicitaciones from "./_components/TableroLicitaciones";
 import { ChipCierre, ChipEstado } from "./_components/Chips";
 import {
@@ -50,7 +52,7 @@ import {
 
 // El cierre es fecha+hora; el contador de días reusa los helpers del tablero.
 function diasAlCierre(cierre: string | null): number | null {
-  return diasRestantes(cierre ? cierre.slice(0, 10) : null);
+  return diasRestantes(cierre ? cierreLocalRd(cierre).slice(0, 10) || null : null);
 }
 
 const VIVO: Record<string, boolean> = {
@@ -461,6 +463,9 @@ export default function ProcesosLista({
       nivel: nivelUrgencia(dias),
       ent: p.institucion_id ? entidades[p.institucion_id] ?? null : null,
       conReloj: Boolean(sub) || Boolean(VIVO[p.estado]),
+      // Cuenta atrás viva: la subsanación abierta, o el cierre mientras
+      // la oferta todavía se prepara.
+      reloj: sub ?? (EN_TRABAJO.includes(p.estado) ? p.cierre : null),
     };
   });
 
@@ -632,14 +637,14 @@ export default function ProcesosLista({
                 </tr>
               </thead>
               <tbody>
-                {filas.map(({ p, sub, dias, nivel, ent, conReloj }) => (
+                {filas.map(({ p, sub, dias, nivel, ent, conReloj, reloj }) => (
                   <tr
                     key={p.id}
                     className="border-b border-line transition-colors last:border-0 hover:bg-surface-2 focus-within:bg-surface-2"
                   >
                     <td className="px-3 py-2.5 align-middle">
                       {conReloj ? (
-                        <ChipCierre dias={dias} nivel={nivel} esSub={Boolean(sub)} />
+                        <ChipCierre dias={dias} nivel={nivel} esSub={Boolean(sub)} reloj={reloj} />
                       ) : (
                         <span className="pl-3.5 text-muted">—</span>
                       )}
@@ -692,7 +697,7 @@ export default function ProcesosLista({
               375px con ninguna técnica; apiladas, nada puede salirse de la
               pantalla. Plazo y estado arriba, que es lo que se mira. ===== */}
           <ul className="divide-y divide-line overflow-hidden rounded-lg border border-line bg-surface shadow-card lg:hidden">
-            {filas.map(({ p, sub, dias, nivel, ent, conReloj }) => (
+            {filas.map(({ p, sub, dias, nivel, ent, conReloj, reloj }) => (
               <li
                 key={p.id}
                 className="flex items-start gap-1 transition-colors hover:bg-surface-2 focus-within:bg-surface-2"
@@ -704,7 +709,7 @@ export default function ProcesosLista({
                 >
                   <span className="flex items-center justify-between gap-2">
                     {conReloj ? (
-                      <ChipCierre dias={dias} nivel={nivel} esSub={Boolean(sub)} />
+                      <ChipCierre dias={dias} nivel={nivel} esSub={Boolean(sub)} reloj={reloj} />
                     ) : (
                       <span className="text-xs text-muted">Sin plazo</span>
                     )}

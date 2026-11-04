@@ -8,6 +8,7 @@ import { IndicadorGuardado, Panel, SectionTitle, inputBase } from "@/components/
 import { useAccion } from "@/lib/use-accion";
 import { actualizarProcesoAction } from "@/lib/actions/licitaciones";
 import { MODALIDAD_LABEL, type LicProceso } from "@/lib/licitaciones/tipos";
+import { cierreDesdeLocalRd, cierreLocalRd } from "@/lib/licitaciones/hora-rd";
 
 export default function DatosProceso({
   proceso,
@@ -68,10 +69,11 @@ export default function DatosProceso({
           Cierre (fecha y hora)
           <input
             type="datetime-local"
-            defaultValue={proceso.cierre ? proceso.cierre.slice(0, 16) : ""}
+            // Se edita y se guarda en hora de RD (la base guarda el instante).
+            defaultValue={cierreLocalRd(proceso.cierre)}
             onBlur={(e) => {
-              const v = e.target.value || null;
-              if (v !== (proceso.cierre?.slice(0, 16) ?? null)) autosave({ cierre: v });
+              const v = e.target.value;
+              if (v !== cierreLocalRd(proceso.cierre)) autosave({ cierre: cierreDesdeLocalRd(v) });
             }}
             className={`${inputBase} mt-1`}
           />
