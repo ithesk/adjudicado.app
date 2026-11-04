@@ -39,7 +39,7 @@ import { avisoError, avisoOk } from "@/lib/avisos";
 import { actualizarProcesoAction } from "@/lib/actions/licitaciones";
 import DuplicarProceso from "./_components/DuplicarProceso";
 import { cierreLocalRd } from "@/lib/licitaciones/hora-rd";
-import { EN_TRABAJO } from "@/lib/licitaciones/resumen";
+import { CON_CONTADOR } from "@/lib/licitaciones/resumen";
 import TableroLicitaciones from "./_components/TableroLicitaciones";
 import { ChipCierre, ChipEstado } from "./_components/Chips";
 import {
@@ -463,9 +463,9 @@ export default function ProcesosLista({
       nivel: nivelUrgencia(dias),
       ent: p.institucion_id ? entidades[p.institucion_id] ?? null : null,
       conReloj: Boolean(sub) || Boolean(VIVO[p.estado]),
-      // Cuenta atrás viva: la subsanación abierta, o el cierre mientras
-      // la oferta todavía se prepara.
-      reloj: sub ?? (EN_TRABAJO.includes(p.estado) ? p.cierre : null),
+      // Cuenta atrás viva: la subsanación abierta, o el cierre mientras la
+      // oferta se prepara o ya está sometida.
+      reloj: sub ?? (CON_CONTADOR.includes(p.estado) ? p.cierre : null),
     };
   });
 

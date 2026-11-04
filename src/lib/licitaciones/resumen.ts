@@ -13,6 +13,9 @@ import type { EstadoLicitacion, LicProceso } from "./tipos";
 export const EN_TRABAJO: EstadoLicitacion[] = ["captura", "calificacion", "costeo", "armado", "listo"];
 // Presentado: la decisión es de la entidad, el dinero está en juego.
 export const EN_JUEGO: EstadoLicitacion[] = ["sometido", "subsanacion"];
+// Con contador hasta el cierre: en preparación y ya sometida (hasta el
+// cierre la oferta se puede reemplazar). La subsanación tiene su propio reloj.
+export const CON_CONTADOR: EstadoLicitacion[] = [...EN_TRABAJO, "sometido"];
 
 export interface Tramo {
   n: number;

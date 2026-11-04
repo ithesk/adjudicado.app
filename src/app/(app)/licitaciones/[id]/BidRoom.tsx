@@ -50,7 +50,7 @@ import LineaTiempo from "./_components/LineaTiempo";
 import ProgresoLargo from "@/components/ProgresoLargo";
 import ContadorCierre from "@/components/ContadorCierre";
 import { cierreCortoRd, cierreLocalRd } from "@/lib/licitaciones/hora-rd";
-import { EN_TRABAJO } from "@/lib/licitaciones/resumen";
+import { CON_CONTADOR } from "@/lib/licitaciones/resumen";
 import OrdenesDelProceso, {
   type OrdenDelProceso,
 } from "./_components/OrdenesDelProceso";
@@ -338,8 +338,9 @@ export default function BidRoom({
           // En móvil las acciones toman el ancho completo y el botón primario
           // se estira (objetivo táctil y jerarquía clara); desktop igual.
           <span className="flex flex-wrap items-center justify-end gap-1.5 max-sm:w-full">
-            {proceso.cierre && EN_TRABAJO.includes(proceso.estado) ? (
-              // Mientras se prepara la oferta, el reloj real hasta el cierre.
+            {proceso.cierre && CON_CONTADOR.includes(proceso.estado) ? (
+              // Mientras se prepara la oferta, y ya sometida hasta el cierre
+              // (todavía se puede reemplazar), el reloj real hasta el cierre.
               <ContadorCierre cierre={proceso.cierre} />
             ) : (
               <span className={`rounded px-2 py-1 font-mono text-[13px] font-semibold ${urgenciaChip(nivel)}`}>
