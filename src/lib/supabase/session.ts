@@ -8,7 +8,7 @@ import { isDemo } from "@/lib/demo";
 // correo su x-inbound-secret — el redirect al login los rompía (el cron de
 // Vercel recibía 307 y nunca corría). El conector MCP se autentica con el
 // token de su URL; /api/expedientes, con el CRON_SECRET (llamadas internas).
-const PUBLIC_PATHS = ["/login", "/registro", "/inicio", "/auth", "/api/cron", "/api/correo-entrante", "/api/mcp", "/api/expedientes"];
+const PUBLIC_PATHS = ["/login", "/registro", "/inicio", "/auth", "/api/cron", "/api/correo-entrante", "/api/mcp", "/api/panel", "/api/expedientes"];
 
 // Páginas de auth/marketing que no aplican con sesión activa → al tablero.
 const SOLO_ANONIMO = ["/login", "/registro", "/inicio"];
