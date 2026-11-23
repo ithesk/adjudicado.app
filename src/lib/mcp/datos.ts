@@ -586,6 +586,7 @@ export async function actualizarItems(
   codigo: string,
   cambios: CambioItem[],
   nuevos: ItemAnalizado[],
+  ordenarPorNumero = false,
 ) {
   const p = await procesoDeLaOrg(ctx, codigo);
   const { data: existentes } = await ctx.supabase
@@ -637,7 +638,28 @@ export async function actualizarItems(
     if (error) avisos.push(`Ítems nuevos: ${error.message}`);
     else creados = filas.length;
   }
-  return { proceso_id: p.id, actualizados, creados, avisos };
+
+  // El orden de la Bid Room (orden_indice) es el del F.033 y la oferta
+  // técnica; los ítems agregados después quedan al final. Esto los pone en
+  // el orden del número del pliego, después de crear los nuevos.
+  let reordenado = false;
+  if (ordenarPorNumero) {
+    const { data: todos } = await ctx.supabase
+      .from("lic_item")
+      .select("id, numero")
+      .eq("org_id", ctx.orgId)
+      .eq("proceso_id", p.id);
+    const enOrden = [...(todos ?? [])].sort((x, y) => (x.numero as number) - (y.numero as number));
+    const errores = await Promise.all(
+      enOrden.map(({ id }, i) =>
+        ctx.supabase.from("lic_item").update({ orden_indice: i }).eq("id", id).eq("org_id", ctx.orgId),
+      ),
+    );
+    const err = errores.find((r) => r.error)?.error;
+    if (err) avisos.push(`No se pudo reordenar: ${err.message}`);
+    else reordenado = true;
+  }
+  return { proceso_id: p.id, actualizados, creados, reordenado, avisos };
 }
 
 // ===== Foto del producto de un ítem =====

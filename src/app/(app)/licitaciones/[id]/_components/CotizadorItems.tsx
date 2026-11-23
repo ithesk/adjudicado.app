@@ -7,7 +7,18 @@
 // Precios (snapshot congelado) o se teclea (manual).
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Calculator, GripVertical, Loader2, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  ArrowDown01,
+  Calculator,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { MicroGuardado, Panel, SectionTitle, btnPrimary } from "@/components/ui";
 import { useAccion } from "@/lib/use-accion";
 import { formatRD } from "@/lib/types";
@@ -116,6 +127,34 @@ export default function CotizadorItems({
     correr("orden", () => reordenarItemsAction(proceso.id, ids));
   }
 
+  // Sin arrastrar: con descripciones largas la fila no cabe en pantalla y el
+  // arrastre nativo no desplaza la página, así que también se mueve con
+  // flechas (una posición) o se ordena todo por el número del pliego.
+  function guardarOrden(ids: string[]) {
+    setOrdenLocal(ids);
+    correr("orden", () => reordenarItemsAction(proceso.id, ids));
+  }
+
+  function mover(id: string, delta: -1 | 1) {
+    const ids = mostrados.map((i) => i.id);
+    const from = ids.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    guardarOrden(ids);
+  }
+
+  const ordenadoPorNumero = mostrados.every(
+    (it, i, arr) => i === 0 || (arr[i - 1].numero ?? 0) <= (it.numero ?? 0),
+  );
+
+  function ordenarPorNumero() {
+    const ids = [...mostrados]
+      .sort((a, b) => (a.numero ?? 0) - (b.numero ?? 0))
+      .map((i) => i.id);
+    guardarOrden(ids);
+  }
+
   const totales = totalesProceso(mostrados, params.itbisPct);
   const sinCotizar = mostrados.filter(
     (i) => i.ofertamos && i.precio_unitario === null,
@@ -145,6 +184,17 @@ export default function CotizadorItems({
               <span className="font-mono text-[11.5px] text-warn">
                 {sinCotizar} sin cotizar
               </span>
+            )}
+            {!ordenadoPorNumero && (
+              <button
+                type="button"
+                onClick={ordenarPorNumero}
+                className="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[12.5px] text-muted hover:text-ink"
+                title="Pone las líneas en el orden del número del pliego (es el orden del F.033 y de la oferta técnica)"
+              >
+                <ArrowDown01 className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+                Ordenar por número
+              </button>
             )}
             <button
               type="button"
@@ -209,9 +259,11 @@ export default function CotizadorItems({
             </tr>
           </thead>
           <tbody>
-            {mostrados.map((item) => (
+            {mostrados.map((item, idx) => (
               <Linea
                 key={item.id}
+                onSubir={idx > 0 ? () => mover(item.id, -1) : undefined}
+                onBajar={idx < mostrados.length - 1 ? () => mover(item.id, 1) : undefined}
                 item={item}
                 imagenUrl={imagenes[item.id] ?? null}
                 params={params}
@@ -393,6 +445,8 @@ function Linea({
   onSobre,
   onSoltar,
   onFinArrastre,
+  onSubir,
+  onBajar,
   onCotizar,
   onEliminar,
 }: {
@@ -414,6 +468,9 @@ function Linea({
   onSobre: () => void;
   onSoltar: () => void;
   onFinArrastre: () => void;
+  /** Mover una posición; undefined en la primera / última línea. */
+  onSubir?: () => void;
+  onBajar?: () => void;
   onCotizar: (o: { suplidor_id: string; sku: string; costo_usd: number }) => void;
   onEliminar: () => void;
 }) {
@@ -468,6 +525,28 @@ function Linea({
             <span className="font-mono text-xs font-semibold text-muted">{item.numero}</span>
             {/* Guardando/guardado de ESTA línea, junto a su número. */}
             <MicroGuardado activo={ocupada} ok={ok} />
+          </span>
+          <span className="mt-0.5 flex gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+            <button
+              type="button"
+              disabled={!onSubir}
+              onClick={onSubir}
+              className="rounded p-0.5 text-muted hover:text-ink disabled:invisible"
+              title="Subir una posición"
+              aria-label={`Subir la línea ${item.numero}`}
+            >
+              <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={!onBajar}
+              onClick={onBajar}
+              className="rounded p-0.5 text-muted hover:text-ink disabled:invisible"
+              title="Bajar una posición"
+              aria-label={`Bajar la línea ${item.numero}`}
+            >
+              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.2} aria-hidden />
+            </button>
           </span>
         </td>
         <td className="px-1 py-1 align-top">

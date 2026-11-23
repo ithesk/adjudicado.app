@@ -555,7 +555,9 @@ export const HERRAMIENTAS: Herramienta[] = [
       "Corrige ítems EXISTENTES por número (marca, modelo, parte, descripción, cantidad, unidad, ofertamos/motivo_descarte) " +
       "y agrega líneas nuevas. No edita la spec_cruda de una línea existente (es la evidencia del pliego) ni toca precios " +
       "(el costeo se hace en la Bid Room). Solo se cambian los campos que envíes. La descripción sigue el formato de la " +
-      "oferta técnica: 1ª línea resumen, luego un punto 'Clave: valor (req. X)' por línea. Confirmar con el usuario antes.",
+      "oferta técnica: 1ª línea resumen, luego un punto 'Clave: valor (req. X)' por línea. " +
+      "ordenar_por_numero: true deja las líneas en el orden del número del pliego (es el orden del F.033 y de la " +
+      "oferta técnica); úsalo cuando se agregaron ítems después y quedaron desordenados. Confirmar con el usuario antes.",
     soloLectura: false,
     entrada: z.object({
       codigo: codigoProceso,
@@ -588,9 +590,13 @@ export const HERRAMIENTAS: Herramienta[] = [
           }),
         )
         .default([]),
+      ordenar_por_numero: z
+        .boolean()
+        .optional()
+        .describe("true: reordena todas las líneas por su número del pliego (orden del F.033 y de la oferta técnica)"),
     }),
     async ejecutar(a, ctx) {
-      const r = await actualizarItems(ctx, a.codigo, a.cambios, a.nuevos);
+      const r = await actualizarItems(ctx, a.codigo, a.cambios, a.nuevos, a.ordenar_por_numero ?? false);
       return { ...r, url: `${ctx.baseUrl}/licitaciones/${r.proceso_id}` };
     },
   }),
