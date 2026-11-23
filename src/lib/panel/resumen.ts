@@ -2,6 +2,8 @@
 // Kindle del taller). Es una función pura: la ruta trae las filas de la base
 // y aquí solo se decide qué se muestra, para poder probarlo sin Supabase.
 
+import { notasParaPanel } from "./notas";
+
 /** Estados en los que todavía queda trabajo antes de una fecha límite. */
 export const ESTADOS_EN_PREPARACION = [
   "captura",
@@ -18,6 +20,7 @@ export interface FilaProceso {
   objeto: string | null;
   estado: string;
   cierre: string | null;
+  notas?: string | null;
   institucion: { nombre: string | null; siglas: string | null } | null;
 }
 
@@ -50,6 +53,10 @@ export interface ProcesoPanel {
   tipo_limite: "cierre" | "subsanacion";
   requisitos: { listos: number; total: number; faltan: string[] };
   items: { cotizados: number; total: number };
+  /** Últimas líneas de las notas del proceso (las del Kindle incluidas). */
+  notas: string[];
+  /** Minutos de bloques de trabajo sumados desde el Kindle. */
+  trabajo_min: number;
 }
 
 export interface ResumenPanel {
@@ -112,6 +119,7 @@ export function resumirProcesos(
         faltan: rs.filter((r) => !hecho(r)).slice(0, MAX_FALTAN).map((r) => r.nombre),
       },
       items: { cotizados: ofertados.filter((i) => i.cotizado).length, total: ofertados.length },
+      ...notasParaPanel(p.notas ?? null),
     });
   }
 

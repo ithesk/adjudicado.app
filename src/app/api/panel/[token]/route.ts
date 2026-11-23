@@ -23,7 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
   const { data: procesos, error } = await supabase
     .from("lic_proceso")
-    .select("id, codigo, objeto, estado, cierre, institucion(nombre, siglas)")
+    .select("id, codigo, objeto, estado, cierre, notas, institucion(nombre, siglas)")
     .eq("org_id", orgId)
     .in("estado", [...ESTADOS_EN_PREPARACION])
     .limit(200);
