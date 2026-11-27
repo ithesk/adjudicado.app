@@ -37,6 +37,22 @@ describe("evaluar", () => {
     expect(o?.socios).toEqual(["adobe"]);
   });
 
+  it("reconoce web, aplicaciones y correo sin las palabras clásicas de TI", () => {
+    for (const titulo of [
+      "Mantenimiento y actualización de la aplicación móvil institucional",
+      "Rediseño de la página web",
+      "Renovación del dominio y correo electrónico institucional",
+    ]) {
+      expect(evaluar(proc({ titulo }), { socios: [], ahora: AHORA })?.nivel).toBe("media");
+    }
+  });
+
+  it("no confunde alojamiento ni aplicación fuera de lo web", () => {
+    expect(evaluar(proc({ titulo: "Alojamiento para participantes del congreso" }), { socios: [], ahora: AHORA })).toBeNull();
+    expect(evaluar(proc({ titulo: "Aplicación de fertilizante en parcelas" }), { socios: [], ahora: AHORA })).toBeNull();
+    expect(evaluar(proc({ titulo: "Servicios para la Republica Dominicana" }), { socios: [], ahora: AHORA })).toBeNull();
+  });
+
   it("ignora tildes y mayúsculas", () => {
     const o = evaluar(proc({ titulo: "ADQUISICIÓN DE CÁMARA FOTOGRÁFICA" }), { socios: [], ahora: AHORA });
     expect(o?.nivel).toBe("media");
