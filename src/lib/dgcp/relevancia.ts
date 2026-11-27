@@ -36,6 +36,11 @@ export const PALABRAS_TI = [
   // servicios TI
   "soporte tecnico", "mantenimiento de red", "mantenimiento de sistema", "desarrollo de software",
   "sistema de gestion", "erp", "crm",
+  // web, aplicaciones y correo. Frases completas a propósito: «alojamiento»
+  // o «aplicación» solas saltarían con hoteles o con aplicación de pintura.
+  "aplicacion movil", "aplicaciones moviles", "app movil", "aplicacion web", "portal web",
+  "portal institucional", "pagina web", "sitio web", "desarrollo web", "plataforma web",
+  "dominio", "correo electronico", "correo institucional", "alojamiento web", "servidor dedicado",
 ];
 
 // TI genérico: relevancia 4.
